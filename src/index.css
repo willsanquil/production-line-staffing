@@ -1,0 +1,197 @@
+:root {
+  font-family: system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #1a1a1a;
+  background-color: #f5f5f5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+  padding: 1rem;
+}
+
+/* Skill cell colors */
+.skill-no_experience { background-color: #e74c3c; color: #fff; }
+.skill-training { background-color: #f1c40f; color: #1a1a1a; }
+.skill-trained { background-color: #27ae60; color: #fff; }
+.skill-expert {
+  background-color: #1e8449;
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 4px,
+      rgba(255,255,255,0.15) 4px,
+      rgba(255,255,255,0.15) 5px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 4px,
+      rgba(0,0,0,0.1) 4px,
+      rgba(0,0,0,0.1) 5px
+    );
+  color: #fff;
+}
+.person-absent .skill-no_experience,
+.person-absent .skill-training,
+.person-absent .skill-trained,
+.person-absent .skill-expert {
+  opacity: 0.5;
+  filter: grayscale(0.4);
+}
+
+.app-header {
+  margin-bottom: 1rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+/* Compact line view for screenshot / phone */
+.line-view {
+  font-size: clamp(0.95rem, 2.8vw, 1.1rem);
+}
+.line-view .line-view-area h2 {
+  font-size: clamp(1.15rem, 3.5vw, 1.35rem);
+}
+@media (max-width: 600px) {
+  .line-view { padding-left: 8px; padding-right: 8px; }
+}
+
+.section-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+/* Areas side-by-side: stable grid so notes/documents don't re-arrange */
+.areas-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.area-card {
+  margin-bottom: 0;
+  min-width: 0;
+  min-height: 220px;
+  contain: layout;
+}
+@media (max-width: 1400px) {
+  .areas-grid { grid-template-columns: repeat(4, minmax(180px, 1fr)); }
+}
+@media (max-width: 900px) {
+  .areas-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+}
+
+.skill-pill.skill-no_experience,
+.skill-pill.skill-training,
+.skill-pill.skill-trained,
+.skill-pill.skill-expert {
+  color: inherit;
+}
+
+.section-card h2 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.1rem;
+}
+
+button {
+  cursor: pointer;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  font-size: 0.9rem;
+}
+button:hover {
+  background: #eee;
+}
+select {
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 0.9rem;
+  min-width: 140px;
+}
+input[type="text"], textarea {
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 0.9rem;
+}
+textarea {
+  width: 100%;
+  min-height: 80px;
+  resize: vertical;
+}
+
+.grand-total {
+  font-size: 1.25rem;
+  font-weight: 600;
+  padding: 0.75rem;
+  background: #e8f4fd;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.timeline-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.timeline-hour {
+  flex: 1 1 110px;
+  min-width: 110px;
+  max-width: 140px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+  font-size: 0.85rem;
+}
+.timeline-hour.has-break { border-color: #f1c40f; background: #fef9e7; }
+.timeline-hour.has-lunch { border-color: #3498db; background: #ebf5fb; }
+
+.task-list { list-style: none; padding: 0; margin: 0.5rem 0 0 0; }
+.task-list li { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.task-list li input[type="checkbox"] { flex-shrink: 0; }
+.task-list li span { flex: 1; min-width: 0; }
+.task-list li .done { text-decoration: line-through; color: #666; }
+.task-list li button { padding: 2px 6px; font-size: 0.8rem; flex-shrink: 0; }
+.task-list-input {
+  padding: 4px 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  box-sizing: border-box;
+}
+.task-list-input::placeholder { color: #999; }
+
+.slots-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.slot-wrap { display: flex; align-items: center; gap: 4px; }
+.slot-wrap select { min-width: 120px; }
+
+.seniority-spectrum .skill-no_experience,
+.seniority-spectrum .skill-training,
+.seniority-spectrum .skill-trained,
+.seniority-spectrum .skill-expert {
+  padding: 0;
+  font-size: 0;
+  line-height: 0;
+}
+
+.save-load-section { margin-top: 1rem; padding: 1rem; background: #f9f9f9; border-radius: 8px; }
