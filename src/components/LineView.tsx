@@ -150,10 +150,11 @@ function LineViewInner({
   const staffRowStyle: CSSProperties = {
     display: 'flex',
     flexWrap: 'wrap',
-    gap: '8px 14px',
+    gap: '10px 16px',
     fontSize: '1rem',
     lineHeight: 1.5,
   };
+  const nameFontSize = '1.28rem';
 
   const renderAreaBlock = (
     areaId: string,
@@ -223,11 +224,11 @@ function LineViewInner({
               <span key={slot.id}>
                 {showLabel ? (
                   <>
-                    <span style={{ color: '#666', marginRight: 4 }}>{slotLabel}:</span>
-                    <span className={`skill-name-${skill}`}>{name}</span>
+                    <span style={{ color: '#666', marginRight: 6, fontSize: '0.95rem' }}>{slotLabel}:</span>
+                    <span className={`skill-name-${skill}`} style={{ fontSize: nameFontSize, fontWeight: 600 }}>{name}</span>
                   </>
                 ) : (
-                  <span className={`skill-name-${skill}`}>{name}</span>
+                  <span className={`skill-name-${skill}`} style={{ fontSize: nameFontSize, fontWeight: 600 }}>{name}</span>
                 )}
               </span>
             );
@@ -237,8 +238,27 @@ function LineViewInner({
     );
   };
 
+  const rotCount = Math.min(6, Math.max(1, rotationCount));
+  const renderBreakMatrix = (areaId: string, areaLabel: string) => {
+    const assignments = breakSchedules?.[areaId];
+    if (!assignments || Object.keys(assignments).length === 0 || rotationCount < 1) return null;
+    return (
+      <BreakTable
+        key={`break-${areaId}`}
+        people={Object.keys(assignments).map((id) => {
+          const p = roster.find((r) => r.id === id);
+          return { id, name: p?.name ?? id };
+        })}
+        assignments={assignments}
+        rotationCount={rotCount}
+        title={`${areaLabel} — Rotations`}
+        presentationMode
+      />
+    );
+  };
+
   return (
-    <div className="line-view" style={{ maxWidth: 540, margin: '0 auto', padding: '0 16px 80px' }}>
+    <div className="line-view" style={{ maxWidth: 960, margin: '0 auto', padding: '0 16px 80px' }}>
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1a1a1a', marginBottom: 12 }}>
           {totalOnLine}/{fullStaff}
@@ -271,86 +291,89 @@ function LineViewInner({
         </div>
       </div>
 
-      {assignedLeadAreas.length > 0 && (
-        <section style={sectionStyle}>
-          <h2 style={sectionTitleStyle}>Leads</h2>
-          <div style={staffRowStyle}>
-            {assignedLeadAreas.map((areaId) => {
-              const personId = leadSlots[areaId]!;
-              const skill = getSkillInArea(areaId, personId);
-              return (
-                <span key={areaId}>
-                  <span style={{ color: '#666', marginRight: 4 }}>{areaLabels[areaId]}:</span>
-                  <span className={`skill-name-${skill}`}>{getName(personId)}</span>
-                </span>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {breaksScope === 'line' && breakSchedules?.[BREAK_LINE_WIDE_KEY] && Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).length > 0 && rotationCount >= 1 && (
-        <section style={sectionStyle}>
-          <h2 style={sectionTitleStyle}>Rotations</h2>
-          <BreakTable
-            people={Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).map((id) => {
-              const p = roster.find((r) => r.id === id);
-              return { id, name: p?.name ?? id };
-            })}
-            assignments={breakSchedules[BREAK_LINE_WIDE_KEY]}
-            rotationCount={Math.min(6, Math.max(1, rotationCount))}
-            presentationMode
-          />
-        </section>
-      )}
-
-      {sections.map((section) => {
-        const isCombined = Array.isArray(section);
-        const renderBreakMatrix = (areaId: string, areaLabel: string) => {
-          const assignments = breakSchedules?.[areaId];
-          if (breaksScope !== 'station' || !assignments || Object.keys(assignments).length === 0 || rotationCount < 1) return null;
-          return (
-            <BreakTable
-              key={`break-${areaId}`}
-              people={Object.keys(assignments).map((id) => {
-                const p = roster.find((r) => r.id === id);
-                return { id, name: p?.name ?? id };
-              })}
-              assignments={assignments}
-              rotationCount={Math.min(6, Math.max(1, rotationCount))}
-              title={`${areaLabel} — Rotations`}
-              presentationMode
-            />
-          );
-        };
-        if (isCombined) {
-          const [idA, idB] = section as [string, string];
-          const label = `${areaLabels[idA] ?? idA} & ${areaLabels[idB] ?? idB}`;
-          const slotsA = slots[idA] ?? [];
-          const slotsB = slots[idB] ?? [];
-          return (
-            <section key={`${idA}-${idB}`} style={sectionStyle}>
-              <h2 style={sectionTitleStyle}>{label}</h2>
-              {[idA, idB].map((areaId) => (
-                <div key={areaId}>
-                  {renderAreaBlock(areaId, areaId === idA ? slotsA : slotsB, { subLabel: areaLabels[areaId] ?? areaId })}
-                  {renderBreakMatrix(areaId, areaLabels[areaId] ?? areaId)}
-                </div>
-              ))}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28, alignItems: 'start' }}>
+        <div>
+          {assignedLeadAreas.length > 0 && (
+            <section style={sectionStyle}>
+              <h2 style={sectionTitleStyle}>Leads</h2>
+              <div style={staffRowStyle}>
+                {assignedLeadAreas.map((areaId) => {
+                  const personId = leadSlots[areaId]!;
+                  const skill = getSkillInArea(areaId, personId);
+                  return (
+                    <span key={areaId}>
+                      <span style={{ color: '#666', marginRight: 6, fontSize: '0.95rem' }}>{areaLabels[areaId]}:</span>
+                      <span className={`skill-name-${skill}`} style={{ fontSize: nameFontSize, fontWeight: 600 }}>{getName(personId)}</span>
+                    </span>
+                  );
+                })}
+              </div>
             </section>
-          );
-        }
-        const areaId = section as string;
-        const allAreaSlots = slots[areaId] ?? [];
-        const areaLabel = areaLabels[areaId] ?? areaId;
-        return (
-          <section key={areaId} style={sectionStyle}>
-            <h2 style={sectionTitleStyle}>{areaLabel}</h2>
-            {renderAreaBlock(areaId, allAreaSlots, { hideTitleRow: true })}
-            {renderBreakMatrix(areaId, areaLabel)}
-          </section>
-        );
-      })}
+          )}
+
+          {sections.map((section) => {
+            const isCombined = Array.isArray(section);
+            if (isCombined) {
+              const [idA, idB] = section as [string, string];
+              const label = `${areaLabels[idA] ?? idA} & ${areaLabels[idB] ?? idB}`;
+              const slotsA = slots[idA] ?? [];
+              const slotsB = slots[idB] ?? [];
+              return (
+                <section key={`${idA}-${idB}`} style={sectionStyle}>
+                  <h2 style={sectionTitleStyle}>{label}</h2>
+                  {[idA, idB].map((areaId) => (
+                    <div key={areaId}>
+                      {renderAreaBlock(areaId, areaId === idA ? slotsA : slotsB, { subLabel: areaLabels[areaId] ?? areaId })}
+                    </div>
+                  ))}
+                </section>
+              );
+            }
+            const areaId = section as string;
+            const allAreaSlots = slots[areaId] ?? [];
+            const areaLabel = areaLabels[areaId] ?? areaId;
+            return (
+              <section key={areaId} style={sectionStyle}>
+                <h2 style={sectionTitleStyle}>{areaLabel}</h2>
+                {renderAreaBlock(areaId, allAreaSlots, { hideTitleRow: true })}
+              </section>
+            );
+          })}
+        </div>
+
+        <div>
+          {breaksScope === 'line' && breakSchedules?.[BREAK_LINE_WIDE_KEY] && Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).length > 0 && rotationCount >= 1 && (
+            <section style={sectionStyle}>
+              <h2 style={sectionTitleStyle}>Rotations</h2>
+              <BreakTable
+                people={Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).map((id) => {
+                  const p = roster.find((r) => r.id === id);
+                  return { id, name: p?.name ?? id };
+                })}
+                assignments={breakSchedules[BREAK_LINE_WIDE_KEY]}
+                rotationCount={rotCount}
+                presentationMode
+              />
+            </section>
+          )}
+
+          {breaksScope === 'station' &&
+            sections.map((section) => {
+              const isCombined = Array.isArray(section);
+              if (isCombined) {
+                const [idA, idB] = section as [string, string];
+                return (
+                  <div key={`break-${idA}-${idB}`}>
+                    {renderBreakMatrix(idA, areaLabels[idA] ?? idA)}
+                    {renderBreakMatrix(idB, areaLabels[idB] ?? idB)}
+                  </div>
+                );
+              }
+              const areaId = section as string;
+              return <div key={`break-${areaId}`}>{renderBreakMatrix(areaId, areaLabels[areaId] ?? areaId)}</div>;
+            })}
+        </div>
+      </div>
     </div>
   );
 }
