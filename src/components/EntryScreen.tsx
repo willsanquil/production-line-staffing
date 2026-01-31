@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react';
 import type { RootState } from '../types';
+import type { LineConfig } from '../types';
 import type { CloudLineSummary } from '../lib/cloudLines';
 import {
   isCloudConfigured,
   listCloudLines,
   createCloudLine,
   getLineState,
+  setLineState,
 } from '../lib/cloudLines';
+import { getEmptyLineState } from '../data/initialState';
+import { BuildLineWizard } from './BuildLineWizard';
 
 const CLOUD_LINE_ID = 'staffing-cloud-line-id';
 const CLOUD_PASSWORD = 'staffing-cloud-password';
@@ -43,10 +47,12 @@ export function clearCloudSession(): void {
 interface EntryScreenProps {
   onSelectLocal: () => void;
   onJoinGroup: (rootState: RootState, lineId: string, password: string) => void;
+  /** Existing area IDs from app (for wizard when configuring new cloud line). */
+  existingAreaIds?: Set<string>;
 }
 
-export function EntryScreen({ onSelectLocal, onJoinGroup }: EntryScreenProps) {
-  const [step, setStep] = useState<'choose' | 'list' | 'create' | 'join'>('choose');
+export function EntryScreen({ onSelectLocal, onJoinGroup, existingAreaIds = new Set() }: EntryScreenProps) {
+  const [step, setStep] = useState<'choose' | 'list' | 'create' | 'join' | 'configure'>('choose');
   const [lines, setLines] = useState<CloudLineSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +61,11 @@ export function EntryScreen({ onSelectLocal, onJoinGroup }: EntryScreenProps) {
   const [createPassword, setCreatePassword] = useState('');
   const [joinLineId, setJoinLineId] = useState('');
   const [joinPassword, setJoinPassword] = useState('');
+
+  /** After create we have lineId + password; wizard completes with config → we save and join. */
+  const [configureLineId, setConfigureLineId] = useState<string | null>(null);
+  const [configurePassword, setConfigurePassword] = useState('');
+  const [configureName, setConfigureName] = useState('');
 
   const cloudAvailable = isCloudConfigured();
 
@@ -76,9 +87,32 @@ export function EntryScreen({ onSelectLocal, onJoinGroup }: EntryScreenProps) {
     setLoading(true);
     setError(null);
     createCloudLine(createName.trim(), createPassword)
-      .then(({ rootState, lineId }) => {
-        setCloudSession(lineId, createPassword);
-        onJoinGroup(rootState, lineId, createPassword);
+      .then(({ lineId }) => {
+        setConfigureLineId(lineId);
+        setConfigurePassword(createPassword);
+        setConfigureName(createName.trim());
+        setStep('configure');
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false));
+  };
+
+  const handleConfigureComplete = (config: LineConfig) => {
+    if (!configureLineId || !configurePassword) return;
+    const lineId = configureLineId;
+    const configWithCloudId: LineConfig = { ...config, id: lineId, name: config.name || configureName };
+    const emptyState = getEmptyLineState(configWithCloudId);
+    const newRootState: RootState = {
+      currentLineId: lineId,
+      lines: [configWithCloudId],
+      lineStates: { [lineId]: emptyState },
+    };
+    setLoading(true);
+    setError(null);
+    setLineState(lineId, configurePassword, newRootState)
+      .then(() => {
+        setCloudSession(lineId, configurePassword);
+        onJoinGroup(newRootState, lineId, configurePassword);
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
@@ -201,6 +235,39 @@ export function EntryScreen({ onSelectLocal, onJoinGroup }: EntryScreenProps) {
         <button type="button" onClick={() => setStep('choose')} style={{ ...btnStyle, marginTop: 16 }}>
           Back
         </button>
+      </div>
+    );
+  }
+
+  if (step === 'configure' && configureLineId) {
+    return (
+      <div style={{ padding: 24, maxWidth: 560, margin: '0 auto' }}>
+        <h1 style={{ fontSize: '1.5rem', marginBottom: 8 }}>Set up your line</h1>
+        <p style={{ color: '#666', marginBottom: 16 }}>
+          Add sections, lead roles, and break options. This line will then be saved to the cloud.
+        </p>
+        {error && (
+          <div style={{ background: '#fee', padding: 12, borderRadius: 8, marginBottom: 16 }}>
+            {error}
+          </div>
+        )}
+        {loading ? (
+          <p>Saving…</p>
+        ) : (
+          <BuildLineWizard
+            existingAreaIds={existingAreaIds}
+            existingLineId={configureLineId}
+            initialLineName={configureName}
+            onComplete={handleConfigureComplete}
+            onCancel={() => {
+              setStep('list');
+              setConfigureLineId(null);
+              setConfigurePassword('');
+              setConfigureName('');
+              setError(null);
+            }}
+          />
+        )}
       </div>
     );
   }

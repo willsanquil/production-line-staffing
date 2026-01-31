@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import type { AppState, AreaId, BreakPreference, RosterPerson, SavedDay, SlotsByArea, TaskItem } from './types';
+import type { AppState, AreaId, BreakPreference, RootState, RosterPerson, SavedDay, SlotsByArea, TaskItem } from './types';
 import type { SkillLevel } from './types';
 import { AREA_IDS, LEAD_SLOT_AREAS, LINE_SECTIONS } from './types';
 
@@ -73,7 +73,7 @@ import { randomizeAssignments, spreadTalent, maxSpeedAssignments, lightStretchAs
 import { generateBreakSchedules } from './lib/breakSchedules';
 import { saveRootState, loadSavedDays, addSavedDay, removeSavedDay, exportStateToJson, importStateFromJson } from './lib/persist';
 import { saveToFile, overwriteFile, openFromFile, isSaveToFileSupported } from './lib/fileStorage';
-import { getLineState, setLineState } from './lib/cloudLines';
+import { getLineState, setLineState, createCloudLine, deleteCloudLine } from './lib/cloudLines';
 import { getCloudSession, clearCloudSession, EntryScreen } from './components/EntryScreen';
 import { LineManager } from './components/LineManager';
 import { BuildLineWizard } from './components/BuildLineWizard';
@@ -143,6 +143,11 @@ export default function App() {
   const [savedDays, setSavedDays] = useState(() => loadSavedDays());
   const [rosterVisible, setRosterVisible] = useState(true);
   const [adminVisible, setAdminVisible] = useState(true);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareName, setShareName] = useState('');
+  const [sharePassword, setSharePassword] = useState('');
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
   const [breakScheduleVisibleByArea, setBreakScheduleVisibleByArea] = useState<Partial<Record<AreaId, boolean>>>({});
   const [areaCapacityOverrides, setAreaCapacityOverrides] = useState(firstLineState.areaCapacityOverrides ?? {});
   const [areaNameOverrides, setAreaNameOverrides] = useState(firstLineState.areaNameOverrides ?? {});
@@ -834,9 +839,70 @@ export default function App() {
     setRootState(getHydratedRootState());
   }, []);
 
+  const handleGoHome = useCallback(() => {
+    clearCloudSession();
+    setCloudLineId(null);
+    cloudPasswordRef.current = null;
+    setRootState(getHydratedRootState());
+    setAppMode('entry');
+  }, []);
+
+  const handleShareSubmit = useCallback(() => {
+    if (!shareName.trim() || !sharePassword) {
+      setShareError('Name and password required');
+      return;
+    }
+    setShareLoading(true);
+    setShareError(null);
+    const root = rootStateRef.current;
+    const lineId = root.currentLineId;
+    const lineConfig = root.lines.find((l) => l.id === lineId);
+    const lineState = root.lineStates[lineId];
+    if (!lineConfig || !lineState) {
+      setShareError('Current line not found');
+      setShareLoading(false);
+      return;
+    }
+    const shareRootState: RootState = {
+      currentLineId: lineId,
+      lines: [lineConfig],
+      lineStates: { [lineId]: lineState },
+    };
+    createCloudLine(shareName.trim(), sharePassword, shareRootState)
+      .then(({ lineId: newCloudLineId }) => {
+        setCloudSession(newCloudLineId, sharePassword);
+        setCloudLineId(newCloudLineId);
+        cloudPasswordRef.current = sharePassword;
+        setRootState(shareRootState);
+        setShowShareModal(false);
+        setShareName('');
+        setSharePassword('');
+      })
+      .catch((e) => setShareError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setShareLoading(false));
+  }, [shareName, sharePassword]);
+
+  const handleDeleteCloudLine = useCallback(() => {
+    const password = cloudPasswordRef.current;
+    if (!cloudLineId || !password) return;
+    const msg = 'Are you sure you want to delete this line from the cloud? Anyone with the password can delete it. This cannot be undone.';
+    if (!window.confirm(msg)) return;
+    deleteCloudLine(cloudLineId, password)
+      .then(() => {
+        clearCloudSession();
+        setCloudLineId(null);
+        cloudPasswordRef.current = null;
+        setRootState(getHydratedRootState());
+        setAppMode('entry');
+      })
+      .catch((e) => alert(e instanceof Error ? e.message : String(e)));
+  }, [cloudLineId]);
+
   if (appMode === 'entry') {
+    const entryExistingAreaIds = new Set(rootState.lines.flatMap((l) => l.areas.map((a) => a.id)));
     return (
       <EntryScreen
+        existingAreaIds={entryExistingAreaIds}
         onSelectLocal={() => setAppMode('app')}
         onJoinGroup={(root, lineId, password) => {
           setRootState(root);
@@ -861,14 +927,79 @@ export default function App() {
       <>
         <header className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <span>Production Line Staffing</span>
+          <button type="button" onClick={handleGoHome} style={{ padding: '8px 16px' }}>
+            Home
+          </button>
         </header>
         <LineManager
           rootState={rootState}
+          canShare={!cloudLineId}
+          onShareClick={() => {
+            setShareName(currentConfig?.name ?? '');
+            setSharePassword('');
+            setShareError(null);
+            setShowShareModal(true);
+          }}
           onOpenLine={handleOpenLine}
           onBuildNew={handleBuildNewLine}
           onDeleteLine={handleDeleteLine}
           onBack={() => setView('staffing')}
         />
+        {showShareModal && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+            }}
+            onClick={() => !shareLoading && setShowShareModal(false)}
+          >
+            <div
+              style={{
+                background: '#fff',
+                padding: 24,
+                borderRadius: 12,
+                maxWidth: 400,
+                width: '90%',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 style={{ marginTop: 0, marginBottom: 16 }}>Share line to cloud</h2>
+              {shareError && (
+                <div style={{ background: '#fee', padding: 10, borderRadius: 8, marginBottom: 12 }}>{shareError}</div>
+              )}
+              <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Line name</label>
+              <input
+                type="text"
+                value={shareName}
+                onChange={(e) => setShareName(e.target.value)}
+                placeholder="e.g. IC Line"
+                style={{ width: '100%', padding: '10px 12px', marginBottom: 12, boxSizing: 'border-box' }}
+              />
+              <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Password</label>
+              <input
+                type="password"
+                value={sharePassword}
+                onChange={(e) => setSharePassword(e.target.value)}
+                placeholder="Others need this to join"
+                style={{ width: '100%', padding: '10px 12px', marginBottom: 16, boxSizing: 'border-box' }}
+              />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={handleShareSubmit} disabled={shareLoading} style={{ padding: '10px 18px', fontWeight: 600 }}>
+                  {shareLoading ? 'Sharing…' : 'Share'}
+                </button>
+                <button type="button" onClick={() => setShowShareModal(false)} disabled={shareLoading} style={{ padding: '10px 18px' }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </>
     );
   }
@@ -879,6 +1010,9 @@ export default function App() {
       <>
         <header className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <span>Production Line Staffing</span>
+          <button type="button" onClick={handleGoHome} style={{ padding: '8px 16px' }}>
+            Home
+          </button>
         </header>
         <BuildLineWizard
           existingAreaIds={existingAreaIds}
@@ -894,9 +1028,14 @@ export default function App() {
       <>
         <header className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <span>Production Line Staffing</span>
-          <button type="button" onClick={() => setView('line-manager')} style={{ padding: '8px 16px' }}>
-            Lines
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={handleGoHome} style={{ padding: '8px 16px' }}>
+              Home
+            </button>
+            <button type="button" onClick={() => setView('line-manager')} style={{ padding: '8px 16px' }}>
+              Lines
+            </button>
+          </div>
         </header>
         <p style={{ padding: 24 }}>No line selected. Open a line or build your own.</p>
       </>
@@ -908,21 +1047,36 @@ export default function App() {
       <>
         <header className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <span>Production Line Staffing — {currentConfig.name}{cloudLineId ? ' (Group)' : ''}</span>
-          {cloudLineId && (
-            <button type="button" onClick={handleLeaveLine} style={{ marginRight: 8, padding: '6px 12px', fontSize: '0.9rem' }}>
-              Leave line
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button type="button" onClick={handleGoHome} style={{ padding: '6px 12px', fontSize: '0.9rem' }}>
+              Home
             </button>
+          {cloudLineId && (
+            <>
+              <button type="button" onClick={handleLeaveLine} style={{ padding: '6px 12px', fontSize: '0.9rem' }}>
+                Leave line
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteCloudLine}
+                title="Remove this line from the cloud (requires password)"
+                style={{ padding: '6px 12px', fontSize: '0.9rem', color: '#c0392b', borderColor: '#c0392b' }}
+              >
+                Delete line from cloud
+              </button>
+            </>
           )}
-          <button type="button" onClick={() => setView('line-manager')} style={{ marginRight: 8 }}>
+          <button type="button" onClick={() => setView('line-manager')}>
             Lines
           </button>
           <button
             type="button"
             onClick={() => setAdminVisible(true)}
-            style={{ padding: '8px 16px', fontSize: '1rem', fontWeight: 600 }}
-          >
-            Show admin
-          </button>
+              style={{ padding: '8px 16px', fontSize: '1rem', fontWeight: 600 }}
+            >
+              Show admin
+            </button>
+          </div>
         </header>
         <LineView
           slots={slots}
@@ -951,22 +1105,37 @@ export default function App() {
     <>
       <header className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
         <span>Production Line Staffing — {currentConfig.name}{cloudLineId ? ' (Group)' : ''}</span>
-        {cloudLineId && (
-          <button type="button" onClick={handleLeaveLine} style={{ marginRight: 4, padding: '6px 12px', fontSize: '0.9rem' }}>
-            Leave line
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button type="button" onClick={handleGoHome} style={{ padding: '6px 12px', fontSize: '0.9rem' }}>
+            Home
           </button>
-        )}
-        <button type="button" onClick={() => setView('line-manager')} style={{ marginRight: 4 }}>
-          Lines
-        </button>
-        <button
-          type="button"
-          onClick={() => setAdminVisible(false)}
-          title="Compact view for screenshot or phone"
-          style={{ padding: '6px 12px', fontSize: '0.9rem' }}
-        >
-          Hide admin
-        </button>
+          {cloudLineId && (
+            <>
+              <button type="button" onClick={handleLeaveLine} style={{ padding: '6px 12px', fontSize: '0.9rem' }}>
+                Leave line
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteCloudLine}
+                title="Remove this line from the cloud"
+                style={{ padding: '6px 12px', fontSize: '0.9rem', color: '#c0392b', borderColor: '#c0392b' }}
+              >
+                Delete line from cloud
+              </button>
+            </>
+          )}
+          <button type="button" onClick={() => setView('line-manager')}>
+            Lines
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdminVisible(false)}
+            title="Compact view for screenshot or phone"
+            style={{ padding: '6px 12px', fontSize: '0.9rem' }}
+          >
+            Hide admin
+          </button>
+        </div>
       </header>
 
       <RosterGrid

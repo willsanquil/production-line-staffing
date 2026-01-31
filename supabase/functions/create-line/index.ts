@@ -58,7 +58,8 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
   try {
-    const { name, password } = (await req.json()) as { name?: string; password?: string };
+    const body = (await req.json()) as { name?: string; password?: string; rootState?: unknown };
+    const { name, password, rootState: providedState } = body;
     if (!name || typeof name !== 'string' || !password || typeof password !== 'string') {
       return new Response(
         JSON.stringify({ error: 'name and password required' }),
@@ -68,7 +69,10 @@ Deno.serve(async (req) => {
     const supabase = createAdminClient();
     const lineId = crypto.randomUUID();
     const passwordHash = await hashPassword(password);
-    const rootState = buildDefaultRootState(lineId, name);
+    const rootState =
+      providedState && typeof providedState === 'object' && providedState !== null
+        ? (providedState as { currentLineId: string; lines: unknown[]; lineStates: Record<string, unknown> })
+        : buildDefaultRootState(lineId, name);
 
     const { error: errLine } = await supabase.from('cloud_lines').insert({
       id: lineId,

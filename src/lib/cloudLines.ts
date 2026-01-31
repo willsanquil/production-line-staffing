@@ -58,20 +58,22 @@ export async function listCloudLines(): Promise<CloudLineSummary[]> {
   return (data ?? []) as CloudLineSummary[];
 }
 
-/** Create a new cloud line. Returns lineId, name, and initial rootState. */
+/** Create a new cloud line. Optionally pass rootState to share an existing local line. */
 export async function createCloudLine(
   name: string,
-  password: string
+  password: string,
+  rootState?: RootState
 ): Promise<{ lineId: string; name: string; rootState: RootState }> {
   const supabase = getClient();
+  const body = rootState
+    ? { name: name.trim(), password, rootState }
+    : { name: name.trim(), password };
   const { data, error } = await supabase.functions.invoke<{
     lineId: string;
     name: string;
     rootState: RootState;
     error?: string;
-  }>('create-line', {
-    body: { name: name.trim(), password },
-  });
+  }>('create-line', { body });
   if (error) {
     const message = await getFunctionErrorMessage(error, 'create-line');
     throw new Error(message);
@@ -104,6 +106,20 @@ export async function getLineState(
   if (data?.error) throw new Error(data.error);
   if (!data?.rootState) throw new Error('Invalid response from get-line-state');
   return data.rootState as RootState;
+}
+
+/** Delete a cloud line (password-protected). Use for admin/testing. */
+export async function deleteCloudLine(lineId: string, password: string): Promise<void> {
+  const supabase = getClient();
+  const { data, error } = await supabase.functions.invoke<{ ok?: boolean; error?: string }>(
+    'delete-line',
+    { body: { lineId, password } }
+  );
+  if (error) {
+    const message = await getFunctionErrorMessage(error, 'delete-line');
+    throw new Error(message);
+  }
+  if (data?.error) throw new Error(data.error);
 }
 
 /** Save a cloud line's state (password-protected). */

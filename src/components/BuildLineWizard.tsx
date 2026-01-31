@@ -5,6 +5,10 @@ import { areaIdFromName } from '../lib/lineConfig';
 interface BuildLineWizardProps {
   /** Existing area IDs across all lines (to avoid id collisions). */
   existingAreaIds: Set<string>;
+  /** When provided (e.g. cloud create flow), use this id instead of generating one. */
+  existingLineId?: string;
+  /** Pre-fill the line name (e.g. from cloud create). */
+  initialLineName?: string;
   onComplete: (config: LineConfig) => void;
   onCancel: () => void;
 }
@@ -18,9 +22,9 @@ interface SectionDraft {
   maxSlots: number;
 }
 
-export function BuildLineWizard({ existingAreaIds, onComplete, onCancel }: BuildLineWizardProps) {
+export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineName, onComplete, onCancel }: BuildLineWizardProps) {
   const [step, setStep] = useState<Step>('name');
-  const [lineName, setLineName] = useState('');
+  const [lineName, setLineName] = useState(initialLineName ?? '');
   const [sections, setSections] = useState<SectionDraft[]>([]);
   const [leadAreaIds, setLeadAreaIds] = useState<Set<string>>(new Set());
   const [breaksEnabled, setBreaksEnabled] = useState(true);
@@ -59,7 +63,7 @@ export function BuildLineWizard({ existingAreaIds, onComplete, onCancel }: Build
   }, []);
 
   const handleCreate = useCallback(() => {
-    const lineId = 'line_' + Math.random().toString(36).slice(2, 10);
+    const lineId = existingLineId ?? 'line_' + Math.random().toString(36).slice(2, 10);
     const areas: AreaConfigInLine[] = sections.map((s) => ({
       id: s.id,
       name: s.name,
@@ -78,7 +82,7 @@ export function BuildLineWizard({ existingAreaIds, onComplete, onCancel }: Build
       breakRotations: Math.min(6, Math.max(1, breakRotations)),
     };
     onComplete(config);
-  }, [lineName, sections, leadAreaIds, breaksEnabled, breaksScope, breakRotations, onComplete]);
+  }, [existingLineId, lineName, sections, leadAreaIds, breaksEnabled, breaksScope, breakRotations, onComplete]);
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', padding: '24px 16px' }}>

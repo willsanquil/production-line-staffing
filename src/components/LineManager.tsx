@@ -2,13 +2,15 @@ import type { RootState } from '../types';
 
 interface LineManagerProps {
   rootState: RootState;
+  canShare?: boolean;
+  onShareClick?: () => void;
   onOpenLine: (lineId: string) => void;
   onBuildNew: () => void;
   onDeleteLine: (lineId: string) => void;
   onBack: () => void;
 }
 
-export function LineManager({ rootState, onOpenLine, onBuildNew, onDeleteLine, onBack }: LineManagerProps) {
+export function LineManager({ rootState, canShare, onShareClick, onOpenLine, onBuildNew, onDeleteLine, onBack }: LineManagerProps) {
   const { lines, currentLineId } = rootState;
   const canDelete = lines.length > 1;
 
@@ -21,8 +23,31 @@ export function LineManager({ rootState, onOpenLine, onBuildNew, onDeleteLine, o
         <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>My lines</h1>
       </div>
       <p style={{ color: '#555', marginBottom: 20, fontSize: '0.95rem' }}>
-        Each line has its own roster. Use the Flexed dropdown to temporarily assign a person to another line; they then appear on that line's roster and can be slotted there (skills retained). Open a line to work on it, or build a new one.
+        Each line has its own roster. Use the Flexed dropdown to temporarily assign a person to another line; they then appear on that line's roster and can be slotted there (skills retained). Open a line to work on it, or build a new one. When in local mode, you can share a line to the cloud so others can join it from the Group list.
       </p>
+      {canShare && onShareClick && (
+        <div style={{ marginBottom: 16 }}>
+          <button
+            type="button"
+            onClick={onShareClick}
+            style={{
+              padding: '10px 18px',
+              fontSize: '1rem',
+              fontWeight: 600,
+              background: '#1a73e8',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              cursor: 'pointer',
+            }}
+          >
+            Share this line to cloud
+          </button>
+          <p style={{ fontSize: '0.85rem', color: '#666', marginTop: 6 }}>
+            Publish the current line with a name and password so others can select it from Group and join.
+          </p>
+        </div>
+      )}
       <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
         {lines.map((line) => (
           <li
