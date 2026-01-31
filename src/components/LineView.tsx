@@ -343,85 +343,7 @@ function LineViewInner({
         )}
       </header>
 
-      {assignedLeadKeys.length > 0 && (
-        isCompact ? (
-          <section className="presentation-section-compact" style={{ ...sectionStyle, padding: 6, marginBottom: 8 }}>
-            <h2 style={{ ...sectionTitleStyle, fontSize: '0.8rem', marginBottom: 4 }}>Leads</h2>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="presentation-table-compact">
-                <thead>
-                  <tr>
-                    <th className="presentation-th-compact">Position</th>
-                    <th className="presentation-th-compact">Name</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {assignedLeadKeys.map((key: string) => {
-                    const personId = leadSlots[key]!;
-                    const skillAreaId = /^\d+$/.test(key) ? (firstAreaId ?? '') : key;
-                    const skill = getSkillInArea(skillAreaId as AreaId, personId);
-                    return (
-                      <tr key={key}>
-                        <td className="presentation-td-compact">{getLeadSlotLabel(key)}</td>
-                        <td className="presentation-td-compact">
-                          <span className={`skill-name-${skill}`}>{getName(personId)}</span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        ) : (
-          <div className="presentation-row" style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
-            <section style={sectionStyle}>
-              <h2 style={sectionTitleStyle}>Leads</h2>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={presentationTableStyle}>
-                  <thead>
-                    <tr>
-                      <th style={presentationThStyle}>Position</th>
-                      <th style={presentationThStyle}>Name</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {assignedLeadKeys.map((key: string) => {
-                      const personId = leadSlots[key]!;
-                      const skillAreaId = /^\d+$/.test(key) ? (firstAreaId ?? '') : key;
-                      const skill = getSkillInArea(skillAreaId as AreaId, personId);
-                      return (
-                        <tr key={key}>
-                          <td style={presentationTdStyle}>{getLeadSlotLabel(key)}</td>
-                          <td style={presentationTdStyle}>
-                            <span className={`skill-name-${skill}`} style={{ fontSize: nameFontSize, fontWeight: 600 }}>{getName(personId)}</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-            <div>
-              {breaksScope === 'line' && breakSchedules?.[BREAK_LINE_WIDE_KEY] && Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).length > 0 && rotationCount >= 1 && (
-                <BreakTable
-                  people={Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).map((id) => {
-                    const p = roster.find((r) => r.id === id);
-                    return { id, name: p?.name ?? id };
-                  })}
-                  assignments={breakSchedules[BREAK_LINE_WIDE_KEY]}
-                  rotationCount={rotCount}
-                  title="Break Schedule"
-                  presentationMode
-                />
-              )}
-            </div>
-          </div>
-        )
-      )}
-
-      {!isCompact && breaksScope === 'line' && breakSchedules?.[BREAK_LINE_WIDE_KEY] && Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).length > 0 && rotationCount >= 1 && assignedLeadKeys.length === 0 && (
+      {!isCompact && breaksScope === 'line' && breakSchedules?.[BREAK_LINE_WIDE_KEY] && Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).length > 0 && rotationCount >= 1 && (
         <div className="presentation-row" style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
           <div />
           <BreakTable
@@ -462,6 +384,68 @@ function LineViewInner({
           </section>
         );
       })}
+
+      {assignedLeadKeys.length > 0 && (
+        isCompact ? (
+          <section className="presentation-section-compact" style={{ ...sectionStyle, padding: 6, marginBottom: 8 }}>
+            <h2 style={{ ...sectionTitleStyle, fontSize: '0.8rem', marginBottom: 4 }}>Leads</h2>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="presentation-table-compact">
+                <thead>
+                  <tr>
+                    <th className="presentation-th-compact">Position</th>
+                    <th className="presentation-th-compact">Name</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {assignedLeadKeys.map((key: string) => {
+                    const personId = leadSlots[key]!;
+                    const skillAreaId = /^\d+$/.test(key) ? (firstAreaId ?? '') : key;
+                    const skill = getSkillInArea(skillAreaId as AreaId, personId);
+                    return (
+                      <tr key={key}>
+                        <td className="presentation-td-compact">{getLeadSlotLabel(key)}</td>
+                        <td className="presentation-td-compact">
+                          <span className={`skill-name-${skill}`}>{getName(personId)}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : (
+          <section style={{ ...sectionStyle, marginTop: 8 }}>
+            <h2 style={sectionTitleStyle}>Leads</h2>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={presentationTableStyle}>
+                <thead>
+                  <tr>
+                    <th style={presentationThStyle}>Position</th>
+                    <th style={presentationThStyle}>Name</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {assignedLeadKeys.map((key: string) => {
+                    const personId = leadSlots[key]!;
+                    const skillAreaId = /^\d+$/.test(key) ? (firstAreaId ?? '') : key;
+                    const skill = getSkillInArea(skillAreaId as AreaId, personId);
+                    return (
+                      <tr key={key}>
+                        <td style={presentationTdStyle}>{getLeadSlotLabel(key)}</td>
+                        <td style={presentationTdStyle}>
+                          <span className={`skill-name-${skill}`} style={{ fontSize: nameFontSize, fontWeight: 600 }}>{getName(personId)}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )
+      )}
     </div>
   );
 }

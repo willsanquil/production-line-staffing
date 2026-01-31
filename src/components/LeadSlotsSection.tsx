@@ -35,9 +35,7 @@ function LeadSlotDropdown({
   const leadsOnly = useMemo(
     () =>
       sortByFirstName(
-        roster.filter(
-          (p) => !p.absent && (p.lead || (p.ot && p.otHereToday))
-        )
+        roster.filter((p) => !p.absent && p.lead && !p.ot)
       ),
     [roster]
   );

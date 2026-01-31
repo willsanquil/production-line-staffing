@@ -220,6 +220,7 @@ export default function App() {
   stateRef.current = { slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea };
   const rootStateRef = useRef(rootState);
   rootStateRef.current = rootState;
+  const lastLocalChangeRef = useRef(0);
 
   useEffect(() => {
     if (appMode !== 'loading-cloud') return;
@@ -312,6 +313,7 @@ export default function App() {
     const password = cloudPasswordRef.current;
     if (!password) return;
     const intervalId = setInterval(() => {
+      if (Date.now() - lastLocalChangeRef.current < 2000) return;
       getLineState(cloudLineId, password)
         .then((root) => setRootState(root))
         .catch(() => { /* ignore poll errors (e.g. network) */ });
@@ -361,6 +363,7 @@ export default function App() {
   }, []);
 
   const setSlotsForArea = useCallback((areaId: AreaId, newSlots: SlotsByArea[AreaId]) => {
+    lastLocalChangeRef.current = Date.now();
     setSlots((prev) => ({ ...prev, [areaId]: newSlots }));
   }, []);
 
@@ -564,6 +567,7 @@ export default function App() {
   const handleAreaCapacityChange = useCallback((areaId: AreaId, payload: { min?: number; max?: number }) => {
     const base = effectiveCapacity[areaId];
     if (!base) return;
+    lastLocalChangeRef.current = Date.now();
     const nextMin = payload.min != null && !Number.isNaN(payload.min) ? Math.max(1, Math.round(payload.min)) : undefined;
     const nextMax = payload.max != null && !Number.isNaN(payload.max) ? Math.max(1, Math.round(payload.max)) : undefined;
     const cap = {
