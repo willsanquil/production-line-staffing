@@ -1,8 +1,8 @@
-import { memo } from 'react';
-import type { AreaId, LeadSlotAreaId, RosterPerson, SlotsByArea } from '../types';
+import { memo, type CSSProperties } from 'react';
+import type { AreaId, RosterPerson, SlotsByArea } from '../types';
 import type { SkillLevel } from '../types';
-import { LINE_SECTIONS, isCombinedSection, COMBINED_14_5_FLIP, LEAD_SLOT_AREAS, areaRequiresTrainedOrExpert } from '../types';
-import { getSlotLabel } from '../lib/areaConfig';
+import { LINE_SECTIONS, LEAD_SLOT_AREAS, areaRequiresTrainedOrExpert as defaultRequiresTrainedOrExpert } from '../types';
+import { getSlotLabel as getSlotLabelDefault, isGenericSlotLabel } from '../lib/areaConfig';
 import type { SlotLabelsByArea } from '../types';
 import { getAreaRisks } from '../lib/lineViewRisks';
 
@@ -24,10 +24,12 @@ function averageKnowledge(areaId: AreaId, slots: { personId: string | null }[], 
   return sum / personIds.length;
 }
 
+const BAR_HEIGHT = 18;
+
 function KnowledgeBar({ position }: { position: number | null }) {
   return (
     <div className="seniority-spectrum-wrap" style={{ marginBottom: 0 }}>
-      <div className="seniority-spectrum" style={{ position: 'relative', height: 14, borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
+      <div className="seniority-spectrum" style={{ position: 'relative', height: BAR_HEIGHT, borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
         <div className="skill-no_experience" style={{ flex: 1, minWidth: 0 }} />
         <div className="skill-training" style={{ flex: 1, minWidth: 0 }} />
         <div className="skill-trained" style={{ flex: 1, minWidth: 0 }} />
@@ -59,16 +61,20 @@ function KnowledgeBar({ position }: { position: number | null }) {
 interface LineViewProps {
   slots: SlotsByArea;
   roster: RosterPerson[];
-  leadSlots: Record<LeadSlotAreaId, string | null>;
+  leadSlots: Record<string, string | null>;
   areaLabels: Record<AreaId, string>;
   slotLabelsByArea: SlotLabelsByArea;
   effectiveCapacity: Record<AreaId, { min: number; max: number }>;
   totalOnLine: number;
   fullStaff: number;
-  /** 0–100 */
   staffingPct: number;
-  /** 0–3 average knowledge, or null if no one on line */
   lineHealthScore: number | null;
+  /** For custom lines: section order (single area id or [id, id] pair). Omit for IC. */
+  lineSections?: (string | readonly [string, string])[];
+  /** For custom lines: area IDs that have a lead slot. Omit for IC. */
+  leadAreaIds?: string[];
+  getSlotLabel?: (areaId: string, slotIndex: number) => string;
+  areaRequiresTrainedOrExpert?: (areaId: string) => boolean;
 }
 
 /** Compact, screenshot- and phone-friendly view: line health, areas, who is running each, and risks. */
@@ -83,21 +89,153 @@ function LineViewInner({
   fullStaff,
   staffingPct,
   lineHealthScore,
+  lineSections: lineSectionsProp,
+  leadAreaIds: leadAreaIdsProp,
+  getSlotLabel: getSlotLabelProp,
+  areaRequiresTrainedOrExpert: areaRequiresTrainedOrExpertProp,
 }: LineViewProps) {
+  const sections = lineSectionsProp ?? LINE_SECTIONS;
+  const leadAreaIds = leadAreaIdsProp ?? [...LEAD_SLOT_AREAS];
+  const getLabel = getSlotLabelProp ?? ((areaId: string, idx: number) => getSlotLabelDefault(areaId, idx, slotLabelsByArea));
+  const requiresTrainedOrExpert = areaRequiresTrainedOrExpertProp ?? defaultRequiresTrainedOrExpert;
   const getName = (personId: string | null) =>
     personId ? (roster.find((p) => p.id === personId)?.name ?? '—') : '—';
+  const getSkillInArea = (areaId: AreaId, personId: string | null): SkillLevel => {
+    if (!personId) return 'no_experience';
+    const p = roster.find((r) => r.id === personId);
+    return (p?.skills[areaId] ?? 'no_experience') as SkillLevel;
+  };
   const knowledgePosition = lineHealthScore != null ? (lineHealthScore / 3) * 100 : null;
+  const assignedLeadAreas = leadAreaIds.filter((areaId) => leadSlots[areaId] != null && leadSlots[areaId] !== '');
+
+  const sectionStyle: CSSProperties = {
+    background: '#fff',
+    borderRadius: 8,
+    border: '1px solid #e5e5e5',
+    padding: '14px 16px',
+    marginBottom: 12,
+  };
+  const sectionTitleStyle: CSSProperties = {
+    margin: 0,
+    fontSize: '1.1rem',
+    fontWeight: 700,
+    color: '#1a1a1a',
+    marginBottom: 10,
+  };
+  const titleRowStyle: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+    flexWrap: 'wrap',
+  };
+  const alertStyle: CSSProperties = {
+    fontSize: '0.95rem',
+    fontWeight: 600,
+    color: '#c0392b',
+    marginBottom: 8,
+    lineHeight: 1.4,
+  };
+  const staffRowStyle: CSSProperties = {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px 14px',
+    fontSize: '1rem',
+    lineHeight: 1.5,
+  };
+
+  const renderAreaBlock = (
+    areaId: string,
+    allSlots: { id: string; personId: string | null; disabled?: boolean }[],
+    options?: { subLabel?: string; hideTitleRow?: boolean }
+  ) => {
+    const subLabel = options?.subLabel;
+    const hideTitleRow = options?.hideTitleRow;
+    const areaSlots = allSlots.filter((s) => !s.disabled);
+    const disabledLabels = allSlots
+      .map((s, idx) => (s.disabled ? getLabel(areaId, idx) : null))
+      .filter((l): l is string => l != null);
+    const filled = areaSlots.filter((s) => s.personId).length;
+    const min = effectiveCapacity[areaId]?.min ?? 0;
+    const disabledCount = allSlots.length - areaSlots.length;
+    const areaRequiresTrained = requiresTrainedOrExpert(areaId);
+    const hasTrainedOrExpert =
+      filled > 0 &&
+      areaSlots.some((s) => {
+        if (!s.personId) return false;
+        const p = roster.find((r) => r.id === s.personId);
+        const sk = p?.skills[areaId] ?? 'no_experience';
+        return sk === 'trained' || sk === 'expert';
+      });
+    const risks = getAreaRisks({
+      filled,
+      min,
+      disabledCount,
+      needsTrainedOrExpert: areaRequiresTrained && filled >= 1 && !hasTrainedOrExpert,
+    });
+    const avgKnowledge = averageKnowledge(areaId, areaSlots, roster);
+    const spectrumPos = avgKnowledge != null ? (avgKnowledge / 3) * 100 : null;
+    const alerts = [
+      ...disabledLabels.map((l) => `${l} disabled`),
+      ...risks,
+    ].filter(Boolean);
+
+    return (
+      <div key={areaId} style={{ marginBottom: subLabel ? 14 : 0 }}>
+        {hideTitleRow ? (
+          <div style={{ ...titleRowStyle, marginBottom: 6 }}>
+            <div style={{ width: 72, flexShrink: 0 }}>
+              <KnowledgeBar position={spectrumPos} />
+            </div>
+          </div>
+        ) : (
+          <div style={titleRowStyle}>
+            <span style={{ fontSize: '1rem', fontWeight: 600, color: '#333' }}>
+              {subLabel ?? areaLabels[areaId]}
+            </span>
+            <div style={{ width: 72, flexShrink: 0 }}>
+              <KnowledgeBar position={spectrumPos} />
+            </div>
+          </div>
+        )}
+        {alerts.length > 0 && (
+          <div style={alertStyle}>{alerts.join(' · ')}</div>
+        )}
+        <div style={staffRowStyle}>
+          {allSlots.map((slot, idx) => {
+            if (slot.disabled) return null;
+            const slotLabel = getLabel(areaId, idx);
+            const name = getName(slot.personId);
+            const skill = getSkillInArea(areaId, slot.personId);
+            const showLabel = !isGenericSlotLabel(slotLabel);
+            return (
+              <span key={slot.id}>
+                {showLabel ? (
+                  <>
+                    <span style={{ color: '#666', marginRight: 4 }}>{slotLabel}:</span>
+                    <span className={`skill-name-${skill}`}>{name}</span>
+                  </>
+                ) : (
+                  <span className={`skill-name-${skill}`}>{name}</span>
+                )}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div className="line-view" style={{ maxWidth: 520, margin: '0 auto', padding: '0 12px 80px' }}>
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: '1rem', color: '#555', marginBottom: 8 }}>
-          {totalOnLine} on line — full staff {fullStaff}
+    <div className="line-view" style={{ maxWidth: 540, margin: '0 auto', padding: '0 16px 80px' }}>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1a1a1a', marginBottom: 12 }}>
+          {totalOnLine}/{fullStaff}
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'flex-start' }}>
-          <div style={{ minWidth: 140 }}>
-            <div style={{ fontSize: '0.75rem', marginBottom: 4, color: '#666' }}>Staffing</div>
-            <div style={{ height: 14, borderRadius: 4, overflow: 'hidden', background: '#eee', position: 'relative' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
+          <div style={{ minWidth: 160 }}>
+            <div style={{ fontSize: '0.85rem', marginBottom: 4, color: '#555', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Staffing</div>
+            <div style={{ height: BAR_HEIGHT, borderRadius: 6, overflow: 'hidden', background: '#eee', position: 'relative' }}>
               <div
                 style={{
                   position: 'absolute',
@@ -110,151 +248,61 @@ function LineViewInner({
                 }}
               />
             </div>
-            <div style={{ fontSize: '0.8rem', marginTop: 2 }}>{staffingPct}%</div>
+            <div style={{ fontSize: '0.9rem', marginTop: 4, color: '#333' }}>{staffingPct}%</div>
           </div>
-          <div style={{ minWidth: 140 }}>
-            <div style={{ fontSize: '0.75rem', marginBottom: 4, color: '#666' }}>Knowledge</div>
+          <div style={{ minWidth: 160 }}>
+            <div style={{ fontSize: '0.85rem', marginBottom: 4, color: '#555', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Knowledge</div>
             <KnowledgeBar position={knowledgePosition} />
-            <div style={{ fontSize: '0.8rem', marginTop: 2 }}>
+            <div style={{ fontSize: '0.9rem', marginTop: 4, color: '#333' }}>
               {lineHealthScore != null ? `${(lineHealthScore).toFixed(1)} / 3` : '—'}
             </div>
           </div>
         </div>
       </div>
 
-      {LEAD_SLOT_AREAS.length > 0 && (
-        <div style={{ marginBottom: 20, paddingBottom: 16, borderBottom: '2px solid #eee' }}>
-          <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Leads
+      {assignedLeadAreas.length > 0 && (
+        <section style={sectionStyle}>
+          <h2 style={sectionTitleStyle}>Leads</h2>
+          <div style={staffRowStyle}>
+            {assignedLeadAreas.map((areaId) => {
+              const personId = leadSlots[areaId]!;
+              const skill = getSkillInArea(areaId, personId);
+              return (
+                <span key={areaId}>
+                  <span style={{ color: '#666', marginRight: 4 }}>{areaLabels[areaId]}:</span>
+                  <span className={`skill-name-${skill}`}>{getName(personId)}</span>
+                </span>
+              );
+            })}
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 20px' }}>
-            {LEAD_SLOT_AREAS.map((areaId) => (
-              <span key={areaId} style={{ fontSize: '1.05rem' }}>
-                <strong>{areaLabels[areaId]}:</strong> {getName(leadSlots[areaId])}
-              </span>
-            ))}
-          </div>
-        </div>
+        </section>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-        {LINE_SECTIONS.map((section) => {
-          if (isCombinedSection(section)) {
-            const label = `${areaLabels[COMBINED_14_5_FLIP[0]]} & ${areaLabels[COMBINED_14_5_FLIP[1]]}`;
-            const slotsA = slots[COMBINED_14_5_FLIP[0]] ?? [];
-            const slotsB = slots[COMBINED_14_5_FLIP[1]] ?? [];
-            return (
-              <section key="14.5-flip" className="line-view-area" style={{ borderBottom: '1px solid #eee', paddingBottom: 16 }}>
-                <h2 style={{ margin: '0 0 12px 0', fontSize: '1.35rem', fontWeight: 700 }}>
-                  {label}
-                </h2>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {[COMBINED_14_5_FLIP[0], COMBINED_14_5_FLIP[1]].map((areaId) => {
-                    const areaSlots = (areaId === COMBINED_14_5_FLIP[0] ? slotsA : slotsB).filter((s) => !s.disabled);
-                    const filled = areaSlots.filter((s) => s.personId).length;
-                    const min = effectiveCapacity[areaId]?.min ?? 0;
-                    const disabledCount = (areaId === COMBINED_14_5_FLIP[0] ? slotsA : slotsB).length - areaSlots.length;
-                    const requiresTrainedOrExpert = areaRequiresTrainedOrExpert(areaId);
-                    const hasTrainedOrExpert =
-                      filled > 0 &&
-                      areaSlots.some((s) => {
-                        if (!s.personId) return false;
-                        const p = roster.find((r) => r.id === s.personId);
-                        const skill = p?.skills[areaId] ?? 'no_experience';
-                        return skill === 'trained' || skill === 'expert';
-                      });
-                    const risks = getAreaRisks({
-                      filled,
-                      min,
-                      disabledCount,
-                      needsTrainedOrExpert: requiresTrainedOrExpert && filled >= 1 && !hasTrainedOrExpert,
-                    });
-                    const avgKnowledge = averageKnowledge(areaId, areaSlots, roster);
-                    const spectrumPos = avgKnowledge != null ? (avgKnowledge / 3) * 100 : null;
-                    return (
-                      <div key={areaId}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: '0.9rem', color: '#666' }}>{areaLabels[areaId]}</span>
-                          <div style={{ width: 80, flexShrink: 0 }}>
-                            <KnowledgeBar position={spectrumPos} />
-                          </div>
-                        </div>
-                        {risks.length > 0 && (
-                          <div style={{ fontSize: '0.85rem', color: '#c0392b', marginBottom: 6 }}>
-                            {risks.join(' ')}
-                          </div>
-                        )}
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 16px' }}>
-                          {areaSlots.map((slot, idx) => {
-                            const slotLabel = getSlotLabel(areaId, idx, slotLabelsByArea);
-                            const name = getName(slot.personId);
-                            return (
-                              <div key={slot.id} style={{ fontSize: '1.05rem' }}>
-                                {slotLabel}: <strong>{name}</strong>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            );
-          }
-          const areaId = section;
-          const allAreaSlots = slots[areaId] ?? [];
-          const areaSlots = allAreaSlots.filter((s) => !s.disabled);
-          const filled = areaSlots.filter((s) => s.personId).length;
-          const min = effectiveCapacity[areaId]?.min ?? 0;
-          const disabledCount = allAreaSlots.length - areaSlots.length;
-          const requiresTrainedOrExpert = areaRequiresTrainedOrExpert(areaId);
-          const hasTrainedOrExpert =
-            filled > 0 &&
-            areaSlots.some((s) => {
-              if (!s.personId) return false;
-              const p = roster.find((r) => r.id === s.personId);
-              const skill = p?.skills[areaId] ?? 'no_experience';
-              return skill === 'trained' || skill === 'expert';
-            });
-          const risks = getAreaRisks({
-            filled,
-            min,
-            disabledCount,
-            needsTrainedOrExpert: requiresTrainedOrExpert && filled >= 1 && !hasTrainedOrExpert,
-          });
-          const avgKnowledge = averageKnowledge(areaId, areaSlots, roster);
-          const spectrumPos = avgKnowledge != null ? (avgKnowledge / 3) * 100 : null;
+      {sections.map((section) => {
+        const isCombined = Array.isArray(section);
+        if (isCombined) {
+          const [idA, idB] = section as [string, string];
+          const label = `${areaLabels[idA] ?? idA} & ${areaLabels[idB] ?? idB}`;
+          const slotsA = slots[idA] ?? [];
+          const slotsB = slots[idB] ?? [];
           return (
-            <section key={areaId} className="line-view-area" style={{ borderBottom: '1px solid #eee', paddingBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-                <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 700 }}>
-                  {areaLabels[areaId]}
-                </h2>
-                <div style={{ width: 80, flexShrink: 0 }}>
-                  <KnowledgeBar position={spectrumPos} />
-                </div>
-              </div>
-              {risks.length > 0 && (
-                <div style={{ fontSize: '0.85rem', color: '#c0392b', marginBottom: 8 }}>
-                  {risks.join(' ')}
-                </div>
+            <section key={`${idA}-${idB}`} style={sectionStyle}>
+              <h2 style={sectionTitleStyle}>{label}</h2>
+              {[idA, idB].map((areaId) =>
+                renderAreaBlock(areaId, areaId === idA ? slotsA : slotsB, { subLabel: areaLabels[areaId] ?? areaId })
               )}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 16px' }}>
-                {areaSlots.map((slot, idx) => {
-                  const slotLabel = getSlotLabel(areaId, idx, slotLabelsByArea);
-                  const name = getName(slot.personId);
-                  return (
-                    <div key={slot.id} style={{ fontSize: '1.05rem' }}>
-                      {slotLabel}: <strong>{name}</strong>
-                    </div>
-                  );
-                })}
-              </div>
             </section>
           );
-        })}
-      </div>
+        }
+        const areaId = section as string;
+        const allAreaSlots = slots[areaId] ?? [];
+        return (
+          <section key={areaId} style={sectionStyle}>
+            <h2 style={sectionTitleStyle}>{areaLabels[areaId] ?? areaId}</h2>
+            {renderAreaBlock(areaId, allAreaSlots, { hideTitleRow: true })}
+          </section>
+        );
+      })}
     </div>
   );
 }

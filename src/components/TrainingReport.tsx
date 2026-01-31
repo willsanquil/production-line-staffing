@@ -7,6 +7,10 @@ interface TrainingReportProps {
   slots: SlotsByArea;
   areaLabels: Record<AreaId, string>;
   effectiveCapacity: Record<AreaId, { min: number; max: number }>;
+  /** Compact list: only no experience / training, with TRAINING REQUEST when they asked to learn that area. */
+  presentationMode?: boolean;
+  /** For custom lines, pass area IDs. Omit for default IC areas. */
+  areaIds?: string[];
 }
 
 /** One assignment row: always show (No experience) or (Training) when applicable; optionally "— wanted to learn". */
@@ -34,11 +38,37 @@ function formatAssignmentLabel(
   );
 }
 
+/** Compact presentation line: Name — Area (No experience | Training) [TRAINING REQUEST] */
+function PresentationTrainingLine({
+  personName,
+  areaLabel,
+  skill,
+  wantToLearn,
+}: {
+  personName: string;
+  areaLabel: string;
+  skill: SkillLevel;
+  wantToLearn: boolean;
+}) {
+  const skillLabel = skill === 'no_experience' ? 'No experience' : 'Training';
+  return (
+    <li style={{ fontSize: '1rem', marginBottom: 4 }}>
+      <strong>{personName}</strong> — {areaLabel} ({skillLabel})
+      {wantToLearn && (
+        <span style={{ marginLeft: 6, fontSize: '0.8rem', fontWeight: 700, color: '#2980b9' }}>
+          TRAINING REQUEST
+        </span>
+      )}
+    </li>
+  );
+}
+
 /** Report: under minimum / disabled slots; all assignments with No experience / Training; who is in an area they wanted to learn. */
-function TrainingReportInner({ roster, slots, areaLabels }: TrainingReportProps) {
+function TrainingReportInner({ roster, slots, areaLabels, presentationMode = false, areaIds: areaIdsProp }: TrainingReportProps) {
+  const areaIds = areaIdsProp ?? [...AREA_IDS];
   const allAssignments = useMemo(() => {
     const list: { personId: string; personName: string; areaId: AreaId; areaLabel: string; skill: SkillLevel; wantToLearn: boolean }[] = [];
-    for (const areaId of AREA_IDS) {
+    for (const areaId of areaIds) {
       for (const slot of slots[areaId] ?? []) {
         if (slot.disabled || !slot.personId) continue;
         const person = roster.find((p) => p.id === slot.personId);
@@ -56,7 +86,7 @@ function TrainingReportInner({ roster, slots, areaLabels }: TrainingReportProps)
       }
     }
     return list;
-  }, [roster, slots, areaLabels]);
+  }, [roster, slots, areaLabels, areaIds]);
 
   const noExperienceOrTraining = useMemo(
     () => allAssignments.filter((a) => a.skill === 'no_experience' || a.skill === 'training'),
@@ -67,6 +97,54 @@ function TrainingReportInner({ roster, slots, areaLabels }: TrainingReportProps)
     const inFirst = new Set(noExperienceOrTraining.map(key));
     return allAssignments.filter((a) => a.wantToLearn && !inFirst.has(key(a)));
   }, [allAssignments, noExperienceOrTraining]);
+
+  if (presentationMode) {
+    const hasTraining = noExperienceOrTraining.length > 0;
+    const hasWantToLearn = wantToLearnOnly.length > 0;
+    const hasAny = hasTraining || hasWantToLearn;
+    return (
+      <section className="line-view" style={{ maxWidth: 520, margin: '0 auto', padding: '0 12px 24px' }}>
+        <h2 style={{ margin: '0 0 12px 0', fontSize: '1.35rem', fontWeight: 700 }}>Training Report</h2>
+        {!hasAny ? (
+          <p style={{ fontSize: '1rem', color: '#666', margin: 0 }}>No one in training.</p>
+        ) : (
+          <>
+            {hasTraining && (
+              <>
+                <h3 style={{ margin: '12px 0 6px 0', fontSize: '1.1rem', fontWeight: 600 }}>No experience or in training</h3>
+                <ul style={{ margin: 0, paddingLeft: '1.25rem', listStyle: 'disc' }}>
+                  {noExperienceOrTraining.map(({ personId, personName, areaId, areaLabel, skill, wantToLearn }) => (
+                    <PresentationTrainingLine
+                      key={`${personId}-${areaId}`}
+                      personName={personName}
+                      areaLabel={areaLabel}
+                      skill={skill}
+                      wantToLearn={wantToLearn}
+                    />
+                  ))}
+                </ul>
+              </>
+            )}
+            {hasWantToLearn && (
+              <>
+                <h3 style={{ margin: '16px 0 6px 0', fontSize: '1.1rem', fontWeight: 600 }}>Assigned to an area they wanted to learn</h3>
+                <ul style={{ margin: 0, paddingLeft: '1.25rem', listStyle: 'disc' }}>
+                  {wantToLearnOnly.map(({ personId, personName, areaId, areaLabel }) => (
+                    <li key={`want-${personId}-${areaId}`} style={{ fontSize: '1rem', marginBottom: 4 }}>
+                      <strong>{personName}</strong> — {areaLabel}
+                      <span style={{ marginLeft: 6, fontSize: '0.8rem', fontWeight: 700, color: '#2980b9' }}>
+                        TRAINING REQUEST
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
+        )}
+      </section>
+    );
+  }
 
   const hasAnyAssignments = allAssignments.length > 0;
   if (!hasAnyAssignments) return null;

@@ -39,3 +39,8 @@ export function getSlotLabel(
   }
   return `Slot ${slotIndex + 1}`;
 }
+
+/** True when the label is the default "Slot 1", "Slot 2", etc. (presentation: hide label, show only person). */
+export function isGenericSlotLabel(label: string): boolean {
+  return /^Slot \d+$/.test(label.trim());
+}

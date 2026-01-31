@@ -58,11 +58,12 @@ function assignToBestBucket(
 /** Generate break and lunch rotation assignments per area. Spreads people across rotations so the line always has coverage (no two in same area on same break/lunch). Respects preferences when possible. */
 export function generateBreakSchedules(
   roster: RosterPerson[],
-  slotsByArea: SlotsByArea
+  slotsByArea: SlotsByArea,
+  areaIds: string[] = [...AREA_IDS]
 ): BreakSchedulesByArea {
   const result: BreakSchedulesByArea = {};
 
-  for (const areaId of AREA_IDS) {
+  for (const areaId of areaIds) {
     const slots = slotsByArea[areaId] ?? [];
     const personIds = slots.map((s) => s.personId).filter(Boolean) as string[];
     if (personIds.length === 0) continue;

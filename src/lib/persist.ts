@@ -1,5 +1,7 @@
-import type { AppState, SavedConfig, SavedDay, SlotsByArea } from '../types';
+import type { AppState, LineState, RootState, RosterPerson, SavedConfig, SavedDay, SlotsByArea } from '../types';
 import { AREA_IDS } from '../types';
+import { getDefaultICLineConfig } from './lineConfig';
+import { normalizeSlotsToCapacity } from '../data/initialState';
 
 const KEY_STATE = 'staffing-app-state';
 const KEY_CONFIGS = 'staffing-app-configs';
@@ -9,11 +11,16 @@ function nanoid(): string {
   return Math.random().toString(36).slice(2, 11);
 }
 
+/** Load legacy single-line state (for migration). */
 export function loadState(): AppState | null {
   try {
     const raw = localStorage.getItem(KEY_STATE);
     if (!raw) return null;
-    return JSON.parse(raw) as AppState;
+    const data = JSON.parse(raw);
+    if (data?.currentLineId != null && data?.lines != null && data?.lineStates != null) {
+      return null;
+    }
+    return data as AppState;
   } catch {
     return null;
   }
@@ -21,6 +28,105 @@ export function loadState(): AppState | null {
 
 export function saveState(state: AppState): void {
   localStorage.setItem(KEY_STATE, JSON.stringify(state));
+}
+
+function normalizeRosterPerson(p: RosterPerson): RosterPerson {
+  const { defaultLineId: _d, ...rest } = p as RosterPerson & { defaultLineId?: string };
+  return {
+    ...rest,
+    flexedToLineId: p.flexedToLineId ?? null,
+    lead: p.lead ?? false,
+    ot: p.ot ?? false,
+    otHereToday: p.otHereToday ?? false,
+    late: p.late ?? false,
+    leavingEarly: p.leavingEarly ?? false,
+    breakPreference: p.breakPreference ?? 'no_preference',
+    areasWantToLearn: p.areasWantToLearn ?? [],
+  };
+}
+
+/** If root has globalRoster (old format), migrate to per-line rosters and return new root. */
+function migrateGlobalRosterToPerLine(root: {
+  currentLineId: string;
+  lines: { id: string }[];
+  lineStates: Record<string, Partial<AppState>>;
+  globalRoster?: RosterPerson[];
+}): RootState | null {
+  if (!Array.isArray(root.globalRoster)) return null;
+  const lineIds = root.lines.map((l) => l.id);
+  const rostersByLine: Record<string, RosterPerson[]> = {};
+  for (const lineId of lineIds) rostersByLine[lineId] = [];
+  for (const p of root.globalRoster) {
+    const homeLineId = (p as RosterPerson & { defaultLineId?: string }).defaultLineId ?? root.currentLineId;
+    const target = lineIds.includes(homeLineId) ? homeLineId : root.currentLineId;
+    if (!rostersByLine[target]) rostersByLine[target] = [];
+    rostersByLine[target].push(normalizeRosterPerson(p));
+  }
+  const lineStates: Record<string, LineState> = {};
+  for (const [lineId, state] of Object.entries(root.lineStates || {})) {
+    const roster = rostersByLine[lineId] ?? state.roster ?? [];
+    lineStates[lineId] = { ...state, roster } as LineState;
+  }
+  return {
+    currentLineId: root.currentLineId,
+    lines: root.lines as import('../types').LineConfig[],
+    lineStates,
+  };
+}
+
+/** Load root state (multi-line). Migrates old globalRoster to per-line rosters. */
+export function loadRootState(): RootState | null {
+  try {
+    const raw = localStorage.getItem(KEY_STATE);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (data?.currentLineId != null && Array.isArray(data?.lines) && data?.lineStates != null) {
+      const root = data as RootState & { globalRoster?: RosterPerson[] };
+      const migrated = migrateGlobalRosterToPerLine(root);
+      if (migrated) return migrated;
+      const lineStates: Record<string, LineState> = {};
+      for (const [lineId, state] of Object.entries(root.lineStates || {})) {
+        const s = state as AppState;
+        const roster = Array.isArray(s?.roster) ? s.roster.map(normalizeRosterPerson) : [];
+        lineStates[lineId] = { ...s, roster } as LineState;
+      }
+      return { currentLineId: root.currentLineId, lines: root.lines, lineStates };
+    }
+    const legacy = data as AppState;
+    if (legacy && Array.isArray(legacy.roster) && legacy.slots && typeof legacy.slots === 'object') {
+      const ic = getDefaultICLineConfig();
+      const slots = normalizeSlotsToCapacity(legacy.slots, legacy.areaCapacityOverrides);
+      const roster = (legacy.roster ?? []).map(normalizeRosterPerson);
+      return {
+        currentLineId: ic.id,
+        lines: [ic],
+        lineStates: {
+          [ic.id]: {
+            roster,
+            slots,
+            leadSlots: legacy.leadSlots ?? {},
+            juicedAreas: legacy.juicedAreas ?? {},
+            deJuicedAreas: legacy.deJuicedAreas ?? {},
+            sectionTasks: legacy.sectionTasks ?? {},
+            schedule: legacy.schedule ?? [],
+            dayNotes: legacy.dayNotes ?? '',
+            documents: legacy.documents ?? [],
+            breakSchedules: legacy.breakSchedules ?? {},
+            areaCapacityOverrides: legacy.areaCapacityOverrides ?? {},
+            areaNameOverrides: legacy.areaNameOverrides ?? {},
+            slotLabelsByArea: legacy.slotLabelsByArea ?? {},
+          },
+        },
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveRootState(root: RootState): void {
+  localStorage.setItem(KEY_STATE, JSON.stringify(root));
 }
 
 /** Export full app state as JSON string (for backup / restore). */
@@ -84,7 +190,8 @@ function saveDaysList(days: SavedDay[]): void {
 export function addSavedDay(
   date: string,
   state: AppState,
-  name?: string
+  name?: string,
+  lineId?: string
 ): SavedDay {
   const days = loadSavedDays();
   const newOne: SavedDay = {
@@ -92,6 +199,7 @@ export function addSavedDay(
     date,
     name,
     savedAt: new Date().toISOString(),
+    lineId,
     roster: JSON.parse(JSON.stringify(state.roster)),
     slots: JSON.parse(JSON.stringify(state.slots)),
     leadSlots: JSON.parse(JSON.stringify(state.leadSlots)),

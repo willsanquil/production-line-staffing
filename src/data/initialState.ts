@@ -1,7 +1,8 @@
-import type { AppState, AreaId, AreaCapacityOverrides, LeadSlots, RosterPerson, ScheduleHour, SlotsByArea, TaskItem, TasksByArea } from '../types';
+import type { AppState, AreaId, AreaCapacityOverrides, LeadSlots, LineConfig, LineState, RosterPerson, ScheduleHour, SlotsByArea, TaskItem, TasksByArea } from '../types';
 import type { SkillLevel } from '../types';
 import { AREA_IDS, LEAD_SLOT_AREAS } from '../types';
 import { getEffectiveCapacity } from '../lib/areaConfig';
+import { getEffectiveCapacityForLine } from '../lib/lineConfig';
 import { buildSeedRoster } from './seedRoster';
 
 function nanoid(): string {
@@ -42,10 +43,11 @@ function defaultLeadSlots(): LeadSlots {
   return out;
 }
 
-/** Create a new roster person with default skills (no_experience). */
-export function createEmptyPerson(name: string): RosterPerson {
+/** Create a new roster person. defaultLineId = line they’re added on. Pass areaIds for skills init. */
+export function createEmptyPerson(name: string, areaIds?: string[]): RosterPerson {
+  const ids = areaIds ?? AREA_IDS;
   const skills = {} as Record<AreaId, SkillLevel>;
-  for (const areaId of AREA_IDS) {
+  for (const areaId of ids) {
     skills[areaId] = 'no_experience';
   }
   return {
@@ -59,12 +61,13 @@ export function createEmptyPerson(name: string): RosterPerson {
     breakPreference: 'no_preference',
     skills,
     areasWantToLearn: [],
+    flexedToLineId: null,
   };
 }
 
 /** Create a new OT pool person (ot: true, otHereToday: false so they do not slot until marked here). */
-export function createEmptyOTPerson(name: string): RosterPerson {
-  const person = createEmptyPerson(name.trim() || 'New OT');
+export function createEmptyOTPerson(name: string, areaIds?: string[]): RosterPerson {
+  const person = createEmptyPerson(name.trim() || 'New OT', areaIds);
   return { ...person, ot: true, otHereToday: false };
 }
 
@@ -121,6 +124,62 @@ export function normalizeSlotsToCapacity(slots: SlotsByArea, capacityOverrides?:
     out[areaId] = list;
   }
   return out;
+}
+
+/** Normalize slots to a line's capacity (for custom lines). */
+export function normalizeSlotsToLineCapacity(
+  slots: SlotsByArea,
+  config: LineConfig,
+  capacityOverrides?: AreaCapacityOverrides | null
+): SlotsByArea {
+  const cap = getEffectiveCapacityForLine(config, capacityOverrides);
+  const out = {} as SlotsByArea;
+  for (const areaId of Object.keys(cap)) {
+    const { min, max } = cap[areaId];
+    const curr = slots[areaId] ?? [];
+    let list = [...curr];
+    if (list.length < min) {
+      for (let i = list.length; i < min; i++) list.push(emptySlot());
+    }
+    if (list.length > max) {
+      list = list.slice(0, max);
+    }
+    out[areaId] = list;
+  }
+  return out;
+}
+
+/** Empty line state for a given line config (empty roster, min slots per area). */
+export function getEmptyLineState(config: LineConfig): LineState {
+  const cap = getEffectiveCapacityForLine(config, null);
+  const slots: SlotsByArea = {};
+  for (const areaId of Object.keys(cap)) {
+    const n = cap[areaId].min;
+    slots[areaId] = Array.from({ length: n }, () => emptySlot());
+  }
+  const sectionTasks: TasksByArea = {};
+  for (const a of config.areas) {
+    sectionTasks[a.id] = [];
+  }
+  const leadSlots: LeadSlots = {};
+  for (const areaId of config.leadAreaIds) {
+    leadSlots[areaId] = null;
+  }
+  return {
+    roster: [],
+    slots,
+    leadSlots,
+    juicedAreas: {},
+    deJuicedAreas: {},
+    sectionTasks,
+    schedule: defaultSchedule(),
+    dayNotes: '',
+    documents: [],
+    breakSchedules: {},
+    areaCapacityOverrides: {},
+    areaNameOverrides: {},
+    slotLabelsByArea: {},
+  };
 }
 export function createEmptyTask(text = '') {
   const t = emptyTask();

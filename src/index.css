@@ -64,6 +64,11 @@ body {
 .line-view .line-view-area h2 {
   font-size: clamp(1.15rem, 3.5vw, 1.35rem);
 }
+/* Person name by skill in presentation (text color only) */
+.line-view .skill-name-no_experience { color: #e74c3c; font-weight: 600; }
+.line-view .skill-name-training { color: #b8860b; font-weight: 600; }
+.line-view .skill-name-trained { color: #27ae60; font-weight: 600; }
+.line-view .skill-name-expert { color: #1e8449; font-weight: 600; }
 @media (max-width: 600px) {
   .line-view { padding-left: 8px; padding-right: 8px; }
 }

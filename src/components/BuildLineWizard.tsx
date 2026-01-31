@@ -1,0 +1,217 @@
+import { useState, useCallback } from 'react';
+import type { LineConfig, AreaConfigInLine } from '../types';
+import { areaIdFromName } from '../lib/lineConfig';
+
+interface BuildLineWizardProps {
+  /** Existing area IDs across all lines (to avoid id collisions). */
+  existingAreaIds: Set<string>;
+  onComplete: (config: LineConfig) => void;
+  onCancel: () => void;
+}
+
+type Step = 'name' | 'sections' | 'leads' | 'done';
+
+interface SectionDraft {
+  id: string;
+  name: string;
+  minSlots: number;
+  maxSlots: number;
+}
+
+export function BuildLineWizard({ existingAreaIds, onComplete, onCancel }: BuildLineWizardProps) {
+  const [step, setStep] = useState<Step>('name');
+  const [lineName, setLineName] = useState('');
+  const [sections, setSections] = useState<SectionDraft[]>([]);
+  const [leadAreaIds, setLeadAreaIds] = useState<Set<string>>(new Set());
+
+  const addSection = useCallback(() => {
+    const existingIds = new Set([...existingAreaIds, ...sections.map((s) => s.id)]);
+    const name = `Section ${sections.length + 1}`;
+    const id = areaIdFromName(name, existingIds);
+    setSections((prev) => [...prev, { id, name, minSlots: 2, maxSlots: 5 }]);
+  }, [sections.length, existingAreaIds]);
+
+  const updateSection = useCallback((index: number, updates: Partial<SectionDraft>) => {
+    setSections((prev) => prev.map((s, i) => (i === index ? { ...s, ...updates } : s)));
+  }, []);
+
+  const removeSection = useCallback((index: number) => {
+    setSections((prev) => prev.filter((_, i) => i !== index));
+    setLeadAreaIds((prev) => {
+      const id = sections[index]?.id;
+      if (!id) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, [sections]);
+
+  const toggleLead = useCallback((areaId: string) => {
+    setLeadAreaIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(areaId)) next.delete(areaId);
+      else next.add(areaId);
+      return next;
+    });
+  }, []);
+
+  const handleCreate = useCallback(() => {
+    const lineId = 'line_' + Math.random().toString(36).slice(2, 10);
+    const areas: AreaConfigInLine[] = sections.map((s) => ({
+      id: s.id,
+      name: s.name,
+      minSlots: Math.max(1, s.minSlots),
+      maxSlots: Math.max(1, s.maxSlots),
+      requiresTrainedOrExpert: true,
+    }));
+    const config: LineConfig = {
+      id: lineId,
+      name: lineName.trim() || 'New Line',
+      areas,
+      leadAreaIds: sections.filter((s) => leadAreaIds.has(s.id)).map((s) => s.id),
+      combinedSections: [],
+    };
+    onComplete(config);
+  }, [lineName, sections, leadAreaIds, onComplete]);
+
+  return (
+    <div style={{ maxWidth: 560, margin: '0 auto', padding: '24px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+        <button type="button" onClick={onCancel} style={{ padding: '8px 12px' }}>
+          ← Cancel
+        </button>
+        <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>Build your own line</h1>
+      </div>
+
+      {step === 'name' && (
+        <>
+          <p style={{ marginBottom: 12, color: '#555' }}>Give your line a name (e.g. IC, NIC, Assembly).</p>
+          <input
+            type="text"
+            value={lineName}
+            onChange={(e) => setLineName(e.target.value)}
+            placeholder="Line name"
+            style={{ width: '100%', padding: '10px 12px', fontSize: '1rem', marginBottom: 20 }}
+            autoFocus
+          />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={onCancel} style={{ padding: '10px 20px' }}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => setStep('sections')}
+              style={{ padding: '10px 20px', fontWeight: 600 }}
+            >
+              Next: Add sections
+            </button>
+          </div>
+        </>
+      )}
+
+      {step === 'sections' && (
+        <>
+          <p style={{ marginBottom: 12, color: '#555' }}>
+            Add the major sections (areas) of your line. For each section set min and max slots.
+          </p>
+          {sections.length === 0 && (
+            <button type="button" onClick={addSection} style={{ marginBottom: 16, padding: '10px 16px' }}>
+              + Add first section
+            </button>
+          )}
+          {sections.map((s, i) => (
+            <div
+              key={s.id}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 72px 72px auto',
+                gap: 8,
+                alignItems: 'center',
+                marginBottom: 10,
+              }}
+            >
+              <input
+                type="text"
+                value={s.name}
+                onChange={(e) => updateSection(i, { name: e.target.value })}
+                placeholder="Section name"
+                style={{ padding: '8px 10px' }}
+              />
+              <input
+                type="number"
+                min={1}
+                value={s.minSlots}
+                onChange={(e) => updateSection(i, { minSlots: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                placeholder="Min"
+                style={{ padding: '8px' }}
+              />
+              <input
+                type="number"
+                min={1}
+                value={s.maxSlots}
+                onChange={(e) => updateSection(i, { maxSlots: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                placeholder="Max"
+                style={{ padding: '8px' }}
+              />
+              <button type="button" onClick={() => removeSection(i)} style={{ padding: '8px' }}>
+                Remove
+              </button>
+            </div>
+          ))}
+          {sections.length > 0 && (
+            <button type="button" onClick={addSection} style={{ marginBottom: 16, padding: '8px 12px' }}>
+              + Add section
+            </button>
+          )}
+          <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+            <button type="button" onClick={() => setStep('name')} style={{ padding: '10px 20px' }}>
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={() => setStep('leads')}
+              disabled={sections.length === 0}
+              style={{ padding: '10px 20px', fontWeight: 600 }}
+            >
+              Next: Lead roles
+            </button>
+          </div>
+        </>
+      )}
+
+      {step === 'leads' && (
+        <>
+          <p style={{ marginBottom: 12, color: '#555' }}>
+            Which sections have a lead role? (One person per section; optional.)
+          </p>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, marginBottom: 20 }}>
+            {sections.map((s) => (
+              <li key={s.id} style={{ marginBottom: 8 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={leadAreaIds.has(s.id)}
+                    onChange={() => toggleLead(s.id)}
+                  />
+                  <span>{s.name}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={() => setStep('sections')} style={{ padding: '10px 20px' }}>
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={handleCreate}
+              style={{ padding: '10px 20px', fontWeight: 600, background: '#27ae60', color: '#fff', border: 'none' }}
+            >
+              Create line
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

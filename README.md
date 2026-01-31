@@ -40,3 +40,25 @@ See **PORTABLE.md** for full steps (one-time build, what to copy, and moving dat
 - **Bank of days**: Save current state (slots, absences, tasks, notes) with date; load or remove from list.
 
 Data is stored in the browser (localStorage). Export config JSON to backup or move assignments; saved days are stored locally in the app.
+
+## Git
+
+The repo is ready to push:
+
+- **`.gitignore`** – ignores `node_modules/`, `dist/`, `.env*`, IDE/OS files. No secrets in the repo.
+- **No `.env` files** – when you add Supabase (or other services), put keys in Vercel env vars, not in Git.
+
+## Deploy on Vercel
+
+1. Push this repo to GitHub (or GitLab/Bitbucket).
+2. In [Vercel](https://vercel.com), **Add New Project** → import the repo.
+3. Vercel will detect Vite; **Build Command**: `npm run build`, **Output Directory**: `dist`. Deploy.
+4. The app is static; no server or env vars required for the current localStorage-only setup.
+
+## Supabase (when you add it)
+
+- Create a project in [Supabase](https://supabase.com).
+- In Vercel → your project → **Settings → Environment Variables**, add:
+  - `VITE_SUPABASE_URL` – your Supabase project URL
+  - `VITE_SUPABASE_ANON_KEY` – your anon/public key
+- In the app, use `import.meta.env.VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`; never commit `.env` (already in `.gitignore`).

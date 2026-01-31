@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import type { AppState, AreaId, BreakPreference, LeadSlotAreaId, RosterPerson, SavedDay, SlotsByArea, TaskItem } from './types';
+import type { AppState, AreaId, BreakPreference, RosterPerson, SavedDay, SlotsByArea, TaskItem } from './types';
 import type { SkillLevel } from './types';
-import { AREA_IDS, LEAD_SLOT_AREAS, LINE_SECTIONS, isCombinedSection, COMBINED_14_5_FLIP } from './types';
+import { AREA_IDS, LEAD_SLOT_AREAS, LINE_SECTIONS } from './types';
 
 const SKILL_SCORE: Record<SkillLevel, number> = {
   no_experience: 0,
@@ -13,13 +13,16 @@ const SKILL_SCORE: Record<SkillLevel, number> = {
 /** Overall line health: average knowledge (0–3) of everyone on the line in their assigned role. */
 function getLineHealthScore(
   slots: SlotsByArea,
-  leadSlots: Record<LeadSlotAreaId, string | null>,
-  roster: { id: string; skills: Record<AreaId, SkillLevel> }[]
+  leadSlots: Record<string, string | null>,
+  roster: { id: string; skills: Record<AreaId, SkillLevel> }[],
+  areaIds: string[],
+  leadAreaIds: string[]
 ): number | null {
   let sum = 0;
   let count = 0;
-  for (const areaId of AREA_IDS) {
-    for (const slot of slots[areaId]) {
+  for (const areaId of areaIds) {
+    const areaSlots = slots[areaId] ?? [];
+    for (const slot of areaSlots) {
       if (!slot.personId) continue;
       const p = roster.find((r) => r.id === slot.personId);
       if (p) {
@@ -28,7 +31,7 @@ function getLineHealthScore(
       }
     }
   }
-  for (const areaId of LEAD_SLOT_AREAS) {
+  for (const areaId of leadAreaIds) {
     const personId = leadSlots[areaId];
     if (!personId) continue;
     const p = roster.find((r) => r.id === personId);
@@ -39,9 +42,20 @@ function getLineHealthScore(
   }
   return count > 0 ? sum / count : null;
 }
-import { getHydratedState } from './lib/initialState';
-import { getEffectiveCapacity, getEffectiveAreaLabels } from './lib/areaConfig';
-import { createEmptyPerson, createEmptyOTPerson, createEmptySlot, getInitialState, normalizeSlotsToCapacity } from './data/initialState';
+import { getHydratedRootState } from './lib/initialState';
+import { getRosterForLine, getFlexedInPersonIds } from './lib/personLabel';
+import { sortByFirstName } from './lib/rosterSort';
+import { getEffectiveCapacity, getEffectiveAreaLabels, getSlotLabel as getSlotLabelIC } from './lib/areaConfig';
+import {
+  getAreaIds,
+  getLineSections,
+  getEffectiveCapacityForLine,
+  getEffectiveAreaLabelsForLine,
+  getSlotLabelForLine,
+  areaRequiresTrainedOrExpertFromConfig,
+  getDefaultICLineConfig,
+} from './lib/lineConfig';
+import { createEmptyPerson, createEmptyOTPerson, createEmptySlot, getEmptyLineState, normalizeSlotsToCapacity, normalizeSlotsToLineCapacity } from './data/initialState';
 import { RosterGrid } from './components/RosterGrid';
 import { LeadSlotsSection } from './components/LeadSlotsSection';
 import { AreaStaffing } from './components/AreaStaffing';
@@ -53,63 +67,163 @@ import { DayBank } from './components/DayBank';
 import { TrainingReport } from './components/TrainingReport';
 import { randomizeAssignments, spreadTalent, maxSpeedAssignments, lightStretchAssignments } from './lib/automation';
 import { generateBreakSchedules } from './lib/breakSchedules';
-import { saveState, loadSavedDays, addSavedDay, removeSavedDay, exportStateToJson, importStateFromJson } from './lib/persist';
+import { saveRootState, loadSavedDays, addSavedDay, removeSavedDay, exportStateToJson, importStateFromJson } from './lib/persist';
 import { saveToFile, overwriteFile, openFromFile, isSaveToFileSupported } from './lib/fileStorage';
+import { LineManager } from './components/LineManager';
+import { BuildLineWizard } from './components/BuildLineWizard';
 
 const FULL_STAFF = 30;
 
 const PERSIST_DEBOUNCE_MS = 400;
 
-function getAssignedPersonIds(slots: SlotsByArea): Set<string> {
+function getAssignedPersonIds(slots: SlotsByArea, areaIds: string[]): Set<string> {
   const set = new Set<string>();
-  for (const areaId of AREA_IDS) {
-    for (const slot of slots[areaId]) {
+  for (const areaId of areaIds) {
+    const areaSlots = slots[areaId] ?? [];
+    for (const slot of areaSlots) {
       if (slot.personId) set.add(slot.personId);
     }
   }
   return set;
 }
 
-function getSafeInitialState() {
-  try {
-    return getHydratedState();
-  } catch {
-    return getInitialState();
+/** Find which line's roster contains this person (their home line). */
+function findPersonHomeLine(lineStates: Record<string, import('./types').LineState>, personId: string): string | null {
+  for (const [lineId, state] of Object.entries(lineStates)) {
+    if (state?.roster?.some((p) => p.id === personId)) return lineId;
   }
+  return null;
 }
 
-const initial = getSafeInitialState();
+/** Update one person in root state (in their home line's roster). */
+function updatePersonInRoot(
+  root: import('./types').RootState,
+  personId: string,
+  updater: (p: RosterPerson) => RosterPerson
+): import('./types').RootState {
+  const homeLineId = findPersonHomeLine(root.lineStates, personId);
+  if (homeLineId == null) return root;
+  const lineState = root.lineStates[homeLineId];
+  const roster = (lineState?.roster ?? []).map((p) => (p.id === personId ? updater(p) : p));
+  return {
+    ...root,
+    lineStates: { ...root.lineStates, [homeLineId]: { ...lineState, roster } },
+  };
+}
+
+const rootInitial = getHydratedRootState();
+const firstLineState = rootInitial.lineStates[rootInitial.currentLineId] ?? getEmptyLineState(getDefaultICLineConfig());
 
 export default function App() {
-  const [roster, setRoster] = useState(initial.roster);
-  const [slots, setSlots] = useState(initial.slots);
-  const [leadSlots, setLeadSlots] = useState(initial.leadSlots);
-  const [juicedAreas, setJuicedAreas] = useState(initial.juicedAreas ?? {});
-  const [deJuicedAreas, setDeJuicedAreas] = useState(initial.deJuicedAreas ?? {});
-  const [sectionTasks, setSectionTasks] = useState(initial.sectionTasks);
-  const [schedule, setSchedule] = useState(initial.schedule);
-  const [dayNotes, setDayNotes] = useState(initial.dayNotes ?? '');
-  const [documents, setDocuments] = useState<string[]>(initial.documents ?? []);
-  const [breakSchedules, setBreakSchedules] = useState(initial.breakSchedules ?? {});
+  const [rootState, setRootState] = useState(rootInitial);
+  const [view, setView] = useState<'staffing' | 'line-manager' | 'build-line'>('staffing');
+
+  const [slots, setSlots] = useState(firstLineState.slots);
+  const [leadSlots, setLeadSlots] = useState(firstLineState.leadSlots);
+  const [juicedAreas, setJuicedAreas] = useState(firstLineState.juicedAreas ?? {});
+  const [deJuicedAreas, setDeJuicedAreas] = useState(firstLineState.deJuicedAreas ?? {});
+  const [sectionTasks, setSectionTasks] = useState(firstLineState.sectionTasks);
+  const [schedule, setSchedule] = useState(firstLineState.schedule);
+  const [dayNotes, setDayNotes] = useState(firstLineState.dayNotes ?? '');
+  const [documents, setDocuments] = useState<string[]>(firstLineState.documents ?? []);
+  const [breakSchedules, setBreakSchedules] = useState(firstLineState.breakSchedules ?? {});
   const [savedDays, setSavedDays] = useState(() => loadSavedDays());
   const [rosterVisible, setRosterVisible] = useState(true);
   const [adminVisible, setAdminVisible] = useState(true);
-  /** Per-area: when false, hide break schedule in that area card (default visible). */
   const [breakScheduleVisibleByArea, setBreakScheduleVisibleByArea] = useState<Partial<Record<AreaId, boolean>>>({});
-  const [areaCapacityOverrides, setAreaCapacityOverrides] = useState(initial.areaCapacityOverrides ?? {});
-  const [areaNameOverrides, setAreaNameOverrides] = useState(initial.areaNameOverrides ?? {});
-  const [slotLabelsByArea, setSlotLabelsByArea] = useState(initial.slotLabelsByArea ?? {});
+  const [areaCapacityOverrides, setAreaCapacityOverrides] = useState(firstLineState.areaCapacityOverrides ?? {});
+  const [areaNameOverrides, setAreaNameOverrides] = useState(firstLineState.areaNameOverrides ?? {});
+  const [slotLabelsByArea, setSlotLabelsByArea] = useState(firstLineState.slotLabelsByArea ?? {});
 
-  const effectiveCapacity = useMemo(() => getEffectiveCapacity(areaCapacityOverrides), [areaCapacityOverrides]);
-  const areaLabels = useMemo(() => getEffectiveAreaLabels(areaNameOverrides), [areaNameOverrides]);
+  const currentConfig = useMemo(
+    () => rootState.lines.find((l) => l.id === rootState.currentLineId),
+    [rootState.lines, rootState.currentLineId]
+  );
+  const areaIds = useMemo(
+    () => (currentConfig ? (currentConfig.id === 'ic' ? [...AREA_IDS] : getAreaIds(currentConfig)) : []),
+    [currentConfig]
+  );
+  const lineSections = useMemo(
+    () => (currentConfig ? (currentConfig.id === 'ic' ? LINE_SECTIONS : getLineSections(currentConfig)) : []),
+    [currentConfig]
+  );
+  const leadAreaIds = useMemo(
+    () => (currentConfig ? (currentConfig.id === 'ic' ? [...LEAD_SLOT_AREAS] : currentConfig.leadAreaIds) : []),
+    [currentConfig]
+  );
+  const effectiveCapacity = useMemo(
+    () =>
+      currentConfig
+        ? currentConfig.id === 'ic'
+          ? getEffectiveCapacity(areaCapacityOverrides)
+          : getEffectiveCapacityForLine(currentConfig, areaCapacityOverrides)
+        : ({} as Record<string, { min: number; max: number }>),
+    [currentConfig, areaCapacityOverrides]
+  );
+  const areaLabels = useMemo(
+    () =>
+      currentConfig
+        ? currentConfig.id === 'ic'
+          ? getEffectiveAreaLabels(areaNameOverrides)
+          : getEffectiveAreaLabelsForLine(currentConfig, areaNameOverrides)
+        : {},
+    [currentConfig, areaNameOverrides]
+  );
+  const getSlotLabel = useCallback(
+    (areaId: string, slotIndex: number) =>
+      currentConfig && currentConfig.id !== 'ic'
+        ? getSlotLabelForLine(currentConfig, areaId, slotIndex, slotLabelsByArea)
+        : getSlotLabelIC(areaId, slotIndex, slotLabelsByArea),
+    [currentConfig, slotLabelsByArea]
+  );
+  const areaRequiresTrainedOrExpert = useCallback(
+    (areaId: string) =>
+      currentConfig ? (currentConfig.id === 'ic' ? areaId !== 'area_flip' : areaRequiresTrainedOrExpertFromConfig(currentConfig, areaId)) : true,
+    [currentConfig]
+  );
 
-  const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const stateRef = useRef({ roster, slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea });
-  stateRef.current = { roster, slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea };
+  const roster = useMemo(
+    () => sortByFirstName(getRosterForLine(rootState.currentLineId, rootState.lineStates)),
+    [rootState.currentLineId, rootState.lineStates]
+  );
+  const flexedInPersonIds = useMemo(
+    () => getFlexedInPersonIds(rootState.currentLineId, rootState.lineStates),
+    [rootState.currentLineId, rootState.lineStates]
+  );
+
+  const stateRef = useRef({ slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea });
+  stateRef.current = { slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea };
+  const rootStateRef = useRef(rootState);
+  rootStateRef.current = rootState;
 
   useEffect(() => {
+    const lineState = rootState.lineStates[rootState.currentLineId];
+    if (!lineState) return;
+    setSlots(lineState.slots ?? {});
+    setLeadSlots(lineState.leadSlots ?? {});
+    setJuicedAreas(lineState.juicedAreas ?? {});
+    setDeJuicedAreas(lineState.deJuicedAreas ?? {});
+    setSectionTasks(lineState.sectionTasks ?? {});
+    setSchedule(lineState.schedule ?? []);
+    setDayNotes(lineState.dayNotes ?? '');
+    setDocuments(lineState.documents ?? []);
+    setBreakSchedules(lineState.breakSchedules ?? {});
+    setAreaCapacityOverrides(lineState.areaCapacityOverrides ?? {});
+    setAreaNameOverrides(lineState.areaNameOverrides ?? {});
+    setSlotLabelsByArea(lineState.slotLabelsByArea ?? {});
+  }, [rootState.currentLineId, rootState.lineStates]);
+
+  const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
     const id = setTimeout(() => {
-      saveState(stateRef.current);
+      const root = rootStateRef.current;
+      saveRootState({
+        ...root,
+        lineStates: {
+          ...root.lineStates,
+          [root.currentLineId]: { ...root.lineStates[root.currentLineId], ...stateRef.current } as AppState,
+        },
+      });
       persistTimeoutRef.current = null;
     }, PERSIST_DEBOUNCE_MS);
     persistTimeoutRef.current = id;
@@ -118,18 +232,25 @@ export default function App() {
         clearTimeout(persistTimeoutRef.current);
         persistTimeoutRef.current = null;
       }
-      saveState(stateRef.current);
+      const root = rootStateRef.current;
+      saveRootState({
+        ...root,
+        lineStates: {
+          ...root.lineStates,
+          [root.currentLineId]: { ...root.lineStates[root.currentLineId], ...stateRef.current } as AppState,
+        },
+      });
     };
-  }, [roster, slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea]);
+  }, [slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea]);
 
-  const allAssignedPersonIds = useMemo(() => getAssignedPersonIds(slots), [slots]);
+  const allAssignedPersonIds = useMemo(() => getAssignedPersonIds(slots, areaIds), [slots, areaIds]);
   const leadAssignedPersonIds = useMemo(() => {
     const set = new Set<string>();
-    for (const areaId of LEAD_SLOT_AREAS) {
+    for (const areaId of leadAreaIds) {
       if (leadSlots[areaId]) set.add(leadSlots[areaId]!);
     }
     return set;
-  }, [leadSlots]);
+  }, [leadSlots, leadAreaIds]);
   const grandTotal = useMemo(
     () => allAssignedPersonIds.size + leadAssignedPersonIds.size,
     [allAssignedPersonIds, leadAssignedPersonIds]
@@ -140,8 +261,8 @@ export default function App() {
   );
 
   const lineHealthScore = useMemo(
-    () => getLineHealthScore(slots, leadSlots, roster),
-    [slots, leadSlots, roster]
+    () => getLineHealthScore(slots, leadSlots, roster, areaIds, leadAreaIds),
+    [slots, leadSlots, roster, areaIds, leadAreaIds]
   );
   const lineHealthSpectrumPosition =
     lineHealthScore != null ? (lineHealthScore / 3) * 100 : null;
@@ -163,92 +284,100 @@ export default function App() {
     setSectionTasks((prev) => ({ ...prev, [areaId]: tasks }));
   }, []);
 
-  const setLeadSlot = useCallback((areaId: LeadSlotAreaId, personId: string | null) => {
+  const setLeadSlot = useCallback((areaId: string, personId: string | null) => {
     setLeadSlots((prev) => ({ ...prev, [areaId]: personId }));
     if (personId) {
       setSlots((prev) => {
         const next = {} as SlotsByArea;
-        for (const aid of AREA_IDS) {
-          next[aid] = prev[aid].map((s) =>
-            s.personId === personId ? { ...s, personId: null } : s
-          );
+        for (const aid of areaIds) {
+          const list = prev[aid];
+          if (list) next[aid] = list.map((s) => (s.personId === personId ? { ...s, personId: null } : s));
         }
-        return next;
+        return { ...prev, ...next };
       });
     }
-  }, []);
+  }, [areaIds]);
 
   const handleNameChange = useCallback((personId: string, name: string) => {
-    setRoster((prev) =>
-      prev.map((p) => (p.id === personId ? { ...p, name: name.trim() || p.name } : p))
-    );
+    setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, name: name.trim() || p.name })));
   }, []);
 
   const handleAddPerson = useCallback((name: string) => {
-    const person = createEmptyPerson(name);
-    setRoster((prev) => [...prev, person]);
-  }, []);
+    const person = createEmptyPerson(name, areaIds);
+    setRootState((prev) => {
+      const lineState = prev.lineStates[prev.currentLineId];
+      const roster = [...(lineState?.roster ?? []), person];
+      return { ...prev, lineStates: { ...prev.lineStates, [prev.currentLineId]: { ...lineState, roster } } };
+    });
+  }, [areaIds]);
 
   const handleRemovePerson = useCallback((personId: string) => {
-    setRoster((prev) => prev.filter((p) => p.id !== personId));
+    const person = roster.find((p) => p.id === personId);
+    const name = person?.name ?? 'this person';
+    if (!window.confirm(`Are you sure you want to remove ${name} from the roster?`)) return;
+    const homeLineId = findPersonHomeLine(rootState.lineStates, personId);
+    if (homeLineId != null) {
+      setRootState((prev) => {
+        const lineState = prev.lineStates[homeLineId];
+        const roster = (lineState?.roster ?? []).filter((p) => p.id !== personId);
+        return { ...prev, lineStates: { ...prev.lineStates, [homeLineId]: { ...lineState, roster } } };
+      });
+    }
     setSlots((prev) => {
       const next = {} as SlotsByArea;
-      for (const areaId of AREA_IDS) {
-        next[areaId] = prev[areaId].map((s) =>
-          s.personId === personId ? { ...s, personId: null } : s
-        );
+      for (const areaId of areaIds) {
+        const list = prev[areaId];
+        if (list) next[areaId] = list.map((s) => (s.personId === personId ? { ...s, personId: null } : s));
       }
-      return next;
+      return { ...prev, ...next };
     });
     setLeadSlots((prev) => {
       const next = { ...prev };
-      for (const areaId of LEAD_SLOT_AREAS) {
+      for (const areaId of leadAreaIds) {
         if (next[areaId] === personId) next[areaId] = null;
       }
       return next;
     });
-  }, []);
+  }, [roster, rootState.lineStates, areaIds, leadAreaIds]);
 
   const handleToggleAbsent = useCallback((personId: string, absent: boolean) => {
-    setRoster((prev) =>
-      prev.map((p) => (p.id === personId ? { ...p, absent } : p))
-    );
+    setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, absent })));
   }, []);
 
   const handleToggleLead = useCallback((personId: string, lead: boolean) => {
-    setRoster((prev) =>
-      prev.map((p) => (p.id === personId ? { ...p, lead } : p))
-    );
+    setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, lead })));
   }, []);
 
   const handleToggleOT = useCallback((personId: string, ot: boolean) => {
-    setRoster((prev) =>
-      prev.map((p) =>
-        p.id === personId ? { ...p, ot, otHereToday: ot ? false : p.otHereToday } : p
-      )
+    setRootState((prev) =>
+      updatePersonInRoot(prev, personId, (p) => ({ ...p, ot, otHereToday: ot ? false : p.otHereToday }))
     );
   }, []);
 
   const handleToggleOTHereToday = useCallback((personId: string, otHereToday: boolean) => {
-    setRoster((prev) =>
-      prev.map((p) => (p.id === personId ? { ...p, otHereToday } : p))
-    );
+    setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, otHereToday })));
   }, []);
 
   const handleAddOT = useCallback((name: string) => {
-    const person = createEmptyOTPerson(name);
-    setRoster((prev) => [...prev, person]);
-  }, []);
+    const person = createEmptyOTPerson(name, areaIds);
+    setRootState((prev) => {
+      const lineState = prev.lineStates[prev.currentLineId];
+      const roster = [...(lineState?.roster ?? []), person];
+      return { ...prev, lineStates: { ...prev.lineStates, [prev.currentLineId]: { ...lineState, roster } } };
+    });
+  }, [areaIds]);
 
   const handleToggleLate = useCallback((personId: string, late: boolean) => {
-    setRoster((prev) =>
-      prev.map((p) => (p.id === personId ? { ...p, late } : p))
-    );
+    setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, late })));
   }, []);
 
   const handleToggleLeavingEarly = useCallback((personId: string, leavingEarly: boolean) => {
-    setRoster((prev) =>
-      prev.map((p) => (p.id === personId ? { ...p, leavingEarly } : p))
+    setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, leavingEarly })));
+  }, []);
+
+  const handleFlexedToLineChange = useCallback((personId: string, lineId: string | null) => {
+    setRootState((prev) =>
+      updatePersonInRoot(prev, personId, (p) => ({ ...p, flexedToLineId: lineId || undefined }))
     );
   }, []);
 
@@ -262,25 +391,18 @@ export default function App() {
   }, []);
 
   const handleBreakPreferenceChange = useCallback((personId: string, breakPreference: BreakPreference) => {
-    setRoster((prev) =>
-      prev.map((p) => (p.id === personId ? { ...p, breakPreference } : p))
-    );
+    setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, breakPreference })));
   }, []);
 
   const handleSkillChange = useCallback((personId: string, areaId: AreaId, level: SkillLevel) => {
-    setRoster((prev) =>
-      prev.map((p) =>
-        p.id === personId
-          ? { ...p, skills: { ...p.skills, [areaId]: level } }
-          : p
-      )
+    setRootState((prev) =>
+      updatePersonInRoot(prev, personId, (p) => ({ ...p, skills: { ...p.skills, [areaId]: level } }))
     );
   }, []);
 
   const handleAreasWantToLearnChange = useCallback((personId: string, areaId: AreaId, checked: boolean) => {
-    setRoster((prev) =>
-      prev.map((p) => {
-        if (p.id !== personId) return p;
+    setRootState((prev) =>
+      updatePersonInRoot(prev, personId, (p) => {
         const list = p.areasWantToLearn ?? [];
         if (checked) return { ...p, areasWantToLearn: list.includes(areaId) ? list : [...list, areaId] };
         return { ...p, areasWantToLearn: list.filter((a) => a !== areaId) };
@@ -330,80 +452,176 @@ export default function App() {
   const handleClearLine = useCallback(() => {
     setSlots((prev) => {
       const next = {} as SlotsByArea;
-      for (const areaId of AREA_IDS) {
-        next[areaId] = prev[areaId].map((s) => ({ ...s, personId: null }));
+      for (const areaId of areaIds) {
+        const list = prev[areaId];
+        if (list) next[areaId] = list.map((s) => ({ ...s, personId: null }));
+      }
+      return { ...prev, ...next };
+    });
+    setBreakSchedules({});
+  }, [areaIds]);
+
+  const handleSaveDay = useCallback((date: string, name?: string) => {
+    const state = stateRef.current;
+    addSavedDay(
+      date,
+      { roster, slots: state.slots, leadSlots: state.leadSlots, juicedAreas: state.juicedAreas, deJuicedAreas: state.deJuicedAreas, sectionTasks: state.sectionTasks, schedule: state.schedule, dayNotes: state.dayNotes, documents: state.documents, breakSchedules: state.breakSchedules },
+      name,
+      rootState.currentLineId
+    );
+    setSavedDays(loadSavedDays());
+  }, [roster, rootState.currentLineId]);
+
+  const handleLoadDay = useCallback((day: SavedDay) => {
+    const targetLineId = day.lineId ?? rootState.currentLineId;
+    const targetConfig = rootState.lines.find((l) => l.id === targetLineId);
+    const normalizedSlots =
+      targetConfig && targetConfig.id !== 'ic'
+        ? normalizeSlotsToLineCapacity(day.slots, targetConfig, areaCapacityOverrides)
+        : normalizeSlotsToCapacity(day.slots, areaCapacityOverrides);
+    const lineStateForDay = {
+      roster: rootState.lineStates[targetLineId]?.roster ?? [],
+      slots: normalizedSlots,
+      leadSlots: day.leadSlots ?? Object.fromEntries((targetConfig?.leadAreaIds ?? leadAreaIds).map((id) => [id, null])),
+      juicedAreas: day.juicedAreas ?? {},
+      deJuicedAreas: day.deJuicedAreas ?? {},
+      sectionTasks: day.sectionTasks ?? {},
+      schedule: day.schedule ?? [],
+      dayNotes: day.dayNotes ?? '',
+      documents: day.documents ?? [],
+      breakSchedules: day.breakSchedules ?? {},
+      areaCapacityOverrides: areaCapacityOverrides ?? {},
+      areaNameOverrides: areaNameOverrides ?? {},
+      slotLabelsByArea: slotLabelsByArea ?? {},
+    };
+    setRootState((prev) => {
+      let next: typeof prev = { ...prev, currentLineId: targetLineId, lineStates: { ...prev.lineStates, [targetLineId]: lineStateForDay } };
+      for (const p of day.roster) {
+        const normalized: RosterPerson = {
+          ...p,
+          lead: p.lead ?? false,
+          ot: p.ot ?? false,
+          otHereToday: p.otHereToday ?? false,
+          late: p.late ?? false,
+          leavingEarly: p.leavingEarly ?? false,
+          breakPreference: p.breakPreference ?? 'no_preference',
+          areasWantToLearn: p.areasWantToLearn ?? [],
+          flexedToLineId: targetLineId,
+        };
+        const homeLineId = findPersonHomeLine(next.lineStates, p.id);
+        if (homeLineId != null) {
+          next = updatePersonInRoot(next, p.id, () => normalized);
+        } else {
+          const ls = next.lineStates[targetLineId];
+          const roster = [...(ls?.roster ?? []), normalized];
+          next = { ...next, lineStates: { ...next.lineStates, [targetLineId]: { ...ls, roster } } };
+        }
       }
       return next;
     });
-    setBreakSchedules({});
-  }, []);
-
-  const handleSaveDay = useCallback((date: string, name?: string) => {
-    addSavedDay(
-      date,
-      { roster, slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules },
-      name
-    );
-    setSavedDays(loadSavedDays());
-  }, [roster, slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules]);
-
-  const handleLoadDay = useCallback((day: SavedDay) => {
-    setRoster(day.roster.map((p) => ({
-      ...p,
-      lead: p.lead ?? false,
-      ot: p.ot ?? false,
-      otHereToday: p.otHereToday ?? false,
-      late: p.late ?? false,
-      leavingEarly: p.leavingEarly ?? false,
-      breakPreference: p.breakPreference ?? 'no_preference',
-      areasWantToLearn: p.areasWantToLearn ?? [],
-    })));
-    setSlots(normalizeSlotsToCapacity(day.slots, areaCapacityOverrides));
-    setLeadSlots(day.leadSlots ?? { area_end_of_line: null, area_courtyard: null, area_bonding: null });
-    setJuicedAreas(day.juicedAreas ?? {});
-    setDeJuicedAreas(day.deJuicedAreas ?? {});
-    setSectionTasks(day.sectionTasks);
-    setSchedule(day.schedule);
-    setDayNotes(day.dayNotes);
-    setDocuments(day.documents);
-    setBreakSchedules(day.breakSchedules ?? {});
-  }, [areaCapacityOverrides]);
+    setSlots(normalizedSlots);
+    setLeadSlots(lineStateForDay.leadSlots);
+    setJuicedAreas(lineStateForDay.juicedAreas);
+    setDeJuicedAreas(lineStateForDay.deJuicedAreas);
+    setSectionTasks(lineStateForDay.sectionTasks);
+    setSchedule(lineStateForDay.schedule);
+    setDayNotes(lineStateForDay.dayNotes);
+    setDocuments(lineStateForDay.documents);
+    setBreakSchedules(lineStateForDay.breakSchedules ?? {});
+  }, [areaCapacityOverrides, areaNameOverrides, leadAreaIds, rootState.currentLineId, rootState.lineStates, slotLabelsByArea]);
 
   const handleRandomize = useCallback(() => {
-    const nextSlots = randomizeAssignments(roster, slots, leadAssignedPersonIds);
+    const nextSlots = randomizeAssignments(roster, slots, leadAssignedPersonIds, areaIds);
     setSlots(nextSlots);
-    setBreakSchedules(generateBreakSchedules(roster, nextSlots));
-  }, [roster, slots, leadAssignedPersonIds]);
+    setBreakSchedules(generateBreakSchedules(roster, nextSlots, areaIds));
+  }, [roster, slots, leadAssignedPersonIds, areaIds]);
 
   const handleSpreadTalent = useCallback(() => {
-    const nextSlots = spreadTalent(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity);
+    const nextSlots = spreadTalent(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds);
     setSlots(nextSlots);
-    setBreakSchedules(generateBreakSchedules(roster, nextSlots));
-  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity]);
+    setBreakSchedules(generateBreakSchedules(roster, nextSlots, areaIds));
+  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds]);
 
   const handleMaxSpeed = useCallback(() => {
-    const nextSlots = maxSpeedAssignments(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity);
+    const nextSlots = maxSpeedAssignments(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds);
     setSlots(nextSlots);
-    setBreakSchedules(generateBreakSchedules(roster, nextSlots));
-  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity]);
+    setBreakSchedules(generateBreakSchedules(roster, nextSlots, areaIds));
+  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds]);
 
   const handleLightStretch = useCallback(() => {
-    const nextSlots = lightStretchAssignments(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity);
+    const nextSlots = lightStretchAssignments(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds);
     setSlots(nextSlots);
-    setBreakSchedules(generateBreakSchedules(roster, nextSlots));
-  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity]);
+    setBreakSchedules(generateBreakSchedules(roster, nextSlots, areaIds));
+  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds]);
 
   const handleRemoveDay = useCallback((id: string) => {
     removeSavedDay(id);
     setSavedDays(loadSavedDays());
   }, []);
 
+  const handleOpenLine = useCallback((lineId: string) => {
+    setRootState((prev) => ({
+      ...prev,
+      lineStates: {
+        ...prev.lineStates,
+        [prev.currentLineId]: { ...prev.lineStates[prev.currentLineId], ...stateRef.current },
+      },
+      currentLineId: lineId,
+    }));
+    setView('staffing');
+  }, []);
+
+  const handleBuildNewLine = useCallback(() => setView('build-line'), []);
+
+  const handleBuildLineComplete = useCallback((config: import('./types').LineConfig) => {
+    const emptyState = getEmptyLineState(config);
+    setRootState((prev) => ({
+      ...prev,
+      lines: [...prev.lines, config],
+      lineStates: { ...prev.lineStates, [config.id]: emptyState },
+      currentLineId: config.id,
+    }));
+    setView('staffing');
+  }, []);
+
+  const handleBuildLineCancel = useCallback(() => setView('line-manager'), []);
+
+  const handleDeleteLine = useCallback((lineId: string) => {
+    const line = rootState.lines.find((l) => l.id === lineId);
+    const lineName = line?.name ?? 'this line';
+    if (rootState.lines.length <= 1) {
+      alert('You need at least one line. Create another line first if you want to remove this one.');
+      return;
+    }
+    const message = `Are you sure you want to delete the line "${lineName}"?\n\nThis will permanently remove its roster, slot assignments, leads, and all saved state for this line. This cannot be undone.`;
+    if (!window.confirm(message)) return;
+    setRootState((prev) => {
+      const newLines = prev.lines.filter((l) => l.id !== lineId);
+      const newLineStates = { ...prev.lineStates };
+      delete newLineStates[lineId];
+      const nextCurrentLineId =
+        prev.currentLineId === lineId
+          ? (newLines[0]?.id ?? prev.currentLineId)
+          : prev.currentLineId;
+      return {
+        ...prev,
+        lines: newLines,
+        lineStates: newLineStates,
+        currentLineId: nextCurrentLineId,
+      };
+    });
+    if (rootState.currentLineId === lineId) {
+      setView('staffing');
+    }
+  }, [rootState.lines, rootState.currentLineId]);
+
   const importFileRef = useRef<HTMLInputElement>(null);
   const savedFileHandleRef = useRef<FileSystemFileHandle | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   const applyImportedState = useCallback((imported: AppState) => {
-    setRoster(imported.roster.map((p: RosterPerson) => ({
+    const currentLineId = rootStateRef.current.currentLineId;
+    const normalized = (imported.roster ?? []).map((p: RosterPerson) => ({
       ...p,
       lead: p.lead ?? false,
       ot: p.ot ?? false,
@@ -412,9 +630,21 @@ export default function App() {
       leavingEarly: p.leavingEarly ?? false,
       breakPreference: p.breakPreference ?? 'no_preference',
       areasWantToLearn: p.areasWantToLearn ?? [],
-    })));
-    setSlots(normalizeSlotsToCapacity(imported.slots, imported.areaCapacityOverrides));
-    setLeadSlots(imported.leadSlots ?? { area_end_of_line: null, area_courtyard: null, area_bonding: null });
+      flexedToLineId: p.flexedToLineId ?? null,
+    }));
+    setRootState((prev) => ({
+      ...prev,
+      lineStates: {
+        ...prev.lineStates,
+        [currentLineId]: { ...prev.lineStates[currentLineId], roster: normalized.length ? normalized : prev.lineStates[currentLineId]?.roster ?? [] },
+      },
+    }));
+    const normalizedSlots =
+      currentConfig && currentConfig.id !== 'ic'
+        ? normalizeSlotsToLineCapacity(imported.slots, currentConfig, imported.areaCapacityOverrides)
+        : normalizeSlotsToCapacity(imported.slots, imported.areaCapacityOverrides);
+    setSlots(normalizedSlots);
+    setLeadSlots(imported.leadSlots ?? Object.fromEntries(leadAreaIds.map((id) => [id, null])));
     setJuicedAreas(imported.juicedAreas ?? {});
     setDeJuicedAreas(imported.deJuicedAreas ?? {});
     setSectionTasks(imported.sectionTasks ?? {});
@@ -426,10 +656,12 @@ export default function App() {
     setAreaNameOverrides(imported.areaNameOverrides ?? {});
     setSlotLabelsByArea(imported.slotLabelsByArea ?? {});
     setSavedDays(loadSavedDays());
-  }, []);
+  }, [currentConfig, leadAreaIds]);
 
   const handleSaveToFile = useCallback(async () => {
-    const state = stateRef.current;
+    const root = rootStateRef.current;
+    const rosterForLine = getRosterForLine(root.currentLineId, root.lineStates);
+    const state: AppState = { ...stateRef.current, roster: rosterForLine };
     try {
       let written = false;
       if (savedFileHandleRef.current) {
@@ -461,7 +693,9 @@ export default function App() {
   }, [applyImportedState]);
 
   const handleExportBackup = useCallback(() => {
-    const state = stateRef.current;
+    const root = rootStateRef.current;
+    const rosterForLine = getRosterForLine(root.currentLineId, root.lineStates);
+    const state: AppState = { ...stateRef.current, roster: rosterForLine };
     const json = exportStateToJson(state);
     const blob = new Blob([json], { type: 'application/json' });
     const a = document.createElement('a');
@@ -488,11 +722,61 @@ export default function App() {
     e.target.value = '';
   }, [applyImportedState]);
 
-  if (!adminVisible) {
+  if (view === 'line-manager') {
     return (
       <>
         <header className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <span>Production Line Staffing</span>
+        </header>
+        <LineManager
+          rootState={rootState}
+          onOpenLine={handleOpenLine}
+          onBuildNew={handleBuildNewLine}
+          onDeleteLine={handleDeleteLine}
+          onBack={() => setView('staffing')}
+        />
+      </>
+    );
+  }
+
+  if (view === 'build-line') {
+    const existingAreaIds = new Set(rootState.lines.flatMap((l) => l.areas.map((a) => a.id)));
+    return (
+      <>
+        <header className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <span>Production Line Staffing</span>
+        </header>
+        <BuildLineWizard
+          existingAreaIds={existingAreaIds}
+          onComplete={handleBuildLineComplete}
+          onCancel={handleBuildLineCancel}
+        />
+      </>
+    );
+  }
+
+  if (!currentConfig) {
+    return (
+      <>
+        <header className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <span>Production Line Staffing</span>
+          <button type="button" onClick={() => setView('line-manager')} style={{ padding: '8px 16px' }}>
+            Lines
+          </button>
+        </header>
+        <p style={{ padding: 24 }}>No line selected. Open a line or build your own.</p>
+      </>
+    );
+  }
+
+  if (!adminVisible) {
+    return (
+      <>
+        <header className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <span>Production Line Staffing — {currentConfig.name}</span>
+          <button type="button" onClick={() => setView('line-manager')} style={{ marginRight: 8 }}>
+            Lines
+          </button>
           <button
             type="button"
             onClick={() => setAdminVisible(true)}
@@ -512,9 +796,13 @@ export default function App() {
           fullStaff={FULL_STAFF}
           staffingPct={grandTotalPct}
           lineHealthScore={lineHealthScore}
+          lineSections={[...lineSections]}
+          leadAreaIds={leadAreaIds}
+          getSlotLabel={getSlotLabel}
+          areaRequiresTrainedOrExpert={areaRequiresTrainedOrExpert}
         />
         <div style={{ maxWidth: 520, margin: '0 auto', padding: '0 12px 24px' }}>
-          <TrainingReport roster={roster} slots={slots} areaLabels={areaLabels} effectiveCapacity={effectiveCapacity} />
+          <TrainingReport roster={roster} slots={slots} areaLabels={areaLabels} effectiveCapacity={effectiveCapacity} presentationMode areaIds={areaIds} />
         </div>
       </>
     );
@@ -523,7 +811,10 @@ export default function App() {
   return (
     <>
       <header className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-        <span>Production Line Staffing</span>
+        <span>Production Line Staffing — {currentConfig.name}</span>
+        <button type="button" onClick={() => setView('line-manager')} style={{ marginRight: 4 }}>
+          Lines
+        </button>
         <button
           type="button"
           onClick={() => setAdminVisible(false)}
@@ -536,8 +827,12 @@ export default function App() {
 
       <RosterGrid
         roster={roster}
+        flexedInPersonIds={flexedInPersonIds}
         visible={rosterVisible}
         areaLabels={areaLabels}
+        areaIds={areaIds}
+        lines={rootState.lines}
+        currentLineId={rootState.currentLineId}
         onToggleVisible={() => setRosterVisible((v) => !v)}
         onNameChange={handleNameChange}
         onRemovePerson={handleRemovePerson}
@@ -552,6 +847,7 @@ export default function App() {
         onBreakPreferenceChange={handleBreakPreferenceChange}
         onSkillChange={handleSkillChange}
         onAreasWantToLearnChange={handleAreasWantToLearnChange}
+        onFlexedToLineChange={handleFlexedToLineChange}
       />
 
       <div className="totals-and-leads-row" style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', marginBottom: 12 }}>
@@ -592,6 +888,7 @@ export default function App() {
           roster={roster}
           leadSlots={leadSlots}
           areaLabels={areaLabels}
+          leadAreaIds={leadAreaIds}
           onLeadSlotChange={setLeadSlot}
         />
       </div>
@@ -608,86 +905,92 @@ export default function App() {
       </div>
 
       <div className="areas-grid">
-        {LINE_SECTIONS.map((section) =>
-          isCombinedSection(section) ? (
-            <CombinedAreaStaffing
-              key="14.5-flip"
-              combinedLabel={`${areaLabels[COMBINED_14_5_FLIP[0]]} & ${areaLabels[COMBINED_14_5_FLIP[1]]}`}
-              areaIdA={COMBINED_14_5_FLIP[0]}
-              areaIdB={COMBINED_14_5_FLIP[1]}
-              areaLabelA={areaLabels[COMBINED_14_5_FLIP[0]]}
-              areaLabelB={areaLabels[COMBINED_14_5_FLIP[1]]}
-              slotsA={slots[COMBINED_14_5_FLIP[0]]}
-              slotsB={slots[COMBINED_14_5_FLIP[1]]}
-              minA={effectiveCapacity[COMBINED_14_5_FLIP[0]].min}
-              maxA={effectiveCapacity[COMBINED_14_5_FLIP[0]].max}
-              minB={effectiveCapacity[COMBINED_14_5_FLIP[1]].min}
-              maxB={effectiveCapacity[COMBINED_14_5_FLIP[1]].max}
-              slotLabelsA={slotLabelsByArea[COMBINED_14_5_FLIP[0]]}
-              slotLabelsB={slotLabelsByArea[COMBINED_14_5_FLIP[1]]}
-              sectionTasksA={sectionTasks[COMBINED_14_5_FLIP[0]]}
-              sectionTasksB={sectionTasks[COMBINED_14_5_FLIP[1]]}
-              roster={roster}
-              allAssignedPersonIds={allAssignedPersonIds}
-              leadAssignedPersonIds={leadAssignedPersonIds}
-              juicedA={!!juicedAreas[COMBINED_14_5_FLIP[0]]}
-              juicedB={!!juicedAreas[COMBINED_14_5_FLIP[1]]}
-              deJuicedA={!!deJuicedAreas[COMBINED_14_5_FLIP[0]]}
-              deJuicedB={!!deJuicedAreas[COMBINED_14_5_FLIP[1]]}
-              onToggleJuice={handleToggleJuice}
-              onToggleDeJuice={handleToggleDeJuice}
-              onCapacityChange={handleAreaCapacityChange}
-              onSlotLabelChange={handleSlotLabelChange}
-              onSlotsChange={setSlotsForArea}
-              onSectionTasksChange={setSectionTasksForArea}
-              onAssign={setSlotAssignment}
-              breakScheduleA={breakSchedules?.[COMBINED_14_5_FLIP[0]]}
-              breakScheduleB={breakSchedules?.[COMBINED_14_5_FLIP[1]]}
-              showBreakSchedule={breakScheduleVisibleByArea[COMBINED_14_5_FLIP[0]] !== false}
-              onToggleBreakSchedule={() =>
-                setBreakScheduleVisibleByArea((prev) => ({
-                  ...prev,
-                  [COMBINED_14_5_FLIP[0]]: prev[COMBINED_14_5_FLIP[0]] === false,
-                }))
-              }
-            />
-          ) : (
+        {lineSections.map((section) => {
+          const isCombined = Array.isArray(section);
+          if (isCombined) {
+            const [idA, idB] = section as [string, string];
+            return (
+              <CombinedAreaStaffing
+                key={`${idA}-${idB}`}
+                combinedLabel={`${areaLabels[idA] ?? idA} & ${areaLabels[idB] ?? idB}`}
+                areaIdA={idA}
+                areaIdB={idB}
+                areaLabelA={areaLabels[idA] ?? idA}
+                areaLabelB={areaLabels[idB] ?? idB}
+                slotsA={slots[idA] ?? []}
+                slotsB={slots[idB] ?? []}
+                minA={effectiveCapacity[idA]?.min ?? 1}
+                maxA={effectiveCapacity[idA]?.max ?? 1}
+                minB={effectiveCapacity[idB]?.min ?? 1}
+                maxB={effectiveCapacity[idB]?.max ?? 1}
+                slotLabelsA={slotLabelsByArea[idA]}
+                slotLabelsB={slotLabelsByArea[idB]}
+                sectionTasksA={sectionTasks[idA] ?? []}
+                sectionTasksB={sectionTasks[idB] ?? []}
+                roster={roster}
+                allAssignedPersonIds={allAssignedPersonIds}
+                leadAssignedPersonIds={leadAssignedPersonIds}
+                juicedA={!!juicedAreas[idA]}
+                juicedB={!!juicedAreas[idB]}
+                deJuicedA={!!deJuicedAreas[idA]}
+                deJuicedB={!!deJuicedAreas[idB]}
+                onToggleJuice={handleToggleJuice}
+                onToggleDeJuice={handleToggleDeJuice}
+                onCapacityChange={handleAreaCapacityChange}
+                onSlotLabelChange={handleSlotLabelChange}
+                onSlotsChange={setSlotsForArea}
+                onSectionTasksChange={setSectionTasksForArea}
+                onAssign={setSlotAssignment}
+                breakScheduleA={breakSchedules?.[idA]}
+                breakScheduleB={breakSchedules?.[idB]}
+                showBreakSchedule={breakScheduleVisibleByArea[idA] !== false}
+                onToggleBreakSchedule={() =>
+                  setBreakScheduleVisibleByArea((prev) => ({
+                    ...prev,
+                    [idA]: prev[idA] === false,
+                  }))
+                }
+              />
+            );
+          }
+          const areaId = section as string;
+          return (
             <AreaStaffing
-              key={section}
-              areaId={section}
-              areaLabel={areaLabels[section]}
-              minSlots={effectiveCapacity[section].min}
-              maxSlots={effectiveCapacity[section].max}
-              slotLabels={slotLabelsByArea[section]}
-              slots={slots[section]}
+              key={areaId}
+              areaId={areaId}
+              areaLabel={areaLabels[areaId] ?? areaId}
+              minSlots={effectiveCapacity[areaId]?.min ?? 1}
+              maxSlots={effectiveCapacity[areaId]?.max ?? 1}
+              slotLabels={slotLabelsByArea[areaId]}
+              slots={slots[areaId] ?? []}
               roster={roster}
               allAssignedPersonIds={allAssignedPersonIds}
               leadAssignedPersonIds={leadAssignedPersonIds}
-              juiced={!!juicedAreas[section]}
-              deJuiced={!!deJuicedAreas[section]}
+              juiced={!!juicedAreas[areaId]}
+              deJuiced={!!deJuicedAreas[areaId]}
               onToggleJuice={handleToggleJuice}
               onToggleDeJuice={handleToggleDeJuice}
               onAreaNameChange={handleAreaNameChange}
               onCapacityChange={handleAreaCapacityChange}
               onSlotLabelChange={handleSlotLabelChange}
-              sectionTasks={sectionTasks[section]}
+              sectionTasks={sectionTasks[areaId] ?? []}
               onSlotsChange={setSlotsForArea}
               onSectionTasksChange={setSectionTasksForArea}
               onAssign={setSlotAssignment}
-              breakSchedule={breakSchedules?.[section]}
-              showBreakSchedule={breakScheduleVisibleByArea[section] !== false}
+              breakSchedule={breakSchedules?.[areaId]}
+              showBreakSchedule={breakScheduleVisibleByArea[areaId] !== false}
               onToggleBreakSchedule={() =>
                 setBreakScheduleVisibleByArea((prev) => ({
                   ...prev,
-                  [section]: prev[section] === false,
+                  [areaId]: prev[areaId] === false,
                 }))
               }
             />
-          )
-        )}
+          );
+        })}
       </div>
 
-      <TrainingReport roster={roster} slots={slots} areaLabels={areaLabels} effectiveCapacity={effectiveCapacity} />
+      <TrainingReport roster={roster} slots={slots} areaLabels={areaLabels} effectiveCapacity={effectiveCapacity} areaIds={areaIds} />
 
       <NotesAndDocuments
         dayNotes={dayNotes}

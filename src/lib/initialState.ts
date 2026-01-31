@@ -1,59 +1,75 @@
-import type { AppState, LeadSlots } from '../types';
-import { LEAD_SLOT_AREAS } from '../types';
-import { loadState } from './persist';
-import { getInitialState, normalizeSlotsToCapacity } from '../data/initialState';
+import type { AppState, LeadSlots, LineConfig, LineState, RootState } from '../types';
+import { loadRootState } from './persist';
+import { getInitialState, getEmptyLineState, normalizeSlotsToLineCapacity } from '../data/initialState';
+import { getDefaultICLineConfig } from './lineConfig';
 
-function defaultLeadSlots(): LeadSlots {
-  const out = {} as LeadSlots;
-  for (const areaId of LEAD_SLOT_AREAS) {
-    out[areaId] = null;
+function normalizeLineState(state: Partial<LineState>, lineConfig: LineConfig): LineState {
+  const capacityOverrides = state.areaCapacityOverrides ?? {};
+  const slots = normalizeSlotsToLineCapacity(state.slots ?? {}, lineConfig, capacityOverrides);
+  const leadSlots: LeadSlots = {};
+  for (const areaId of lineConfig.leadAreaIds) {
+    leadSlots[areaId] = state.leadSlots?.[areaId] ?? null;
   }
-  return out;
+  const sectionTasks = state.sectionTasks ?? {};
+  for (const a of lineConfig.areas) {
+    if (!sectionTasks[a.id]) sectionTasks[a.id] = [];
+  }
+  const roster = Array.isArray(state.roster) ? state.roster : [];
+  return {
+    ...state,
+    roster,
+    slots,
+    leadSlots,
+    juicedAreas: state.juicedAreas ?? {},
+    deJuicedAreas: state.deJuicedAreas ?? {},
+    sectionTasks,
+    schedule: state.schedule ?? getInitialState().schedule,
+    dayNotes: state.dayNotes ?? '',
+    documents: state.documents ?? [],
+    breakSchedules: state.breakSchedules ?? {},
+    areaCapacityOverrides: capacityOverrides,
+    areaNameOverrides: state.areaNameOverrides ?? {},
+    slotLabelsByArea: state.slotLabelsByArea ?? {},
+  } as LineState;
 }
 
-/** Single source of truth: load from localStorage once at app load, or use defaults. Never overwrites after mount. */
-let cached: AppState | null = null;
+/** Single source of truth: load from localStorage once at app load. Returns full root state (multi-line) or builds default. */
+let cachedRoot: RootState | null = null;
 
-export function getHydratedState(): AppState {
-  if (cached) return cached;
+export function getHydratedRootState(): RootState {
+  if (cachedRoot) return cachedRoot;
   try {
-    const loaded = loadState();
-    if (loaded) {
-      const defaults = getInitialState();
-      const slots =
-        loaded.slots != null && typeof loaded.slots === 'object'
-          ? normalizeSlotsToCapacity(loaded.slots, loaded.areaCapacityOverrides)
-          : defaults.slots;
-      const roster = Array.isArray(loaded.roster)
-        ? loaded.roster.map((p) => ({
-            ...p,
-            lead: p.lead ?? false,
-            ot: p.ot ?? false,
-            otHereToday: p.otHereToday ?? false,
-            late: p.late ?? false,
-            leavingEarly: p.leavingEarly ?? false,
-            breakPreference: p.breakPreference ?? 'no_preference',
-            areasWantToLearn: p.areasWantToLearn ?? [],
-          }))
-        : defaults.roster;
-      cached = {
-        ...defaults,
-        ...loaded,
-        roster,
-        slots,
-        leadSlots: loaded.leadSlots ?? defaultLeadSlots(),
-        juicedAreas: loaded.juicedAreas ?? {},
-        deJuicedAreas: loaded.deJuicedAreas ?? {},
-        breakSchedules: loaded.breakSchedules ?? {},
-        areaCapacityOverrides: loaded.areaCapacityOverrides ?? {},
-        areaNameOverrides: loaded.areaNameOverrides ?? {},
-        slotLabelsByArea: loaded.slotLabelsByArea ?? {},
-      };
-      return cached;
+    const root = loadRootState();
+    if (root && root.lines?.length && root.lineStates) {
+      const current = root.lineStates[root.currentLineId];
+      const config = root.lines.find((l) => l.id === root.currentLineId);
+      if (config && current) {
+        root.lineStates[root.currentLineId] = normalizeLineState(current, config);
+      } else if (config && !current) {
+        root.lineStates[root.currentLineId] = getEmptyLineState(config);
+      }
+      cachedRoot = root;
+      return cachedRoot;
     }
   } catch {
-    // Invalid or missing saved state: use fresh state
+    // fall through to default
   }
-  cached = getInitialState();
-  return cached;
+  const ic = getDefaultICLineConfig();
+  const defaultState = getInitialState();
+  cachedRoot = {
+    currentLineId: ic.id,
+    lines: [ic],
+    lineStates: { [ic.id]: defaultState },
+  };
+  return cachedRoot;
+}
+
+/** Current line state (includes that line's stored roster). Prefer getHydratedRootState() for multi-line UI. */
+export function getHydratedState(): AppState {
+  const root = getHydratedRootState();
+  const state = root.lineStates[root.currentLineId];
+  const config = root.lines.find((l) => l.id === root.currentLineId);
+  if (config && state) return state as AppState;
+  if (config) return getEmptyLineState(config) as AppState;
+  return getInitialState();
 }

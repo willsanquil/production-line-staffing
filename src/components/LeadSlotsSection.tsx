@@ -1,46 +1,50 @@
 import { memo, useMemo, useState, useRef, useEffect } from 'react';
-import type { AreaId, LeadSlotAreaId, RosterPerson } from '../types';
+import type { AreaId, RosterPerson } from '../types';
 import { LEAD_SLOT_AREAS } from '../types';
 import { sortByFirstName } from '../lib/rosterSort';
 import { SkillPill } from './SkillPill';
 
 interface LeadSlotsSectionProps {
   roster: RosterPerson[];
-  leadSlots: Record<LeadSlotAreaId, string | null>;
+  leadSlots: Record<string, string | null>;
   areaLabels: Record<AreaId, string>;
-  onLeadSlotChange: (areaId: LeadSlotAreaId, personId: string | null) => void;
+  /** Area IDs that have a lead slot. Omit for default IC lead areas. */
+  leadAreaIds?: string[];
+  onLeadSlotChange: (areaId: string, personId: string | null) => void;
 }
 
 /** One dropdown: only leads not assigned to any other lead slot (or current for this slot). Colored by skill in this area. */
 function LeadSlotDropdown({
   areaId,
   areaLabel,
+  leadAreaIds,
   roster,
   leadSlots,
   onLeadSlotChange,
 }: {
-  areaId: LeadSlotAreaId;
+  areaId: string;
   areaLabel: string;
+  leadAreaIds: string[];
   roster: RosterPerson[];
-  leadSlots: Record<LeadSlotAreaId, string | null>;
-  onLeadSlotChange: (areaId: LeadSlotAreaId, personId: string | null) => void;
+  leadSlots: Record<string, string | null>;
+  onLeadSlotChange: (areaId: string, personId: string | null) => void;
 }) {
   const leadsOnly = useMemo(
     () =>
       sortByFirstName(
         roster.filter(
-          (p) => p.lead && !p.absent && (!p.ot || p.otHereToday)
+          (p) => !p.absent && (p.lead || (p.ot && p.otHereToday))
         )
       ),
     [roster]
   );
   const assignedToOther = useMemo(() => {
     const set = new Set<string>();
-    for (const other of LEAD_SLOT_AREAS) {
+    for (const other of leadAreaIds) {
       if (other !== areaId && leadSlots[other]) set.add(leadSlots[other]!);
     }
     return set;
-  }, [areaId, leadSlots]);
+  }, [areaId, leadSlots, leadAreaIds]);
   const available = useMemo(
     () => leadsOnly.filter((p) => leadSlots[areaId] === p.id || !assignedToOther.has(p.id)),
     [leadsOnly, leadSlots, areaId, assignedToOther]
@@ -174,15 +178,18 @@ function LeadSlotsSectionInner({
   roster,
   leadSlots,
   areaLabels,
+  leadAreaIds: leadAreaIdsProp,
   onLeadSlotChange,
 }: LeadSlotsSectionProps) {
+  const leadAreaIds = leadAreaIdsProp ?? [...LEAD_SLOT_AREAS];
   return (
     <div className="lead-slots-section" style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
-      {LEAD_SLOT_AREAS.map((areaId) => (
+      {leadAreaIds.map((areaId) => (
         <LeadSlotDropdown
           key={areaId}
           areaId={areaId}
-          areaLabel={areaLabels[areaId]}
+          areaLabel={areaLabels[areaId] ?? areaId}
+          leadAreaIds={leadAreaIds}
           roster={roster}
           leadSlots={leadSlots}
           onLeadSlotChange={onLeadSlotChange}

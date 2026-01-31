@@ -1,12 +1,20 @@
 import { memo, useMemo, useState, useEffect } from 'react';
-import type { AreaId, BreakPreference, RosterPerson, SkillLevel } from '../types';
+import type { AreaId, BreakPreference, LineConfig, RosterPerson, SkillLevel } from '../types';
 import { AREA_IDS } from '../types';
 import { sortByFirstName } from '../lib/rosterSort';
 
 interface RosterGridProps {
   roster: RosterPerson[];
+  /** Person IDs who are flexed in to this line (show in a separate Flex pool section). */
+  flexedInPersonIds?: Set<string>;
   visible: boolean;
   areaLabels: Record<AreaId, string>;
+  /** When building custom lines, pass area IDs in display order. Omit for default IC areas. */
+  areaIds?: string[];
+  /** When multiple lines exist, show Flexed dropdown (other lines only). */
+  lines?: LineConfig[];
+  currentLineId?: string;
+  onFlexedToLineChange?: (personId: string, lineId: string | null) => void;
   onToggleVisible: () => void;
   onNameChange: (personId: string, name: string) => void;
   onRemovePerson: (personId: string) => void;
@@ -41,16 +49,17 @@ const SKILL_SCORE: Record<SkillLevel, number> = {
 const PAGE_SIZE = 10;
 
 /** Average knowledge (0–3) across all areas for one person. */
-function personHealthScore(person: RosterPerson): number {
+function personHealthScore(person: RosterPerson, areaIds: string[]): number {
+  if (areaIds.length === 0) return 0;
   let sum = 0;
-  for (const areaId of AREA_IDS) {
+  for (const areaId of areaIds) {
     sum += SKILL_SCORE[person.skills[areaId] ?? 'no_experience'];
   }
-  return sum / AREA_IDS.length;
+  return sum / areaIds.length;
 }
 
-function PersonHealthBar({ person }: { person: RosterPerson }) {
-  const score = personHealthScore(person);
+function PersonHealthBar({ person, areaIds }: { person: RosterPerson; areaIds: string[] }) {
+  const score = personHealthScore(person, areaIds);
   const position = (score / 3) * 100;
   return (
     <div
@@ -92,8 +101,13 @@ function PersonHealthBar({ person }: { person: RosterPerson }) {
 
 function RosterGridInner({
   roster,
+  flexedInPersonIds = new Set(),
   visible,
   areaLabels,
+  areaIds: areaIdsProp,
+  lines = [],
+  currentLineId = '',
+  onFlexedToLineChange,
   onToggleVisible,
   onNameChange,
   onRemovePerson,
@@ -109,21 +123,30 @@ function RosterGridInner({
   onSkillChange,
   onAreasWantToLearnChange,
 }: RosterGridProps) {
-  const { staffRoster, otRoster } = useMemo(() => {
+  const areaIds = areaIdsProp ?? [...AREA_IDS];
+  const otherLines = useMemo(() => lines.filter((l) => l.id !== currentLineId), [lines, currentLineId]);
+  const showFlexedColumn = otherLines.length > 0 && currentLineId && onFlexedToLineChange;
+  const { staffRoster, flexedInRoster, otRoster } = useMemo(() => {
     const sorted = sortByFirstName(roster);
+    const flexedIn = sorted.filter((p) => flexedInPersonIds.has(p.id));
+    const own = sorted.filter((p) => !flexedInPersonIds.has(p.id));
     return {
-      staffRoster: sorted.filter((p) => !p.ot),
-      otRoster: sorted.filter((p) => p.ot),
+      staffRoster: own.filter((p) => !p.ot),
+      flexedInRoster: sortByFirstName(flexedIn),
+      otRoster: own.filter((p) => p.ot),
     };
-  }, [roster]);
+  }, [roster, flexedInPersonIds]);
   const [newName, setNewName] = useState('');
   const [newOTName, setNewOTName] = useState('');
   const [staffPage, setStaffPage] = useState(0);
   const [otPage, setOtPage] = useState(0);
 
   const staffTotalPages = Math.max(1, Math.ceil(staffRoster.length / PAGE_SIZE));
+  const flexedInTotalPages = Math.max(1, Math.ceil(flexedInRoster.length / PAGE_SIZE));
   const otTotalPages = Math.max(1, Math.ceil(otRoster.length / PAGE_SIZE));
   const staffPageIndex = Math.min(staffPage, staffTotalPages - 1);
+  const [flexedInPage, setFlexedInPage] = useState(0);
+  const flexedInPageIndex = Math.min(flexedInPage, flexedInTotalPages - 1);
   const otPageIndex = Math.min(otPage, otTotalPages - 1);
   const staffRosterPage = useMemo(
     () =>
@@ -132,6 +155,14 @@ function RosterGridInner({
         (staffPageIndex + 1) * PAGE_SIZE
       ),
     [staffRoster, staffPageIndex]
+  );
+  const flexedInRosterPage = useMemo(
+    () =>
+      flexedInRoster.slice(
+        flexedInPageIndex * PAGE_SIZE,
+        (flexedInPageIndex + 1) * PAGE_SIZE
+      ),
+    [flexedInRoster, flexedInPageIndex]
   );
   const otRosterPage = useMemo(
     () =>
@@ -142,6 +173,9 @@ function RosterGridInner({
   useEffect(() => {
     if (staffPageIndex !== staffPage) setStaffPage(staffPageIndex);
   }, [staffPageIndex, staffPage]);
+  useEffect(() => {
+    if (flexedInPageIndex !== flexedInPage) setFlexedInPage(flexedInPageIndex);
+  }, [flexedInPageIndex, flexedInPage]);
   useEffect(() => {
     if (otPageIndex !== otPage) setOtPage(otPageIndex);
   }, [otPageIndex, otPage]);
@@ -196,29 +230,32 @@ function RosterGridInner({
                 <tr>
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Name</th>
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 44 }}></th>
+                  {showFlexedColumn && (
+                    <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', minWidth: 100 }} title="Temporarily assign this person to another line">Flexed</th>
+                  )}
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 70 }}>Absent</th>
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 60 }}>Lead</th>
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 50 }}>OT</th>
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 55 }}>Late</th>
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 90 }}>Leave early</th>
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 100 }}>Break</th>
-                  {AREA_IDS.map((areaId) => (
+                  {areaIds.map((areaId) => (
                     <th key={areaId} style={{ padding: '6px 8px', textAlign: 'center', borderBottom: '2px solid #ddd', minWidth: 90 }}>
                       {areaLabels[areaId]}
                     </th>
                   ))}
-                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', fontSize: '0.8rem' }} colSpan={AREA_IDS.length}>
+                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', fontSize: '0.8rem' }} colSpan={areaIds.length}>
                     Want to learn (profile)
                   </th>
                 </tr>
                 <tr>
-                  <th colSpan={8} style={{ padding: 0, border: 'none' }} />
-                  {AREA_IDS.map((areaId) => (
+                  <th colSpan={8 + (showFlexedColumn ? 1 : 0)} style={{ padding: 0, border: 'none' }} />
+                  {areaIds.map((areaId) => (
                     <th key={areaId} style={{ padding: '2px 4px', textAlign: 'center', borderBottom: '2px solid #ddd', fontSize: '0.75rem' }}>
                       {areaLabels[areaId]}
                     </th>
                   ))}
-                  {AREA_IDS.map((areaId) => (
+                  {areaIds.map((areaId) => (
                     <th key={`learn-${areaId}`} style={{ padding: '2px 4px', textAlign: 'center', borderBottom: '2px solid #ddd', fontSize: '0.75rem' }}>
                       {areaLabels[areaId]}
                     </th>
@@ -229,7 +266,7 @@ function RosterGridInner({
                 {staffRosterPage.map((person) => (
                   <tr key={person.id} className={person.absent ? 'person-absent' : ''}>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee', verticalAlign: 'top' }}>
-                      <PersonHealthBar person={person} />
+                      <PersonHealthBar person={person} areaIds={areaIds} />
                       <input
                         type="text"
                         value={person.name}
@@ -249,6 +286,22 @@ function RosterGridInner({
                         −
                       </button>
                     </td>
+                    {showFlexedColumn && (
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                        <select
+                          value={person.flexedToLineId ?? ''}
+                          onChange={(e) => onFlexedToLineChange?.(person.id, e.target.value || null)}
+                          style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 88 }}
+                          title="Temporarily assign to another line"
+                          aria-label={`${person.name} flexed to`}
+                        >
+                          <option value="">—</option>
+                          {otherLines.map((l) => (
+                            <option key={l.id} value={l.id}>{l.name}</option>
+                          ))}
+                        </select>
+                      </td>
+                    )}
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
                       <input
                         type="checkbox"
@@ -303,7 +356,7 @@ function RosterGridInner({
                         <option value="prefer_late">Prefer late</option>
                       </select>
                     </td>
-                    {AREA_IDS.map((areaId) => {
+                    {areaIds.map((areaId) => {
                       const level = person.skills[areaId] ?? 'no_experience';
                       return (
                         <td
@@ -338,7 +391,7 @@ function RosterGridInner({
                         </td>
                       );
                     })}
-                    {AREA_IDS.map((areaId) => {
+                    {areaIds.map((areaId) => {
                       const want = (person.areasWantToLearn ?? []).includes(areaId);
                       return (
                         <td
@@ -387,6 +440,140 @@ function RosterGridInner({
             </div>
           )}
 
+          {/* Flexed to this line – people from other lines; can be assigned to slots here */}
+          {flexedInRoster.length > 0 && (
+            <>
+              <h3 style={{ margin: '1.25rem 0 0.5rem 0', fontSize: '1rem' }}>Flexed to this line</h3>
+              <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#666' }}>
+                People temporarily assigned from other lines. They can be slotted here; skills are unchanged.
+              </p>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Name</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 90 }}>Send back</th>
+                      {showFlexedColumn && (
+                        <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', minWidth: 100 }}>Flexed</th>
+                      )}
+                      <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 70 }}>Absent</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 100 }}>Break</th>
+                      {areaIds.map((areaId) => (
+                        <th key={areaId} style={{ padding: '6px 8px', textAlign: 'center', borderBottom: '2px solid #ddd', minWidth: 90 }}>
+                          {areaLabels[areaId]}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {flexedInRosterPage.map((person) => (
+                      <tr key={person.id} style={{ backgroundColor: 'rgba(33, 150, 243, 0.06)' }}>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee', verticalAlign: 'top' }}>
+                          <PersonHealthBar person={person} areaIds={areaIds} />
+                          <span style={{ fontWeight: 500 }}>{person.name}</span>
+                        </td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                          <button
+                            type="button"
+                            onClick={() => onFlexedToLineChange?.(person.id, null)}
+                            style={{ padding: '4px 8px', fontSize: '0.8rem' }}
+                            title="Send back to their home line"
+                          >
+                            Send back
+                          </button>
+                        </td>
+                        {showFlexedColumn && (
+                          <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                            <select
+                              value={person.flexedToLineId ?? ''}
+                              onChange={(e) => onFlexedToLineChange?.(person.id, e.target.value || null)}
+                              style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 88 }}
+                              aria-label={`${person.name} flexed to`}
+                            >
+                              <option value="">—</option>
+                              {otherLines.map((l) => (
+                                <option key={l.id} value={l.id}>{l.name}</option>
+                              ))}
+                            </select>
+                          </td>
+                        )}
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                          <input
+                            type="checkbox"
+                            checked={person.absent}
+                            onChange={(e) => onToggleAbsent(person.id, e.target.checked)}
+                            aria-label={`Mark ${person.name} absent`}
+                          />
+                        </td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                          <select
+                            value={person.breakPreference ?? 'no_preference'}
+                            onChange={(e) => onBreakPreferenceChange(person.id, e.target.value as BreakPreference)}
+                            style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 100 }}
+                            title="Break preference"
+                          >
+                            <option value="prefer_early">Prefer early</option>
+                            <option value="no_preference">No preference</option>
+                            <option value="prefer_late">Prefer late</option>
+                          </select>
+                        </td>
+                        {areaIds.map((areaId) => {
+                          const level = person.skills[areaId] ?? 'no_experience';
+                          return (
+                            <td
+                              key={areaId}
+                              style={{ padding: '2px 4px', borderBottom: '1px solid #eee', textAlign: 'center' }}
+                            >
+                              <select
+                                value={level}
+                                onChange={(e) => onSkillChange(person.id, areaId, e.target.value as SkillLevel)}
+                                className={`skill-${level}`}
+                                style={{
+                                  width: '100%',
+                                  maxWidth: 120,
+                                  padding: '4px 6px',
+                                  border: '1px solid rgba(0,0,0,0.2)',
+                                  borderRadius: 4,
+                                  fontSize: '0.8rem',
+                                }}
+                              >
+                                {SKILL_LEVELS.map((l) => (
+                                  <option key={l} value={l}>{SKILL_LABELS[l]}</option>
+                                ))}
+                              </select>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {flexedInRoster.length > PAGE_SIZE && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => setFlexedInPage((p) => Math.max(0, p - 1))}
+                    disabled={flexedInPageIndex <= 0}
+                  >
+                    ← Prev
+                  </button>
+                  <span style={{ fontSize: '0.9rem' }}>
+                    Page {flexedInPageIndex + 1} of {flexedInTotalPages}
+                    <span style={{ color: '#666', marginLeft: 4 }}>({flexedInRoster.length} flexed in)</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setFlexedInPage((p) => Math.min(flexedInTotalPages - 1, p + 1))}
+                    disabled={flexedInPageIndex >= flexedInTotalPages - 1}
+                  >
+                    Next →
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+
           {/* OT pool – separate list; "Here today" controls slotting eligibility */}
           <h3 style={{ margin: '1.25rem 0 0.5rem 0', fontSize: '1rem' }}>OT pool</h3>
           <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#666' }}>
@@ -410,26 +597,29 @@ function RosterGridInner({
                 <tr>
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Name</th>
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 44 }}></th>
+                  {showFlexedColumn && (
+                    <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', minWidth: 100 }}>Flexed</th>
+                  )}
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 50 }}>OT</th>
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 90 }}>Here today</th>
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 100 }}>Break</th>
-                  {AREA_IDS.map((areaId) => (
+                  {areaIds.map((areaId) => (
                     <th key={areaId} style={{ padding: '6px 8px', textAlign: 'center', borderBottom: '2px solid #ddd', minWidth: 90 }}>
                       {areaLabels[areaId]}
                     </th>
                   ))}
-                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', fontSize: '0.8rem' }} colSpan={AREA_IDS.length}>
+                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', fontSize: '0.8rem' }} colSpan={areaIds.length}>
                     Want to learn
                   </th>
                 </tr>
                 <tr>
-                  <th colSpan={5} style={{ padding: 0, border: 'none' }} />
-                  {AREA_IDS.map((areaId) => (
+                  <th colSpan={5 + (showFlexedColumn ? 1 : 0)} style={{ padding: 0, border: 'none' }} />
+                  {areaIds.map((areaId) => (
                     <th key={areaId} style={{ padding: '2px 4px', textAlign: 'center', borderBottom: '2px solid #ddd', fontSize: '0.75rem' }}>
                       {areaLabels[areaId]}
                     </th>
                   ))}
-                  {AREA_IDS.map((areaId) => (
+                  {areaIds.map((areaId) => (
                     <th key={`learn-${areaId}`} style={{ padding: '2px 4px', textAlign: 'center', borderBottom: '2px solid #ddd', fontSize: '0.75rem' }}>
                       {areaLabels[areaId]}
                     </th>
@@ -440,7 +630,7 @@ function RosterGridInner({
                 {otRosterPage.map((person) => (
                   <tr key={person.id} style={{ backgroundColor: (person.otHereToday ?? false) ? 'transparent' : 'rgba(0,0,0,0.04)' }}>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee', verticalAlign: 'top' }}>
-                      <PersonHealthBar person={person} />
+                      <PersonHealthBar person={person} areaIds={areaIds} />
                       <input
                         type="text"
                         value={person.name}
@@ -460,6 +650,21 @@ function RosterGridInner({
                         −
                       </button>
                     </td>
+                    {showFlexedColumn && (
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                        <select
+                          value={person.flexedToLineId ?? ''}
+                          onChange={(e) => onFlexedToLineChange?.(person.id, e.target.value || null)}
+                          style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 88 }}
+                          aria-label={`${person.name} flexed to`}
+                        >
+                          <option value="">—</option>
+                          {otherLines.map((l) => (
+                            <option key={l.id} value={l.id}>{l.name}</option>
+                          ))}
+                        </select>
+                      </td>
+                    )}
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
                       <input
                         type="checkbox"
@@ -494,7 +699,7 @@ function RosterGridInner({
                         <option value="prefer_late">Prefer late</option>
                       </select>
                     </td>
-                    {AREA_IDS.map((areaId) => {
+                    {areaIds.map((areaId) => {
                       const level = person.skills[areaId] ?? 'no_experience';
                       return (
                         <td
@@ -529,7 +734,7 @@ function RosterGridInner({
                         </td>
                       );
                     })}
-                    {AREA_IDS.map((areaId) => {
+                    {areaIds.map((areaId) => {
                       const want = (person.areasWantToLearn ?? []).includes(areaId);
                       return (
                         <td

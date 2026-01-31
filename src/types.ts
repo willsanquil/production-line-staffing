@@ -13,7 +13,7 @@ export const AREA_IDS = [
   'area_flip',
 ] as const;
 
-export type AreaId = (typeof AREA_IDS)[number];
+export type AreaId = string;
 
 /** Order of sections on the line. Combined 14.5 & Flip is one section; others are single areas. */
 export const COMBINED_14_5_FLIP: readonly [AreaId, AreaId] = ['area_14_5', 'area_flip'];
@@ -93,6 +93,8 @@ export interface RosterPerson {
   skills: Record<AreaId, SkillLevel>;
   /** Area IDs this person wants to learn (opt-in for training assignments in report). */
   areasWantToLearn?: AreaId[];
+  /** When set, person is temporarily assigned to this line and appears on that line's roster (skills retained). */
+  flexedToLineId?: string | null;
 }
 
 export interface Slot {
@@ -140,8 +142,8 @@ export interface SavedConfig {
 
 /** Area-specific lead roles (one person per area). */
 export const LEAD_SLOT_AREAS = ['area_end_of_line', 'area_courtyard', 'area_bonding'] as const;
-export type LeadSlotAreaId = (typeof LEAD_SLOT_AREAS)[number];
-export type LeadSlots = Record<LeadSlotAreaId, string | null>;
+export type LeadSlotAreaId = string;
+export type LeadSlots = Record<string, string | null>;
 
 /** Per-area "juice" flag: when on, Spread talent prioritizes that area with higher skill. */
 export type JuicedAreas = Partial<Record<AreaId, boolean>>;
@@ -159,6 +161,8 @@ export interface SavedDay {
   date: string; // YYYY-MM-DD
   name?: string;
   savedAt: string;
+  /** Line this day was saved for (e.g. IC, NIC). */
+  lineId?: string;
   roster: RosterPerson[];
   slots: SlotsByArea;
   leadSlots: LeadSlots;
@@ -185,4 +189,37 @@ export interface AppState {
   areaCapacityOverrides?: AreaCapacityOverrides;
   areaNameOverrides?: AreaNameOverrides;
   slotLabelsByArea?: SlotLabelsByArea;
+}
+
+/** Single area definition when building a line (name, capacity, optional default slot labels). */
+export interface AreaConfigInLine {
+  id: string;
+  name: string;
+  minSlots: number;
+  maxSlots: number;
+  /** Default slot names by index (e.g. Bonding: Float, 100s, ...). Omit for "Slot 1", "Slot 2". */
+  defaultSlotLabels?: string[];
+  /** If false, area can run without a trained/expert (e.g. flex). Default true. */
+  requiresTrainedOrExpert?: boolean;
+}
+
+/** Full definition of a line: name, sections (areas), which have leads, optional combined sections. */
+export interface LineConfig {
+  id: string;
+  name: string;
+  areas: AreaConfigInLine[];
+  /** Area IDs that have a lead slot (one person per area). */
+  leadAreaIds: string[];
+  /** Pairs of area IDs to show as one combined section (e.g. 14.5 & Flip). */
+  combinedSections: [string, string][];
+}
+
+/** Same shape as AppState; each line has its own roster and slots. */
+export type LineState = AppState;
+
+/** Root multi-line state: which line is open and per-line state (each line has its own roster). */
+export interface RootState {
+  currentLineId: string;
+  lines: LineConfig[];
+  lineStates: Record<string, LineState>;
 }

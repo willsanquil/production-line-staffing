@@ -43,11 +43,12 @@ function takeBestTrainedOrExpert(
 }
 
 /** Copy slots to out; preserve personId for locked slots and return their personIds so automation skips those people elsewhere. */
-function copySlotsPreservingLocked(slotsByArea: SlotsByArea): { out: SlotsByArea; assignedFromLocked: Set<string> } {
+function copySlotsPreservingLocked(slotsByArea: SlotsByArea, areaIds: string[]): { out: SlotsByArea; assignedFromLocked: Set<string> } {
   const assignedFromLocked = new Set<string>();
   const out = {} as SlotsByArea;
-  for (const areaId of AREA_IDS) {
-    out[areaId] = slotsByArea[areaId].map((s) => {
+  for (const areaId of areaIds) {
+    const list = slotsByArea[areaId] ?? [];
+    out[areaId] = list.map((s) => {
       if (s.locked && s.personId) assignedFromLocked.add(s.personId);
       return { ...s, personId: s.locked ? s.personId : null };
     });
@@ -59,11 +60,13 @@ function copySlotsPreservingLocked(slotsByArea: SlotsByArea): { out: SlotsByArea
 function fillAnchorSlots(
   out: SlotsByArea,
   pool: RosterPerson[],
-  assigned: Set<string>
+  assigned: Set<string>,
+  areaIds: string[]
 ): void {
-  for (const areaId of AREA_IDS) {
-    if (!areaRequiresTrainedOrExpert(areaId) || out[areaId].length === 0) continue;
-    const firstEnabledIdx = out[areaId].findIndex((s) => !s.disabled && !s.locked);
+  for (const areaId of areaIds) {
+    const list = out[areaId] ?? [];
+    if (!areaRequiresTrainedOrExpert(areaId) || list.length === 0) continue;
+    const firstEnabledIdx = list.findIndex((s) => !s.disabled && !s.locked);
     if (firstEnabledIdx === -1) continue;
     const person = takeBestTrainedOrExpert(pool, assigned, areaId);
     if (person) {
@@ -77,7 +80,8 @@ function fillAnchorSlots(
 export function randomizeAssignments(
   roster: RosterPerson[],
   slotsByArea: SlotsByArea,
-  leadAssignedPersonIds: Set<string> = new Set()
+  leadAssignedPersonIds: Set<string> = new Set(),
+  areaIds: string[] = [...AREA_IDS]
 ): SlotsByArea {
   const available = roster.filter(
     (p) =>
@@ -85,13 +89,14 @@ export function randomizeAssignments(
       !leadAssignedPersonIds.has(p.id) &&
       (!p.ot || p.otHereToday)
   );
-  const { out, assignedFromLocked } = copySlotsPreservingLocked(slotsByArea);
+  const { out, assignedFromLocked } = copySlotsPreservingLocked(slotsByArea, areaIds);
   const used = new Set(assignedFromLocked);
-  fillAnchorSlots(out, available, used);
+  fillAnchorSlots(out, available, used, areaIds);
   const shuffledRemaining = shuffle(available.filter((p) => !used.has(p.id)));
-  for (const areaId of AREA_IDS) {
-    for (let i = 0; i < out[areaId].length; i++) {
-      if (out[areaId][i].disabled || out[areaId][i].locked || out[areaId][i].personId != null) continue;
+  for (const areaId of areaIds) {
+    const list = out[areaId] ?? [];
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].disabled || list[i].locked || list[i].personId != null) continue;
       const person = shuffledRemaining.find((p) => !used.has(p.id) && eligibleForArea(p, areaId));
       if (person) {
         out[areaId][i].personId = person.id;
@@ -109,7 +114,8 @@ export function spreadTalent(
   juicedAreas: JuicedAreas = {},
   leadAssignedPersonIds: Set<string> = new Set(),
   deJuicedAreas: DeJuicedAreas = {},
-  capacity?: EffectiveCapacity | null
+  capacity?: EffectiveCapacity | null,
+  areaIds: string[] = [...AREA_IDS]
 ): SlotsByArea {
   const cap = capacity ?? AREA_CAPACITY;
   const available = shuffle(
@@ -120,14 +126,15 @@ export function spreadTalent(
         (!p.ot || p.otHereToday)
     )
   );
-  const { out, assignedFromLocked } = copySlotsPreservingLocked(slotsByArea);
+  const { out, assignedFromLocked } = copySlotsPreservingLocked(slotsByArea, areaIds);
   const assigned = new Set(assignedFromLocked);
-  fillAnchorSlots(out, available, assigned);
+  fillAnchorSlots(out, available, assigned, areaIds);
   const fillableIdx = (areaId: AreaId) =>
-    out[areaId].map((_, i) => i).filter((i) => !out[areaId][i].disabled && !out[areaId][i].locked);
+    (out[areaId] ?? []).map((_, i) => i).filter((i) => !out[areaId][i].disabled && !out[areaId][i].locked);
   const minSlotOrder: { areaId: AreaId; slotIdx: number }[] = [];
-  for (const areaId of AREA_IDS) {
-    fillableIdx(areaId).slice(0, cap[areaId].min).forEach((slotIdx) => minSlotOrder.push({ areaId, slotIdx }));
+  for (const areaId of areaIds) {
+    const c = cap[areaId];
+    if (c) fillableIdx(areaId).slice(0, c.min).forEach((slotIdx) => minSlotOrder.push({ areaId, slotIdx }));
   }
   minSlotOrder.sort((a, b) => {
     const priority = (areaId: AreaId) =>
@@ -135,17 +142,18 @@ export function spreadTalent(
     const pA = priority(a.areaId);
     const pB = priority(b.areaId);
     if (pB !== pA) return pB - pA;
-    if (a.areaId !== b.areaId) return AREA_IDS.indexOf(a.areaId) - AREA_IDS.indexOf(b.areaId);
+    if (a.areaId !== b.areaId) return areaIds.indexOf(a.areaId) - areaIds.indexOf(b.areaId);
     return a.slotIdx - b.slotIdx;
   });
   const overflowOrder: { areaId: AreaId; slotIdx: number }[] = [];
-  for (const areaId of AREA_IDS) {
-    fillableIdx(areaId).slice(cap[areaId].min).forEach((slotIdx) => overflowOrder.push({ areaId, slotIdx }));
+  for (const areaId of areaIds) {
+    const c = cap[areaId];
+    if (c) fillableIdx(areaId).slice(c.min).forEach((slotIdx) => overflowOrder.push({ areaId, slotIdx }));
   }
   const slotOrder = [...minSlotOrder, ...overflowOrder];
   for (const { areaId, slotIdx } of slotOrder) {
-    const slot = out[areaId][slotIdx];
-    if (slot.personId != null) continue;
+    const slot = out[areaId]?.[slotIdx];
+    if (!slot || slot.personId != null) continue;
     const candidates = [...available]
       .filter((p) => !assigned.has(p.id) && eligibleForArea(p, areaId))
       .sort((a, b) => scoreForArea(b, areaId) - scoreForArea(a, areaId));
@@ -164,7 +172,8 @@ export function maxSpeedAssignments(
   juicedAreas: JuicedAreas = {},
   leadAssignedPersonIds: Set<string> = new Set(),
   deJuicedAreas: DeJuicedAreas = {},
-  capacity?: EffectiveCapacity | null
+  capacity?: EffectiveCapacity | null,
+  areaIds: string[] = [...AREA_IDS]
 ): SlotsByArea {
   const cap = capacity ?? AREA_CAPACITY;
   const available = roster.filter(
@@ -173,14 +182,15 @@ export function maxSpeedAssignments(
       !leadAssignedPersonIds.has(p.id) &&
       (!p.ot || p.otHereToday)
   );
-  const { out, assignedFromLocked } = copySlotsPreservingLocked(slotsByArea);
+  const { out, assignedFromLocked } = copySlotsPreservingLocked(slotsByArea, areaIds);
   const assigned = new Set(assignedFromLocked);
-  fillAnchorSlots(out, available, assigned);
+  fillAnchorSlots(out, available, assigned, areaIds);
   const fillableIdx = (areaId: AreaId) =>
-    out[areaId].map((_, i) => i).filter((i) => !out[areaId][i].disabled && !out[areaId][i].locked);
+    (out[areaId] ?? []).map((_, i) => i).filter((i) => !out[areaId][i].disabled && !out[areaId][i].locked);
   const minSlotOrder: { areaId: AreaId; slotIdx: number }[] = [];
-  for (const areaId of AREA_IDS) {
-    fillableIdx(areaId).slice(0, cap[areaId].min).forEach((slotIdx) => minSlotOrder.push({ areaId, slotIdx }));
+  for (const areaId of areaIds) {
+    const c = cap[areaId];
+    if (c) fillableIdx(areaId).slice(0, c.min).forEach((slotIdx) => minSlotOrder.push({ areaId, slotIdx }));
   }
   minSlotOrder.sort((a, b) => {
     const priority = (areaId: AreaId) =>
@@ -188,17 +198,18 @@ export function maxSpeedAssignments(
     const pA = priority(a.areaId);
     const pB = priority(b.areaId);
     if (pB !== pA) return pB - pA;
-    if (a.areaId !== b.areaId) return AREA_IDS.indexOf(a.areaId) - AREA_IDS.indexOf(b.areaId);
+    if (a.areaId !== b.areaId) return areaIds.indexOf(a.areaId) - areaIds.indexOf(b.areaId);
     return a.slotIdx - b.slotIdx;
   });
   const overflowOrder: { areaId: AreaId; slotIdx: number }[] = [];
-  for (const areaId of AREA_IDS) {
-    fillableIdx(areaId).slice(cap[areaId].min).forEach((slotIdx) => overflowOrder.push({ areaId, slotIdx }));
+  for (const areaId of areaIds) {
+    const c = cap[areaId];
+    if (c) fillableIdx(areaId).slice(c.min).forEach((slotIdx) => overflowOrder.push({ areaId, slotIdx }));
   }
   const slotOrder = [...minSlotOrder, ...overflowOrder];
   for (const { areaId, slotIdx } of slotOrder) {
-    const slot = out[areaId][slotIdx];
-    if (slot.personId != null) continue;
+    const slot = out[areaId]?.[slotIdx];
+    if (!slot || slot.personId != null) continue;
     const candidates = [...available]
       .filter((p) => !assigned.has(p.id) && eligibleForArea(p, areaId))
       .sort((a, b) => scoreForArea(b, areaId) - scoreForArea(a, areaId));
@@ -224,7 +235,8 @@ export function lightStretchAssignments(
   juicedAreas: JuicedAreas = {},
   leadAssignedPersonIds: Set<string> = new Set(),
   deJuicedAreas: DeJuicedAreas = {},
-  capacity?: EffectiveCapacity | null
+  capacity?: EffectiveCapacity | null,
+  areaIds: string[] = [...AREA_IDS]
 ): SlotsByArea {
   const cap = capacity ?? AREA_CAPACITY;
   const available = shuffle(
@@ -235,14 +247,15 @@ export function lightStretchAssignments(
         (!p.ot || p.otHereToday)
     )
   );
-  const { out, assignedFromLocked } = copySlotsPreservingLocked(slotsByArea);
+  const { out, assignedFromLocked } = copySlotsPreservingLocked(slotsByArea, areaIds);
   const assigned = new Set(assignedFromLocked);
-  fillAnchorSlots(out, available, assigned);
+  fillAnchorSlots(out, available, assigned, areaIds);
   const fillableIdx = (areaId: AreaId) =>
-    out[areaId].map((_, i) => i).filter((i) => !out[areaId][i].disabled && !out[areaId][i].locked);
+    (out[areaId] ?? []).map((_, i) => i).filter((i) => !out[areaId][i].disabled && !out[areaId][i].locked);
   const minSlotOrder: { areaId: AreaId; slotIdx: number }[] = [];
-  for (const areaId of AREA_IDS) {
-    fillableIdx(areaId).slice(0, cap[areaId].min).forEach((slotIdx) => minSlotOrder.push({ areaId, slotIdx }));
+  for (const areaId of areaIds) {
+    const c = cap[areaId];
+    if (c) fillableIdx(areaId).slice(0, c.min).forEach((slotIdx) => minSlotOrder.push({ areaId, slotIdx }));
   }
   minSlotOrder.sort((a, b) => {
     const priority = (areaId: AreaId) =>
@@ -250,18 +263,19 @@ export function lightStretchAssignments(
     const pA = priority(a.areaId);
     const pB = priority(b.areaId);
     if (pB !== pA) return pB - pA;
-    if (a.areaId !== b.areaId) return AREA_IDS.indexOf(a.areaId) - AREA_IDS.indexOf(b.areaId);
+    if (a.areaId !== b.areaId) return areaIds.indexOf(a.areaId) - areaIds.indexOf(b.areaId);
     return a.slotIdx - b.slotIdx;
   });
   const overflowOrder: { areaId: AreaId; slotIdx: number }[] = [];
-  for (const areaId of AREA_IDS) {
-    fillableIdx(areaId).slice(cap[areaId].min).forEach((slotIdx) => overflowOrder.push({ areaId, slotIdx }));
+  for (const areaId of areaIds) {
+    const c = cap[areaId];
+    if (c) fillableIdx(areaId).slice(c.min).forEach((slotIdx) => overflowOrder.push({ areaId, slotIdx }));
   }
   const slotOrder = [...minSlotOrder, ...overflowOrder];
   const LIGHT_STRETCH_CHANCE = 0.35;
   for (const { areaId, slotIdx } of slotOrder) {
-    const slot = out[areaId][slotIdx];
-    if (slot.personId != null) continue;
+    const slot = out[areaId]?.[slotIdx];
+    if (!slot || slot.personId != null) continue;
     const eligible = [...available].filter((p) => !assigned.has(p.id) && eligibleForArea(p, areaId));
     if (eligible.length === 0) continue;
     const useStretch = Math.random() < LIGHT_STRETCH_CHANCE;
@@ -285,7 +299,8 @@ export function lightStretchAssignments(
 export function stretchAssignments(
   roster: RosterPerson[],
   slotsByArea: SlotsByArea,
-  leadAssignedPersonIds: Set<string> = new Set()
+  leadAssignedPersonIds: Set<string> = new Set(),
+  areaIds: string[] = [...AREA_IDS]
 ): SlotsByArea {
   const available = shuffle(
     roster.filter(
@@ -295,18 +310,19 @@ export function stretchAssignments(
         (!p.ot || p.otHereToday)
     )
   );
-  const { out, assignedFromLocked } = copySlotsPreservingLocked(slotsByArea);
+  const { out, assignedFromLocked } = copySlotsPreservingLocked(slotsByArea, areaIds);
   const assigned = new Set(assignedFromLocked);
-  fillAnchorSlots(out, available, assigned);
+  fillAnchorSlots(out, available, assigned, areaIds);
   const slotOrder: { areaId: AreaId; slotIdx: number }[] = [];
-  for (const areaId of AREA_IDS) {
-    for (let slotIdx = 0; slotIdx < out[areaId].length; slotIdx++) {
-      if (!out[areaId][slotIdx].disabled && !out[areaId][slotIdx].locked) slotOrder.push({ areaId, slotIdx });
+  for (const areaId of areaIds) {
+    const list = out[areaId] ?? [];
+    for (let slotIdx = 0; slotIdx < list.length; slotIdx++) {
+      if (!list[slotIdx].disabled && !list[slotIdx].locked) slotOrder.push({ areaId, slotIdx });
     }
   }
   shuffle(slotOrder);
   for (const { areaId, slotIdx } of slotOrder) {
-    const slot = out[areaId][slotIdx];
+    const slot = out[areaId]?.[slotIdx];
     if (slot.personId != null) continue;
     const candidates = [...available]
       .filter((p) => !assigned.has(p.id) && eligibleForArea(p, areaId))

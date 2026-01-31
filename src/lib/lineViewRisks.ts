@@ -15,7 +15,7 @@ export interface AreaRiskContext {
 export function getAreaRisks(ctx: AreaRiskContext): string[] {
   const lines: string[] = [];
   if (ctx.filled < ctx.min) {
-    lines.push(`Understaffed (${ctx.filled}/${ctx.min}) — can't cover breaks.`);
+    lines.push(`Understaffed (${ctx.filled}/${ctx.min}).`);
   }
   if (ctx.needsTrainedOrExpert) {
     lines.push('No trained or expert — station cannot run.');
