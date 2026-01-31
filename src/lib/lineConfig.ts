@@ -73,6 +73,24 @@ export function getDefaultSlotLabels(config: LineConfig, areaId: string): string
   return area?.defaultSlotLabels;
 }
 
+/** Linked slot groups for an area: slots that share the same label must not share the same break rotation.
+ * Returns array of groups, each group is an array of slot indices (e.g. [[2,3],[4,5]] for 100s/200s and 200s/300s).
+ */
+export function getLinkedSlotGroupsForArea(
+  config: LineConfig,
+  areaId: string,
+  slotCount: number,
+  slotLabelsByArea?: SlotLabelsByArea | null
+): number[][] {
+  const byLabel: Record<string, number[]> = {};
+  for (let i = 0; i < slotCount; i++) {
+    const label = getSlotLabelForLine(config, areaId, i, slotLabelsByArea);
+    if (!byLabel[label]) byLabel[label] = [];
+    byLabel[label].push(i);
+  }
+  return Object.values(byLabel).filter((g) => g.length > 1);
+}
+
 /** Whether the area requires at least one trained or expert to run. Default false (unchecked). */
 export function areaRequiresTrainedOrExpertFromConfig(config: LineConfig, areaId: string): boolean {
   const area = config.areas.find((a) => a.id === areaId);

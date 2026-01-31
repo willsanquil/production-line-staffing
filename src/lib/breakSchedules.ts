@@ -112,6 +112,87 @@ function runAssignmentForPeople(
   return assignments;
 }
 
+/** Assign one person to a rotation that isn't in usedInGroup; prefer rotation with smallest count. */
+function assignLinkedPersonToBucket(
+  personId: string,
+  skillScore: number,
+  preference: BreakPreference | undefined,
+  buckets: Record<number, Bucket>,
+  rotationCount: number,
+  usedInGroup: Set<number>
+): number {
+  const preferred = preferredRotations(preference, rotationCount);
+  const rotations = Array.from({ length: rotationCount }, (_, i) => i + 1);
+  const allowed = rotations.filter((r) => !usedInGroup.has(r));
+  const isLowSkill = skillScore <= 1;
+  const sorted = [...allowed].sort((a, b) => {
+    const countA = buckets[a].personIds.length;
+    const countB = buckets[b].personIds.length;
+    if (countA !== countB) return countA - countB;
+    const prefA = preferred.includes(a) ? 0 : 1;
+    const prefB = preferred.includes(b) ? 0 : 1;
+    if (prefA !== prefB) return prefA - prefB;
+    const sumA = buckets[a].skillSum;
+    const sumB = buckets[b].skillSum;
+    if (isLowSkill) return sumB - sumA;
+    return sumA - sumB;
+  });
+  const bestRot = sorted[0] ?? 1;
+  buckets[bestRot].skillSum += skillScore;
+  buckets[bestRot].personIds.push(personId);
+  return bestRot;
+}
+
+/**
+ * Per-area assignment when some slots are linked (same label): people in a linked group get distinct rotations.
+ */
+function runAssignmentWithLinkedSlots(
+  peopleWithSlot: { personId: string; skillScore: number; preference: BreakPreference; slotIndex: number }[],
+  rotationCount: number,
+  linkedGroups: number[][]
+): Record<string, { breakRotation: BreakRotation; lunchRotation: LunchRotation }> {
+  const assignments: Record<string, { breakRotation: BreakRotation; lunchRotation: LunchRotation }> = {};
+  const breakBuckets: Record<number, Bucket> = {};
+  for (let r = 1; r <= rotationCount; r++) {
+    breakBuckets[r] = { skillSum: 0, personIds: [] };
+  }
+  const slotToGroup = new Map<number, number[]>();
+  for (const group of linkedGroups) {
+    for (const idx of group) slotToGroup.set(idx, group);
+  }
+  const prefOrder = (p: BreakPreference) =>
+    p === 'prefer_early' ? 0 : p === 'prefer_middle' ? 1 : p === 'prefer_late' ? 2 : 3;
+  const assignedPersonIds = new Set<string>();
+
+  for (const group of linkedGroups) {
+    const groupPeople = peopleWithSlot
+      .filter((p) => group.includes(p.slotIndex))
+      .sort((a, b) => prefOrder(a.preference) - prefOrder(b.preference));
+    const usedInGroup = new Set<number>();
+    for (const { personId, skillScore, preference } of groupPeople) {
+      const rot = assignLinkedPersonToBucket(
+        personId,
+        skillScore,
+        preference,
+        breakBuckets,
+        rotationCount,
+        usedInGroup
+      );
+      usedInGroup.add(rot);
+      assignedPersonIds.add(personId);
+      assignments[personId] = { breakRotation: rot as BreakRotation, lunchRotation: rot as LunchRotation };
+    }
+  }
+
+  const remaining = peopleWithSlot.filter((p) => !assignedPersonIds.has(p.personId));
+  for (const { personId, skillScore, preference } of remaining) {
+    const rot = assignToBestBucket(personId, skillScore, preference, breakBuckets, rotationCount);
+    assignments[personId] = { breakRotation: rot as BreakRotation, lunchRotation: rot as LunchRotation };
+  }
+
+  return assignments;
+}
+
 export interface GenerateBreakSchedulesOptions {
   /** Area IDs to process (default: AREA_IDS). */
   areaIds?: string[];
@@ -121,6 +202,8 @@ export interface GenerateBreakSchedulesOptions {
   scope?: 'line' | 'station';
   /** Lead slots (personId per area) to include in line-wide. */
   leadSlots?: Record<string, string | null>;
+  /** Per area: groups of slot indices that share a break slot (e.g. same role); people in a group get distinct rotations. */
+  linkedSlotsByArea?: Record<string, number[][]>;
 }
 
 /**
@@ -133,7 +216,7 @@ export function generateBreakSchedules(
   areaIds: string[] = [...AREA_IDS],
   options: GenerateBreakSchedulesOptions = {}
 ): BreakSchedulesByArea {
-  const { rotationCount = 3, scope = 'station', leadSlots = {} } = options;
+  const { rotationCount = 3, scope = 'station', leadSlots = {}, linkedSlotsByArea = {} } = options;
   const n = Math.min(6, Math.max(1, rotationCount));
   const result: BreakSchedulesByArea = {};
 
@@ -178,17 +261,25 @@ export function generateBreakSchedules(
 
   for (const areaId of areaIds) {
     const slots = slotsByArea[areaId] ?? [];
-    const personIds = slots.map((s) => s.personId).filter(Boolean) as string[];
-    if (personIds.length === 0) continue;
-
-    const people = personIds.map((id) => {
-      const p = roster.find((r) => r.id === id);
+    const peopleWithSlot: { personId: string; skillScore: number; preference: BreakPreference; slotIndex: number }[] = [];
+    for (let i = 0; i < slots.length; i++) {
+      const personId = slots[i].personId;
+      if (!personId) continue;
+      const p = roster.find((r) => r.id === personId);
       const skillScore = p ? SKILL_SCORE[p.skills[areaId as keyof typeof p.skills] ?? 'no_experience'] : 0;
       const preference = p?.breakPreference ?? 'no_preference';
-      return { personId: id, skillScore, preference };
-    });
+      peopleWithSlot.push({ personId, skillScore, preference, slotIndex: i });
+    }
+    if (peopleWithSlot.length === 0) continue;
 
-    result[areaId] = runAssignmentForPeople(people, n);
+    const linkedGroups = linkedSlotsByArea[areaId] ?? [];
+    const people = peopleWithSlot.map(({ personId, skillScore, preference }) => ({ personId, skillScore, preference }));
+
+    if (linkedGroups.length > 0) {
+      result[areaId] = runAssignmentWithLinkedSlots(peopleWithSlot, n, linkedGroups);
+    } else {
+      result[areaId] = runAssignmentForPeople(people, n);
+    }
   }
 
   return result;

@@ -62,6 +62,7 @@ import {
   areaIdFromName,
   getLeadSlotKeys,
   getLeadSlotLabel,
+  getLinkedSlotGroupsForArea,
 } from './lib/lineConfig';
 import { createEmptyPerson, createEmptyOTPerson, createEmptySlot, getEmptyLineState, normalizeSlotsToCapacity, normalizeSlotsToLineCapacity } from './data/initialState';
 import { RosterGrid } from './components/RosterGrid';
@@ -686,33 +687,45 @@ export default function App() {
     const nextSlots = randomizeAssignments(roster, slots, leadAssignedPersonIds, areaIds, areaRequiresTrainedOrExpert);
     setSlots(nextSlots);
     if (currentConfig && getBreaksEnabled(currentConfig)) {
+      const linkedSlotsByArea: Record<string, number[][]> = {};
+      for (const areaId of areaIds) {
+        const areaSlots = nextSlots[areaId] ?? [];
+        linkedSlotsByArea[areaId] = getLinkedSlotGroupsForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
+      }
       setBreakSchedules(
         generateBreakSchedules(roster, nextSlots, areaIds, {
           rotationCount: getBreakRotations(currentConfig),
           scope: getBreaksScope(currentConfig),
           leadSlots,
+          linkedSlotsByArea,
         })
       );
     } else {
       setBreakSchedules({});
     }
-  }, [roster, slots, leadAssignedPersonIds, areaIds, currentConfig, leadSlots, areaRequiresTrainedOrExpert]);
+  }, [roster, slots, leadAssignedPersonIds, areaIds, currentConfig, leadSlots, areaRequiresTrainedOrExpert, slotLabelsByArea]);
 
   const handleSpreadTalent = useCallback(() => {
     const nextSlots = spreadTalent(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
     setSlots(nextSlots);
     if (currentConfig && getBreaksEnabled(currentConfig)) {
+      const linkedSlotsByArea: Record<string, number[][]> = {};
+      for (const areaId of areaIds) {
+        const areaSlots = nextSlots[areaId] ?? [];
+        linkedSlotsByArea[areaId] = getLinkedSlotGroupsForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
+      }
       setBreakSchedules(
         generateBreakSchedules(roster, nextSlots, areaIds, {
           rotationCount: getBreakRotations(currentConfig),
           scope: getBreaksScope(currentConfig),
           leadSlots,
+          linkedSlotsByArea,
         })
       );
     } else {
       setBreakSchedules({});
     }
-  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, currentConfig, leadSlots]);
+  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, currentConfig, leadSlots, slotLabelsByArea]);
 
   const handleRemoveDay = useCallback((id: string) => {
     removeSavedDay(id);
