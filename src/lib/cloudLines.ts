@@ -1,5 +1,18 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient, FunctionsHttpError } from '@supabase/supabase-js';
 import type { RootState } from '../types';
+
+/** Get a user-friendly error message from an Edge Function non-2xx response. */
+async function getFunctionErrorMessage(error: unknown): Promise<string> {
+  if (error instanceof FunctionsHttpError && error.context && typeof error.context.json === 'function') {
+    try {
+      const body = (await error.context.json()) as { error?: string };
+      if (body?.error && typeof body.error === 'string') return body.error;
+    } catch {
+      // ignore parse errors
+    }
+  }
+  return error instanceof Error ? error.message : String(error);
+}
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -48,7 +61,10 @@ export async function createCloudLine(
   }>('create-line', {
     body: { name: name.trim(), password },
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    const message = await getFunctionErrorMessage(error);
+    throw new Error(message);
+  }
   if (data?.error) throw new Error(data.error);
   if (!data?.lineId || !data?.rootState) throw new Error('Invalid response from create-line');
   return {
@@ -70,7 +86,10 @@ export async function getLineState(
   }>('get-line-state', {
     body: { lineId, password },
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    const message = await getFunctionErrorMessage(error);
+    throw new Error(message);
+  }
   if (data?.error) throw new Error(data.error);
   if (!data?.rootState) throw new Error('Invalid response from get-line-state');
   return data.rootState as RootState;
@@ -87,6 +106,9 @@ export async function setLineState(
     'set-line-state',
     { body: { lineId, password, rootState } }
   );
-  if (error) throw new Error(error.message);
+  if (error) {
+    const message = await getFunctionErrorMessage(error);
+    throw new Error(message);
+  }
   if (data?.error) throw new Error(data.error);
 }

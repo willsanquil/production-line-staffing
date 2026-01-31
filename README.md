@@ -90,3 +90,9 @@ npx supabase functions deploy set-line-state
 
 - On open, users choose **Local / Demo** (browser-only) or **Group**.
 - **Group**: list public lines → **Create a new line** (name + password) or **Join an existing line** (select line + password). Data is saved to the cloud; anyone with the password can join and edit. **Leave line** returns to local and shows the entry screen again on next open (or refresh after leaving).
+
+### 5. Troubleshooting "Edge Function returned a non-2xx status code"
+
+- **Deploy the functions** if you haven’t: `npx supabase login`, then `npx supabase link --project-ref YOUR_REF`, then deploy `create-line`, `get-line-state`, `set-line-state`.
+- **Check Edge Function logs**: Supabase Dashboard → **Edge Functions** → select `create-line` → **Logs**. The real error (e.g. missing env, database error) appears there.
+- After the next deploy, the app will show the function’s error message in the red banner when create/join fails.
