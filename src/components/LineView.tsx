@@ -55,8 +55,10 @@ interface LineViewProps {
   lineHealthScore: number | null;
   /** For custom lines: section order (single area id or [id, id] pair). Omit for IC. */
   lineSections?: (string | readonly [string, string])[];
-  /** For custom lines: area IDs that have a lead slot. Omit for IC. */
-  leadAreaIds?: string[];
+  /** Lead slot keys (area IDs or "0","1",... for named positions). */
+  leadSlotKeys?: string[];
+  /** Display label for each lead slot key. */
+  getLeadSlotLabel?: (key: string) => string;
   getSlotLabel?: (areaId: string, slotIndex: number) => string;
   areaRequiresTrainedOrExpert?: (areaId: string) => boolean;
   /** For presentation mode: break schedules per area (or __line__ for line-wide). */
@@ -80,7 +82,8 @@ function LineViewInner({
   staffingPct,
   lineHealthScore,
   lineSections: lineSectionsProp,
-  leadAreaIds: leadAreaIdsProp,
+  leadSlotKeys: leadSlotKeysProp,
+  getLeadSlotLabel: getLeadSlotLabelProp,
   getSlotLabel: getSlotLabelProp,
   areaRequiresTrainedOrExpert: areaRequiresTrainedOrExpertProp,
   breakSchedules,
@@ -88,7 +91,8 @@ function LineViewInner({
   breaksScope = 'station',
 }: LineViewProps) {
   const sections = lineSectionsProp ?? LINE_SECTIONS;
-  const leadAreaIds = leadAreaIdsProp ?? [...LEAD_SLOT_AREAS];
+  const leadSlotKeys = leadSlotKeysProp ?? [...LEAD_SLOT_AREAS];
+  const getLeadSlotLabel = getLeadSlotLabelProp ?? ((key: string) => areaLabels[key] ?? key);
   const getLabel = getSlotLabelProp ?? ((areaId: string, idx: number) => getSlotLabelDefault(areaId, idx, slotLabelsByArea));
   const requiresTrainedOrExpert = areaRequiresTrainedOrExpertProp ?? defaultRequiresTrainedOrExpert;
   const getName = (personId: string | null) =>
@@ -99,7 +103,8 @@ function LineViewInner({
     return (p?.skills[areaId] ?? 'no_experience') as SkillLevel;
   };
   const knowledgePosition = lineHealthScore != null ? (lineHealthScore / 3) * 100 : null;
-  const assignedLeadAreas = leadAreaIds.filter((areaId) => leadSlots[areaId] != null && leadSlots[areaId] !== '');
+  const assignedLeadKeys = leadSlotKeys.filter((k: string) => leadSlots[k] != null && leadSlots[k] !== '');
+  const firstAreaId = typeof sections[0] === 'string' ? sections[0] : sections[0]?.[0];
 
   const sectionStyle: CSSProperties = {
     background: '#fff',
@@ -167,13 +172,31 @@ function LineViewInner({
     const metricText = `${filled}/${min}`;
     const metricExtra = risks.length > 0 ? ` · ${risks.join(' · ')}` : '';
     const hasRoleLabels = areaSlots.some((_, idx) => !isGenericSlotLabel(getLabel(areaId, idx)));
+    const personIds = areaSlots.map((s) => s.personId).filter(Boolean) as string[];
+    const areaKnowledgePosition =
+      personIds.length > 0
+        ? (personIds.reduce((sum, id) => {
+            const p = roster.find((r) => r.id === id);
+            const level = p?.skills[areaId] ?? 'no_experience';
+            const score = level === 'expert' ? 3 : level === 'trained' ? 2 : level === 'training' ? 1 : 0;
+            return sum + score;
+          }, 0) /
+            personIds.length /
+            3) *
+          100
+        : null;
 
     return (
       <div key={areaId} style={{ marginBottom: 12 }}>
         {!hideTitle && (
-          <h3 style={{ margin: '0 0 8px 0', fontWeight: 700, fontSize: '1.15rem' }}>
-            {subLabel} — {metricText}{metricExtra}
-          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+            <h3 style={{ margin: 0, fontWeight: 700, fontSize: '1.15rem' }}>
+              {subLabel} — {metricText}{metricExtra}
+            </h3>
+            <div style={{ flex: '1 1 120px', minWidth: 120, maxWidth: 200 }}>
+              <KnowledgeBar position={areaKnowledgePosition} />
+            </div>
+          </div>
         )}
         <div style={{ overflowX: 'auto' }}>
           <table style={presentationTableStyle}>
@@ -265,7 +288,7 @@ function LineViewInner({
         </div>
       </div>
 
-      {assignedLeadAreas.length > 0 && (
+      {assignedLeadKeys.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
           <section style={sectionStyle}>
             <h2 style={sectionTitleStyle}>Leads</h2>
@@ -273,17 +296,18 @@ function LineViewInner({
               <table style={presentationTableStyle}>
                 <thead>
                   <tr>
-                    <th style={presentationThStyle}>Area</th>
+                    <th style={presentationThStyle}>Position</th>
                     <th style={presentationThStyle}>Name</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {assignedLeadAreas.map((areaId) => {
-                    const personId = leadSlots[areaId]!;
-                    const skill = getSkillInArea(areaId, personId);
+                  {assignedLeadKeys.map((key: string) => {
+                    const personId = leadSlots[key]!;
+                    const skillAreaId = /^\d+$/.test(key) ? (firstAreaId ?? '') : key;
+                    const skill = getSkillInArea(skillAreaId as AreaId, personId);
                     return (
-                      <tr key={areaId}>
-                        <td style={presentationTdStyle}>{areaLabels[areaId]}</td>
+                      <tr key={key}>
+                        <td style={presentationTdStyle}>{getLeadSlotLabel(key)}</td>
                         <td style={presentationTdStyle}>
                           <span className={`skill-name-${skill}`} style={{ fontSize: nameFontSize, fontWeight: 600 }}>{getName(personId)}</span>
                         </td>
@@ -311,7 +335,7 @@ function LineViewInner({
         </div>
       )}
 
-      {breaksScope === 'line' && breakSchedules?.[BREAK_LINE_WIDE_KEY] && Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).length > 0 && rotationCount >= 1 && assignedLeadAreas.length === 0 && (
+      {breaksScope === 'line' && breakSchedules?.[BREAK_LINE_WIDE_KEY] && Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).length > 0 && rotationCount >= 1 && assignedLeadKeys.length === 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
           <div />
           <BreakTable

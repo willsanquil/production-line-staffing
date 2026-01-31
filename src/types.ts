@@ -206,13 +206,15 @@ export interface AreaConfigInLine {
 /** Break scope: line-wide (one set of rotations for the whole line) or per-station (per area). */
 export type BreakScope = 'line' | 'station';
 
-/** Full definition of a line: name, sections (areas), which have leads, optional combined sections, break options. */
+/** Full definition of a line: name, sections (areas), leads, optional combined sections, break options. */
 export interface LineConfig {
   id: string;
   name: string;
   areas: AreaConfigInLine[];
-  /** Area IDs that have a lead slot (one person per area). */
-  leadAreaIds: string[];
+  /** Legacy: area IDs that have a lead slot. Used when leadSlotNames is absent (e.g. IC). */
+  leadAreaIds?: string[];
+  /** Named lead positions (e.g. "Floor Lead", "Quality"). Keys in leadSlots state are "0", "1", ... */
+  leadSlotNames?: string[];
   /** Pairs of area IDs to show as one combined section (e.g. 14.5 & Flip). */
   combinedSections: [string, string][];
   /** If false, no break/lunch scheduling for this line. Default true. */

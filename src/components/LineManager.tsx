@@ -67,7 +67,8 @@ export function LineManager({ rootState, canShare, onShareClick, onOpenLine, onB
               <div style={{ fontWeight: 600, fontSize: '1.1rem' }}>{line.name}</div>
               <div style={{ fontSize: '0.85rem', color: '#666', marginTop: 2 }}>
                 {line.areas.length} section{line.areas.length !== 1 ? 's' : ''}
-                {line.leadAreaIds.length > 0 && ` · ${line.leadAreaIds.length} lead role${line.leadAreaIds.length !== 1 ? 's' : ''}`}
+                {(line.leadSlotNames?.length ?? line.leadAreaIds?.length ?? 0) > 0 &&
+                  ` · ${line.leadSlotNames?.length ?? line.leadAreaIds?.length ?? 0} lead role${(line.leadSlotNames?.length ?? line.leadAreaIds?.length ?? 0) !== 1 ? 's' : ''}`}
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

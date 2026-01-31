@@ -73,10 +73,10 @@ export function getDefaultSlotLabels(config: LineConfig, areaId: string): string
   return area?.defaultSlotLabels;
 }
 
-/** Whether the area requires at least one trained or expert to run. */
+/** Whether the area requires at least one trained or expert to run. Default false (unchecked). */
 export function areaRequiresTrainedOrExpertFromConfig(config: LineConfig, areaId: string): boolean {
   const area = config.areas.find((a) => a.id === areaId);
-  return area?.requiresTrainedOrExpert !== false;
+  return area?.requiresTrainedOrExpert === true;
 }
 
 export function isCombinedSection(section: string | readonly [string, string]): section is readonly [string, string] {
@@ -124,6 +124,30 @@ export function getBreakRotations(config: LineConfig): number {
 
 /** Key used in breakSchedules for line-wide assignments. */
 export const BREAK_LINE_WIDE_KEY = '__line__';
+
+/** Lead slot keys for this line: either "0","1",... when using leadSlotNames, or area IDs from leadAreaIds. */
+export function getLeadSlotKeys(config: LineConfig): string[] {
+  const names = config.leadSlotNames;
+  if (names && names.length > 0) {
+    return names.map((_, i) => String(i));
+  }
+  return config.leadAreaIds ?? [];
+}
+
+/** Display label for a lead slot key. */
+export function getLeadSlotLabel(
+  config: LineConfig,
+  key: string,
+  areaLabels?: Record<string, string> | null
+): string {
+  const names = config.leadSlotNames;
+  if (names && names.length > 0) {
+    const i = parseInt(key, 10);
+    const name = names[i];
+    return name?.trim() || `Lead ${i + 1}`;
+  }
+  return areaLabels?.[key] ?? key;
+}
 
 /** Effective capacity (min/max) for a line, with optional overrides. */
 export function getEffectiveCapacityForLine(

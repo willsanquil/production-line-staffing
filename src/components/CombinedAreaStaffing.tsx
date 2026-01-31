@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import type { AreaId, BreakRotation, LunchRotation, RosterPerson, Slot, TaskItem } from '../types';
+import type { AreaId, RosterPerson, Slot, TaskItem } from '../types';
 import type { SkillLevel } from '../types';
 import { createEmptySlot } from '../data/initialState';
 import { getSlotLabel } from '../lib/areaConfig';
@@ -23,8 +23,6 @@ function averageSeniority(areaId: AreaId, slots: Slot[], roster: RosterPerson[])
   }
   return sum / personIds.length;
 }
-
-type BreakScheduleRecord = Record<string, { breakRotation: BreakRotation; lunchRotation: LunchRotation }>;
 
 interface CombinedAreaStaffingProps {
   /** Combined section title (e.g. "14.5 & Flip"). */
@@ -59,10 +57,6 @@ interface CombinedAreaStaffingProps {
   onSlotsChange: (areaId: AreaId, slots: Slot[]) => void;
   onSectionTasksChange: (areaId: AreaId, tasks: TaskItem[]) => void;
   onAssign: (areaId: AreaId, slotId: string, personId: string | null) => void;
-  breakScheduleA?: BreakScheduleRecord;
-  breakScheduleB?: BreakScheduleRecord;
-  showBreakSchedule: boolean;
-  onToggleBreakSchedule: () => void;
   requiresTrainedOrExpertA?: boolean;
   requiresTrainedOrExpertB?: boolean;
   onRequiresTrainedOrExpertChangeA?: (value: boolean) => void;
@@ -99,18 +93,11 @@ function CombinedAreaStaffingInner({
   onSlotsChange,
   onSectionTasksChange,
   onAssign,
-  breakScheduleA,
-  breakScheduleB,
-  showBreakSchedule,
-  onToggleBreakSchedule,
-  requiresTrainedOrExpertA = true,
-  requiresTrainedOrExpertB = true,
+  requiresTrainedOrExpertA = false,
+  requiresTrainedOrExpertB = false,
   onRequiresTrainedOrExpertChangeA,
   onRequiresTrainedOrExpertChangeB,
 }: CombinedAreaStaffingProps) {
-  const hasBreakData =
-    (breakScheduleA && Object.keys(breakScheduleA).length > 0) ||
-    (breakScheduleB && Object.keys(breakScheduleB).length > 0);
   const juiced = juicedA || juicedB;
   const deJuiced = deJuicedA || deJuicedB;
   const setJuiced = (v: boolean) => {
@@ -336,19 +323,6 @@ function CombinedAreaStaffingInner({
     );
   }
 
-  const mergedBreakSchedule = (() => {
-    const hasA = breakScheduleA && Object.keys(breakScheduleA).length > 0;
-    const hasB = breakScheduleB && Object.keys(breakScheduleB).length > 0;
-    if (!showBreakSchedule || (!hasA && !hasB)) return null;
-    const slotsWithPeople = ([1, 2, 3] as const).filter((rot) => {
-      const inA = breakScheduleA && Object.values(breakScheduleA).some((v) => v.breakRotation === rot || v.lunchRotation === rot);
-      const inB = breakScheduleB && Object.values(breakScheduleB).some((v) => v.breakRotation === rot || v.lunchRotation === rot);
-      return inA || inB;
-    });
-    if (slotsWithPeople.length === 0) return null;
-    return { slotsWithPeople };
-  })();
-
   return (
     <section className="section-card area-card">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
@@ -361,73 +335,22 @@ function CombinedAreaStaffingInner({
               onChange={(e) => setJuiced(e.target.checked)}
               aria-label={`Juice ${combinedLabel}`}
             />
-            Juice it
+            Prioritize
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.9rem', cursor: 'pointer' }}>
             <input
               type="checkbox"
               checked={deJuiced}
               onChange={(e) => setDeJuiced(e.target.checked)}
-              aria-label={`De-juice ${combinedLabel}`}
+              aria-label={`De-prioritize ${combinedLabel}`}
             />
-            De-juice it
+            De-Prioritize
           </label>
-          {hasBreakData && (
-            <button
-              type="button"
-              onClick={onToggleBreakSchedule}
-              title={showBreakSchedule ? 'Hide break schedule' : 'Show break schedule'}
-              style={{ fontSize: '0.85rem', padding: '2px 8px' }}
-            >
-              {showBreakSchedule ? 'Hide breaks' : 'Show breaks'}
-            </button>
-          )}
         </div>
       </div>
 
       {renderSubArea(areaIdA, areaLabelA, slotsA, minA, maxA, slotLabelsA, sectionTasksA, requiresTrainedOrExpertA, onRequiresTrainedOrExpertChangeA)}
       {renderSubArea(areaIdB, areaLabelB, slotsB, minB, maxB, slotLabelsB, sectionTasksB, requiresTrainedOrExpertB, onRequiresTrainedOrExpertChangeB)}
-
-      {mergedBreakSchedule && (
-        <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #eee' }}>
-          <strong>Break schedule</strong>
-          <div style={{ fontSize: '0.85rem', marginTop: 4 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${mergedBreakSchedule.slotsWithPeople.length}, 1fr)`, gap: 8, marginTop: 6 }}>
-              {mergedBreakSchedule.slotsWithPeople.map((rot) => {
-                const breakPersonIdsA = breakScheduleA
-                  ? Object.entries(breakScheduleA).filter(([, v]) => v.breakRotation === rot).map(([id]) => id)
-                  : [];
-                const breakPersonIdsB = breakScheduleB
-                  ? Object.entries(breakScheduleB).filter(([, v]) => v.breakRotation === rot).map(([id]) => id)
-                  : [];
-                const lunchPersonIdsA = breakScheduleA
-                  ? Object.entries(breakScheduleA).filter(([, v]) => v.lunchRotation === rot).map(([id]) => id)
-                  : [];
-                const lunchPersonIdsB = breakScheduleB
-                  ? Object.entries(breakScheduleB).filter(([, v]) => v.lunchRotation === rot).map(([id]) => id)
-                  : [];
-                const breakNamesA = breakPersonIdsA.map((id) => roster.find((r) => r.id === id)?.name ?? id).join(', ') || '—';
-                const breakNamesB = breakPersonIdsB.map((id) => roster.find((r) => r.id === id)?.name ?? id).join(', ') || '—';
-                const lunchNamesA = lunchPersonIdsA.map((id) => roster.find((r) => r.id === id)?.name ?? id).join(', ') || '—';
-                const lunchNamesB = lunchPersonIdsB.map((id) => roster.find((r) => r.id === id)?.name ?? id).join(', ') || '—';
-                const breakNames = [breakNamesA, breakNamesB].filter(Boolean).join('; ') || '—';
-                const lunchNames = [lunchNamesA, lunchNamesB].filter(Boolean).join('; ') || '—';
-                return (
-                  <div key={rot} style={{ padding: 6, background: 'rgba(0,0,0,0.04)', borderRadius: 4 }}>
-                    <div style={{ fontWeight: 600, marginBottom: 4 }}>Slot {rot}</div>
-                    <div style={{ marginBottom: 2 }}>
-                      <span style={{ color: '#b7950b' }}>Break (8:30, 2pm, 4pm):</span> {breakNames}
-                    </div>
-                    <div>
-                      <span style={{ color: '#2980b9' }}>Lunch (11:30):</span> {lunchNames}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
     </section>
   );
 }

@@ -2,7 +2,7 @@ import type { AppState, AreaId, AreaCapacityOverrides, LeadSlots, LineConfig, Li
 import type { SkillLevel } from '../types';
 import { AREA_IDS, LEAD_SLOT_AREAS } from '../types';
 import { getEffectiveCapacity } from '../lib/areaConfig';
-import { getEffectiveCapacityForLine } from '../lib/lineConfig';
+import { getEffectiveCapacityForLine, getLeadSlotKeys } from '../lib/lineConfig';
 import { buildSeedRoster } from './seedRoster';
 
 function nanoid(): string {
@@ -162,8 +162,8 @@ export function getEmptyLineState(config: LineConfig): LineState {
     sectionTasks[a.id] = [];
   }
   const leadSlots: LeadSlots = {};
-  for (const areaId of config.leadAreaIds) {
-    leadSlots[areaId] = null;
+  for (const key of getLeadSlotKeys(config)) {
+    leadSlots[key] = null;
   }
   return {
     roster: [],

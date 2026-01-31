@@ -1,33 +1,36 @@
 import { memo, useMemo, useState, useRef, useEffect } from 'react';
-import type { AreaId, RosterPerson } from '../types';
-import { LEAD_SLOT_AREAS } from '../types';
+import type { RosterPerson } from '../types';
 import { sortByFirstName } from '../lib/rosterSort';
 import { SkillPill } from './SkillPill';
 
 interface LeadSlotsSectionProps {
   roster: RosterPerson[];
   leadSlots: Record<string, string | null>;
-  areaLabels: Record<AreaId, string>;
-  /** Area IDs that have a lead slot. Omit for default IC lead areas. */
-  leadAreaIds?: string[];
-  onLeadSlotChange: (areaId: string, personId: string | null) => void;
+  leadSlotKeys: string[];
+  getLeadSlotLabel: (key: string) => string;
+  /** When lead slot is a named position (key "0","1",...), use first area for skill color. */
+  areaIds?: string[];
+  onLeadSlotChange: (key: string, personId: string | null) => void;
 }
 
-/** One dropdown: only leads not assigned to any other lead slot (or current for this slot). Colored by skill in this area. */
+/** One dropdown: only leads not assigned to any other lead slot (or current for this slot). Colored by skill. */
 function LeadSlotDropdown({
-  areaId,
-  areaLabel,
-  leadAreaIds,
+  slotKey,
+  slotLabel,
+  skillAreaId,
+  leadSlotKeys,
   roster,
   leadSlots,
   onLeadSlotChange,
 }: {
-  areaId: string;
-  areaLabel: string;
-  leadAreaIds: string[];
+  slotKey: string;
+  slotLabel: string;
+  /** Area ID used for skill coloring (e.g. first area when slot is named position). */
+  skillAreaId: string;
+  leadSlotKeys: string[];
   roster: RosterPerson[];
   leadSlots: Record<string, string | null>;
-  onLeadSlotChange: (areaId: string, personId: string | null) => void;
+  onLeadSlotChange: (key: string, personId: string | null) => void;
 }) {
   const leadsOnly = useMemo(
     () =>
@@ -40,17 +43,17 @@ function LeadSlotDropdown({
   );
   const assignedToOther = useMemo(() => {
     const set = new Set<string>();
-    for (const other of leadAreaIds) {
-      if (other !== areaId && leadSlots[other]) set.add(leadSlots[other]!);
+    for (const other of leadSlotKeys) {
+      if (other !== slotKey && leadSlots[other]) set.add(leadSlots[other]!);
     }
     return set;
-  }, [areaId, leadSlots, leadAreaIds]);
+  }, [slotKey, leadSlots, leadSlotKeys]);
   const available = useMemo(
-    () => leadsOnly.filter((p) => leadSlots[areaId] === p.id || !assignedToOther.has(p.id)),
-    [leadsOnly, leadSlots, areaId, assignedToOther]
+    () => leadsOnly.filter((p) => leadSlots[slotKey] === p.id || !assignedToOther.has(p.id)),
+    [leadsOnly, leadSlots, slotKey, assignedToOther]
   );
 
-  const currentPerson = leadSlots[areaId] ? roster.find((p) => p.id === leadSlots[areaId]) : null;
+  const currentPerson = leadSlots[slotKey] ? roster.find((p) => p.id === leadSlots[slotKey]) : null;
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -64,14 +67,14 @@ function LeadSlotDropdown({
   }, [open]);
 
   function select(personId: string | null) {
-    onLeadSlotChange(areaId, personId);
+    onLeadSlotChange(slotKey, personId);
     setOpen(false);
   }
 
   return (
     <div className="lead-slot-wrap" ref={containerRef} style={{ display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}>
       <label style={{ fontSize: '0.9rem', fontWeight: 500 }}>
-        Lead {areaLabel}:
+        {slotLabel}:
       </label>
       <div style={{ position: 'relative' }}>
         <button
@@ -94,7 +97,7 @@ function LeadSlotDropdown({
         >
           {currentPerson ? (
             <SkillPill
-              level={currentPerson.skills[areaId] ?? 'no_experience'}
+              level={currentPerson.skills[skillAreaId] ?? 'no_experience'}
               label={currentPerson.name}
               small
             />
@@ -153,17 +156,17 @@ function LeadSlotDropdown({
                     textAlign: 'left',
                     border: 'none',
                     borderRadius: 4,
-                    background: leadSlots[areaId] === p.id ? '#e8f4fd' : 'transparent',
+                    background: leadSlots[slotKey] === p.id ? '#e8f4fd' : 'transparent',
                     cursor: 'pointer',
                     fontSize: '0.9rem',
                   }}
                 >
                   <SkillPill
-                    level={p.skills[areaId] ?? 'no_experience'}
+                    level={p.skills[skillAreaId] ?? 'no_experience'}
                     label={p.name}
                     small
                   />
-                  {leadSlots[areaId] === p.id && <span style={{ marginLeft: 4 }}>✓</span>}
+                  {leadSlots[slotKey] === p.id && <span style={{ marginLeft: 4 }}>✓</span>}
                 </button>
               </li>
             ))}
@@ -177,19 +180,20 @@ function LeadSlotDropdown({
 function LeadSlotsSectionInner({
   roster,
   leadSlots,
-  areaLabels,
-  leadAreaIds: leadAreaIdsProp,
+  leadSlotKeys,
+  getLeadSlotLabel,
+  areaIds = [],
   onLeadSlotChange,
 }: LeadSlotsSectionProps) {
-  const leadAreaIds = leadAreaIdsProp ?? [...LEAD_SLOT_AREAS];
   return (
     <div className="lead-slots-section" style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
-      {leadAreaIds.map((areaId) => (
+      {leadSlotKeys.map((key) => (
         <LeadSlotDropdown
-          key={areaId}
-          areaId={areaId}
-          areaLabel={areaLabels[areaId] ?? areaId}
-          leadAreaIds={leadAreaIds}
+          key={key}
+          slotKey={key}
+          slotLabel={getLeadSlotLabel(key)}
+          skillAreaId={/^\d+$/.test(key) ? (areaIds[0] ?? '') : key}
+          leadSlotKeys={leadSlotKeys}
           roster={roster}
           leadSlots={leadSlots}
           onLeadSlotChange={onLeadSlotChange}

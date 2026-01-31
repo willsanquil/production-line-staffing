@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { AppState, AreaId, BreakPreference, RootState, RosterPerson, SavedDay, SlotsByArea, TaskItem } from './types';
 import type { SkillLevel } from './types';
-import { AREA_IDS, LEAD_SLOT_AREAS, LINE_SECTIONS } from './types';
+import { AREA_IDS, LINE_SECTIONS } from './types';
 
 const SKILL_SCORE: Record<SkillLevel, number> = {
   no_experience: 0,
@@ -16,7 +16,7 @@ function getLineHealthScore(
   leadSlots: Record<string, string | null>,
   roster: { id: string; skills: Record<AreaId, SkillLevel> }[],
   areaIds: string[],
-  leadAreaIds: string[]
+  leadSlotKeys: string[]
 ): number | null {
   let sum = 0;
   let count = 0;
@@ -31,12 +31,13 @@ function getLineHealthScore(
       }
     }
   }
-  for (const areaId of leadAreaIds) {
-    const personId = leadSlots[areaId];
+  for (const key of leadSlotKeys) {
+    const personId = leadSlots[key];
     if (!personId) continue;
     const p = roster.find((r) => r.id === personId);
     if (p) {
-      sum += SKILL_SCORE[p.skills[areaId] ?? 'no_experience'];
+      const areaForSkill = /^\d+$/.test(key) ? areaIds[0] : key;
+      sum += SKILL_SCORE[p.skills[areaForSkill] ?? 'no_experience'];
       count++;
     }
   }
@@ -59,6 +60,8 @@ import {
   getBreakRotations,
   BREAK_LINE_WIDE_KEY,
   areaIdFromName,
+  getLeadSlotKeys,
+  getLeadSlotLabel,
 } from './lib/lineConfig';
 import { createEmptyPerson, createEmptyOTPerson, createEmptySlot, getEmptyLineState, normalizeSlotsToCapacity, normalizeSlotsToLineCapacity } from './data/initialState';
 import { RosterGrid } from './components/RosterGrid';
@@ -154,7 +157,6 @@ export default function App() {
   const [addStationMin, setAddStationMin] = useState(2);
   const [addStationMax, setAddStationMax] = useState(5);
   const [addStationHasLead, setAddStationHasLead] = useState(false);
-  const [breakScheduleVisibleByArea, setBreakScheduleVisibleByArea] = useState<Partial<Record<AreaId, boolean>>>({});
   const [areaCapacityOverrides, setAreaCapacityOverrides] = useState(firstLineState.areaCapacityOverrides ?? {});
   const [areaNameOverrides, setAreaNameOverrides] = useState(firstLineState.areaNameOverrides ?? {});
   const [slotLabelsByArea, setSlotLabelsByArea] = useState(firstLineState.slotLabelsByArea ?? {});
@@ -171,8 +173,8 @@ export default function App() {
     () => (currentConfig ? (currentConfig.id === 'ic' ? LINE_SECTIONS : getLineSections(currentConfig)) : []),
     [currentConfig]
   );
-  const leadAreaIds = useMemo(
-    () => (currentConfig ? (currentConfig.id === 'ic' ? [...LEAD_SLOT_AREAS] : currentConfig.leadAreaIds) : []),
+  const leadSlotKeys = useMemo(
+    () => (currentConfig ? getLeadSlotKeys(currentConfig) : []),
     [currentConfig]
   );
   const effectiveCapacity = useMemo(
@@ -307,11 +309,11 @@ export default function App() {
   const allAssignedPersonIds = useMemo(() => getAssignedPersonIds(slots, areaIds), [slots, areaIds]);
   const leadAssignedPersonIds = useMemo(() => {
     const set = new Set<string>();
-    for (const areaId of leadAreaIds) {
-      if (leadSlots[areaId]) set.add(leadSlots[areaId]!);
+    for (const key of leadSlotKeys) {
+      if (leadSlots[key]) set.add(leadSlots[key]!);
     }
     return set;
-  }, [leadSlots, leadAreaIds]);
+  }, [leadSlots, leadSlotKeys]);
   const grandTotal = useMemo(
     () => allAssignedPersonIds.size + leadAssignedPersonIds.size,
     [allAssignedPersonIds, leadAssignedPersonIds]
@@ -322,8 +324,8 @@ export default function App() {
   );
 
   const lineHealthScore = useMemo(
-    () => getLineHealthScore(slots, leadSlots, roster, areaIds, leadAreaIds),
-    [slots, leadSlots, roster, areaIds, leadAreaIds]
+    () => getLineHealthScore(slots, leadSlots, roster, areaIds, leadSlotKeys),
+    [slots, leadSlots, roster, areaIds, leadSlotKeys]
   );
   const lineHealthSpectrumPosition =
     lineHealthScore != null ? (lineHealthScore / 3) * 100 : null;
@@ -402,12 +404,12 @@ export default function App() {
     });
     setLeadSlots((prev) => {
       const next = { ...prev };
-      for (const areaId of leadAreaIds) {
-        if (next[areaId] === personId) next[areaId] = null;
+      for (const key of leadSlotKeys) {
+        if (next[key] === personId) next[key] = null;
       }
       return next;
     });
-  }, [roster, rootState.lineStates, areaIds, leadAreaIds]);
+  }, [roster, rootState.lineStates, areaIds, leadSlotKeys]);
 
   const handleToggleAbsent = useCallback((personId: string, absent: boolean) => {
     setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, absent })));
@@ -516,9 +518,12 @@ export default function App() {
           requiresTrainedOrExpert: false,
         };
         const areas = [...line.areas, newArea];
-        const leadAreaIds = hasLeadRole ? [...line.leadAreaIds, areaId] : line.leadAreaIds;
+        const nextLeadAreaIds =
+          hasLeadRole && !(line.leadSlotNames && line.leadSlotNames.length > 0)
+            ? [...(line.leadAreaIds ?? []), areaId]
+            : (line.leadAreaIds ?? []);
         const lines = prev.lines.slice();
-        lines[lineIndex] = { ...line, areas, leadAreaIds };
+        lines[lineIndex] = { ...line, areas, leadAreaIds: nextLeadAreaIds };
 
         const lineState = prev.lineStates[prev.currentLineId];
         if (!lineState) return { ...prev, lines };
@@ -615,7 +620,9 @@ export default function App() {
     const lineStateForDay = {
       roster: rootState.lineStates[targetLineId]?.roster ?? [],
       slots: normalizedSlots,
-      leadSlots: day.leadSlots ?? Object.fromEntries((targetConfig?.leadAreaIds ?? leadAreaIds).map((id) => [id, null])),
+      leadSlots:
+        day.leadSlots ??
+        Object.fromEntries((targetConfig ? getLeadSlotKeys(targetConfig) : leadSlotKeys).map((id) => [id, null])),
       juicedAreas: day.juicedAreas ?? {},
       deJuicedAreas: day.deJuicedAreas ?? {},
       sectionTasks: day.sectionTasks ?? {},
@@ -661,7 +668,7 @@ export default function App() {
     setDayNotes(lineStateForDay.dayNotes);
     setDocuments(lineStateForDay.documents);
     setBreakSchedules(lineStateForDay.breakSchedules ?? {});
-  }, [areaCapacityOverrides, areaNameOverrides, leadAreaIds, rootState.currentLineId, rootState.lineStates, slotLabelsByArea]);
+  }, [areaCapacityOverrides, areaNameOverrides, leadSlotKeys, rootState.currentLineId, rootState.lineStates, slotLabelsByArea]);
 
   const handleRandomize = useCallback(() => {
     const nextSlots = randomizeAssignments(roster, slots, leadAssignedPersonIds, areaIds, areaRequiresTrainedOrExpert);
@@ -817,7 +824,7 @@ export default function App() {
         ? normalizeSlotsToLineCapacity(imported.slots, currentConfig, imported.areaCapacityOverrides)
         : normalizeSlotsToCapacity(imported.slots, imported.areaCapacityOverrides);
     setSlots(normalizedSlots);
-    setLeadSlots(imported.leadSlots ?? Object.fromEntries(leadAreaIds.map((id) => [id, null])));
+    setLeadSlots(imported.leadSlots ?? Object.fromEntries(leadSlotKeys.map((id) => [id, null])));
     setJuicedAreas(imported.juicedAreas ?? {});
     setDeJuicedAreas(imported.deJuicedAreas ?? {});
     setSectionTasks(imported.sectionTasks ?? {});
@@ -829,7 +836,7 @@ export default function App() {
     setAreaNameOverrides(imported.areaNameOverrides ?? {});
     setSlotLabelsByArea(imported.slotLabelsByArea ?? {});
     setSavedDays(loadSavedDays());
-  }, [currentConfig, leadAreaIds]);
+  }, [currentConfig, leadSlotKeys]);
 
   const handleSaveToFile = useCallback(async () => {
     const root = rootStateRef.current;
@@ -1153,7 +1160,8 @@ export default function App() {
           staffingPct={grandTotalPct}
           lineHealthScore={lineHealthScore}
           lineSections={[...lineSections]}
-          leadAreaIds={leadAreaIds}
+          leadSlotKeys={leadSlotKeys}
+          getLeadSlotLabel={(key) => getLeadSlotLabel(currentConfig!, key, areaLabels)}
           getSlotLabel={getSlotLabel}
           areaRequiresTrainedOrExpert={areaRequiresTrainedOrExpert}
           breakSchedules={presentationBreakData?.breakSchedules}
@@ -1266,8 +1274,9 @@ export default function App() {
         <LeadSlotsSection
           roster={roster}
           leadSlots={leadSlots}
-          areaLabels={areaLabels}
-          leadAreaIds={leadAreaIds}
+          leadSlotKeys={leadSlotKeys}
+          getLeadSlotLabel={(key) => getLeadSlotLabel(currentConfig!, key, areaLabels)}
+          areaIds={areaIds}
           onLeadSlotChange={setLeadSlot}
         />
       </div>
@@ -1407,15 +1416,6 @@ export default function App() {
                 onSlotsChange={setSlotsForArea}
                 onSectionTasksChange={setSectionTasksForArea}
                 onAssign={setSlotAssignment}
-                breakScheduleA={currentConfig && getBreaksEnabled(currentConfig) ? breakSchedules?.[idA] : undefined}
-                breakScheduleB={currentConfig && getBreaksEnabled(currentConfig) ? breakSchedules?.[idB] : undefined}
-                showBreakSchedule={currentConfig && getBreaksEnabled(currentConfig) && breakScheduleVisibleByArea[idA] !== false}
-                onToggleBreakSchedule={() =>
-                  setBreakScheduleVisibleByArea((prev) => ({
-                    ...prev,
-                    [idA]: prev[idA] === false,
-                  }))
-                }
                 requiresTrainedOrExpertA={areaRequiresTrainedOrExpert(idA)}
                 requiresTrainedOrExpertB={areaRequiresTrainedOrExpert(idB)}
                 onRequiresTrainedOrExpertChangeA={(value) => handleAreaRequiresTrainedOrExpertChange(idA, value)}
@@ -1447,14 +1447,6 @@ export default function App() {
               onSlotsChange={setSlotsForArea}
               onSectionTasksChange={setSectionTasksForArea}
               onAssign={setSlotAssignment}
-              breakSchedule={currentConfig && getBreaksEnabled(currentConfig) ? breakSchedules?.[areaId] : undefined}
-              showBreakSchedule={currentConfig && getBreaksEnabled(currentConfig) && breakScheduleVisibleByArea[areaId] !== false}
-              onToggleBreakSchedule={() =>
-                setBreakScheduleVisibleByArea((prev) => ({
-                  ...prev,
-                  [areaId]: prev[areaId] === false,
-                }))
-              }
               requiresTrainedOrExpert={areaRequiresTrainedOrExpert(areaId)}
               onRequiresTrainedOrExpertChange={(value) => handleAreaRequiresTrainedOrExpertChange(areaId, value)}
             />

@@ -26,7 +26,8 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
   const [step, setStep] = useState<Step>('name');
   const [lineName, setLineName] = useState(initialLineName ?? '');
   const [sections, setSections] = useState<SectionDraft[]>([]);
-  const [leadAreaIds, setLeadAreaIds] = useState<Set<string>>(new Set());
+  const [leadCount, setLeadCount] = useState(0);
+  const [leadNames, setLeadNames] = useState<string[]>([]);
   const [breaksEnabled, setBreaksEnabled] = useState(true);
   const [breaksScope, setBreaksScope] = useState<BreakScope>('station');
   const [breakRotations, setBreakRotations] = useState(3);
@@ -44,20 +45,12 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
 
   const removeSection = useCallback((index: number) => {
     setSections((prev) => prev.filter((_, i) => i !== index));
-    setLeadAreaIds((prev) => {
-      const id = sections[index]?.id;
-      if (!id) return prev;
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }, [sections]);
+  }, []);
 
-  const toggleLead = useCallback((areaId: string) => {
-    setLeadAreaIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(areaId)) next.delete(areaId);
-      else next.add(areaId);
+  const setLeadName = useCallback((index: number, value: string) => {
+    setLeadNames((prev) => {
+      const next = [...prev];
+      next[index] = value;
       return next;
     });
   }, []);
@@ -71,18 +64,23 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
       maxSlots: Math.max(1, s.maxSlots),
       requiresTrainedOrExpert: false,
     }));
+    const leadSlotNames = Array.from({ length: leadCount }, (_, i) => {
+      const name = leadNames[i]?.trim();
+      return name || `Lead ${i + 1}`;
+    });
     const config: LineConfig = {
       id: lineId,
       name: lineName.trim() || 'New Line',
       areas,
-      leadAreaIds: sections.filter((s) => leadAreaIds.has(s.id)).map((s) => s.id),
+      leadAreaIds: [],
+      leadSlotNames: leadCount > 0 ? leadSlotNames : undefined,
       combinedSections: [],
       breaksEnabled,
       breaksScope,
       breakRotations: Math.min(6, Math.max(1, breakRotations)),
     };
     onComplete(config);
-  }, [existingLineId, lineName, sections, leadAreaIds, breaksEnabled, breaksScope, breakRotations, onComplete]);
+  }, [existingLineId, lineName, sections, leadCount, leadNames, breaksEnabled, breaksScope, breakRotations, onComplete]);
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', padding: '24px 16px' }}>
@@ -192,22 +190,44 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
       {step === 'leads' && (
         <>
           <p style={{ marginBottom: 12, color: '#555' }}>
-            Which sections have a lead role? (One person per section; optional.)
+            How many lead positions do you want? Give each a name (e.g. Floor Lead, Quality).
           </p>
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, marginBottom: 20 }}>
-            {sections.map((s) => (
-              <li key={s.id} style={{ marginBottom: 8 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={leadAreaIds.has(s.id)}
-                    onChange={() => toggleLead(s.id)}
-                  />
-                  <span>{s.name}</span>
-                </label>
-              </li>
-            ))}
-          </ul>
+          <label style={{ display: 'block', marginBottom: 12, fontSize: '0.95rem' }}>
+            Number of leads
+            <input
+              type="number"
+              min={0}
+              max={10}
+              value={leadCount}
+              onChange={(e) => {
+                const n = Math.max(0, Math.min(10, e.target.valueAsNumber || 0));
+                setLeadCount(n);
+                setLeadNames((prev) => {
+                  if (prev.length >= n) return prev.slice(0, n);
+                  return [...prev, ...Array(n - prev.length).fill('')];
+                });
+              }}
+              style={{ marginLeft: 8, width: 56, padding: '4px 8px' }}
+            />
+          </label>
+          {leadCount > 0 && (
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0, marginBottom: 20 }}>
+              {Array.from({ length: leadCount }, (_, i) => (
+                <li key={i} style={{ marginBottom: 10 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.95rem' }}>
+                    <span style={{ minWidth: 100 }}>Position {i + 1}</span>
+                    <input
+                      type="text"
+                      value={leadNames[i] ?? ''}
+                      onChange={(e) => setLeadName(i, e.target.value)}
+                      placeholder={`Lead ${i + 1}`}
+                      style={{ flex: 1, maxWidth: 240, padding: '6px 10px', border: '1px solid #ccc', borderRadius: 4 }}
+                    />
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" onClick={() => setStep('sections')} style={{ padding: '10px 20px' }}>
               Back

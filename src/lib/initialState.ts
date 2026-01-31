@@ -1,14 +1,14 @@
 import type { AppState, LeadSlots, LineConfig, LineState, RootState } from '../types';
 import { loadRootState } from './persist';
 import { getInitialState, getEmptyLineState, normalizeSlotsToLineCapacity } from '../data/initialState';
-import { getDefaultICLineConfig } from './lineConfig';
+import { getDefaultICLineConfig, getLeadSlotKeys } from './lineConfig';
 
 function normalizeLineState(state: Partial<LineState>, lineConfig: LineConfig): LineState {
   const capacityOverrides = state.areaCapacityOverrides ?? {};
   const slots = normalizeSlotsToLineCapacity(state.slots ?? {}, lineConfig, capacityOverrides);
   const leadSlots: LeadSlots = {};
-  for (const areaId of lineConfig.leadAreaIds) {
-    leadSlots[areaId] = state.leadSlots?.[areaId] ?? null;
+  for (const key of getLeadSlotKeys(lineConfig)) {
+    leadSlots[key] = state.leadSlots?.[key] ?? null;
   }
   const sectionTasks = state.sectionTasks ?? {};
   for (const a of lineConfig.areas) {
