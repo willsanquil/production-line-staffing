@@ -27,7 +27,9 @@ function preferredRotations(pref: BreakPreference | undefined, rotationCount: nu
  * Assign one person to a bucket so that the line always has coverage.
  * 1) Spread first: prefer the rotation with the fewest people.
  * 2) Then respect preference (early/late) among rotations with the same count.
- * 3) Then balance skill (lower skill sum in bucket).
+ * 3) Balance skill: high-skill people go to slots with lowest skill sum (raise the floor);
+ *    low-skill people (newbies/training) go to slots with highest skill sum so we don't have
+ *    all newbies on the floor at the same time.
  */
 function assignToBestBucket(
   personId: string,
@@ -39,6 +41,7 @@ function assignToBestBucket(
   const preferred = preferredRotations(preference, rotationCount);
   const rotations = Array.from({ length: rotationCount }, (_, i) => i + 1);
   const allowed = preferred.length < rotationCount ? rotations.filter((r) => preferred.includes(r)) : rotations;
+  const isLowSkill = skillScore <= 1; // no_experience or training
   const sorted = [...allowed].sort((a, b) => {
     const countA = buckets[a].personIds.length;
     const countB = buckets[b].personIds.length;
@@ -46,7 +49,10 @@ function assignToBestBucket(
     const prefA = preferred.includes(a) ? 0 : 1;
     const prefB = preferred.includes(b) ? 0 : 1;
     if (prefA !== prefB) return prefA - prefB;
-    return buckets[a].skillSum - buckets[b].skillSum;
+    const sumA = buckets[a].skillSum;
+    const sumB = buckets[b].skillSum;
+    if (isLowSkill) return sumB - sumA; // prefer slot with more existing skill (don't cluster newbies)
+    return sumA - sumB; // high-skill: prefer slot with least skill (balance coverage)
   });
   const bestRot = sorted[0] ?? 1;
   buckets[bestRot].skillSum += skillScore;
@@ -109,18 +115,34 @@ export function generateBreakSchedules(
 
   if (scope === 'line') {
     const personIds = new Set<string>();
+    const personAreas: Record<string, string[]> = {};
     for (const areaId of areaIds) {
       const slots = slotsByArea[areaId] ?? [];
       for (const s of slots) {
-        if (s.personId) personIds.add(s.personId);
+        if (s.personId) {
+          personIds.add(s.personId);
+          if (!personAreas[s.personId]) personAreas[s.personId] = [];
+          personAreas[s.personId].push(areaId);
+        }
       }
       const leadId = leadSlots[areaId];
-      if (leadId) personIds.add(leadId);
+      if (leadId) {
+        personIds.add(leadId);
+        if (!personAreas[leadId]) personAreas[leadId] = [];
+        personAreas[leadId].push(areaId);
+      }
     }
     const people = Array.from(personIds).map((id) => {
       const p = roster.find((r) => r.id === id);
-      const areaId = areaIds[0];
-      const skillScore = p && areaId ? SKILL_SCORE[p.skills[areaId as keyof typeof p.skills] ?? 'no_experience'] : 0;
+      const areas = personAreas[id] ?? [];
+      let skillScore = 0;
+      if (p && areas.length > 0) {
+        const sum = areas.reduce(
+          (acc, areaId) => acc + SKILL_SCORE[p.skills[areaId as keyof typeof p.skills] ?? 'no_experience'],
+          0
+        );
+        skillScore = sum / areas.length;
+      }
       const preference = p?.breakPreference ?? 'no_preference';
       return { personId: id, skillScore, preference };
     });

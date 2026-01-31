@@ -1,7 +1,8 @@
 import { memo, type CSSProperties } from 'react';
-import type { AreaId, RosterPerson, SlotsByArea } from '../types';
+import type { AreaId, BreakRotation, LunchRotation, RosterPerson, SlotsByArea } from '../types';
 import type { SkillLevel } from '../types';
 import { LINE_SECTIONS, LEAD_SLOT_AREAS, areaRequiresTrainedOrExpert as defaultRequiresTrainedOrExpert } from '../types';
+import { BreakTable } from './BreakTable';
 import { getSlotLabel as getSlotLabelDefault, isGenericSlotLabel } from '../lib/areaConfig';
 import type { SlotLabelsByArea } from '../types';
 import { getAreaRisks } from '../lib/lineViewRisks';
@@ -75,6 +76,10 @@ interface LineViewProps {
   leadAreaIds?: string[];
   getSlotLabel?: (areaId: string, slotIndex: number) => string;
   areaRequiresTrainedOrExpert?: (areaId: string) => boolean;
+  /** For presentation mode: whole-line break/lunch assignments so team can see coverage. */
+  breakAssignments?: Record<string, { breakRotation: BreakRotation; lunchRotation: LunchRotation }>;
+  /** Number of break/lunch slots (1–6). */
+  rotationCount?: number;
 }
 
 /** Compact, screenshot- and phone-friendly view: line health, areas, who is running each, and risks. */
@@ -93,6 +98,8 @@ function LineViewInner({
   leadAreaIds: leadAreaIdsProp,
   getSlotLabel: getSlotLabelProp,
   areaRequiresTrainedOrExpert: areaRequiresTrainedOrExpertProp,
+  breakAssignments,
+  rotationCount = 3,
 }: LineViewProps) {
   const sections = lineSectionsProp ?? LINE_SECTIONS;
   const leadAreaIds = leadAreaIdsProp ?? [...LEAD_SLOT_AREAS];
@@ -303,6 +310,24 @@ function LineViewInner({
           </section>
         );
       })}
+
+      {breakAssignments && Object.keys(breakAssignments).length > 0 && rotationCount >= 1 && (
+        <section style={sectionStyle}>
+          <h2 style={sectionTitleStyle}>Break &amp; lunch coverage</h2>
+          <p style={{ fontSize: '0.95rem', color: '#555', margin: '0 0 12px 0' }}>
+            Who is on break or lunch in each slot. Balanced so coverage stays strong.
+          </p>
+          <BreakTable
+            people={Object.keys(breakAssignments).map((id) => {
+              const p = roster.find((r) => r.id === id);
+              return { id, name: p?.name ?? id };
+            })}
+            assignments={breakAssignments}
+            rotationCount={Math.min(6, Math.max(1, rotationCount))}
+            presentationMode
+          />
+        </section>
+      )}
     </div>
   );
 }

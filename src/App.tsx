@@ -58,6 +58,7 @@ import {
   getBreaksScope,
   getBreakRotations,
   BREAK_LINE_WIDE_KEY,
+  areaIdFromName,
 } from './lib/lineConfig';
 import { createEmptyPerson, createEmptyOTPerson, createEmptySlot, getEmptyLineState, normalizeSlotsToCapacity, normalizeSlotsToLineCapacity } from './data/initialState';
 import { RosterGrid } from './components/RosterGrid';
@@ -148,6 +149,11 @@ export default function App() {
   const [sharePassword, setSharePassword] = useState('');
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
+  const [showAddStationForm, setShowAddStationForm] = useState(false);
+  const [addStationName, setAddStationName] = useState('');
+  const [addStationMin, setAddStationMin] = useState(2);
+  const [addStationMax, setAddStationMax] = useState(5);
+  const [addStationHasLead, setAddStationHasLead] = useState(false);
   const [breakScheduleVisibleByArea, setBreakScheduleVisibleByArea] = useState<Partial<Record<AreaId, boolean>>>({});
   const [areaCapacityOverrides, setAreaCapacityOverrides] = useState(firstLineState.areaCapacityOverrides ?? {});
   const [areaNameOverrides, setAreaNameOverrides] = useState(firstLineState.areaNameOverrides ?? {});
@@ -322,6 +328,29 @@ export default function App() {
   const lineHealthSpectrumPosition =
     lineHealthScore != null ? (lineHealthScore / 3) * 100 : null;
 
+  /** Whole-team break assignments for presentation mode (line-wide or merged per-station). */
+  const presentationBreakData = useMemo(() => {
+    if (!currentConfig || !getBreaksEnabled(currentConfig) || !breakSchedules) return null;
+    const rotationCount = getBreakRotations(currentConfig);
+    const scope = getBreaksScope(currentConfig);
+    if (scope === 'line') {
+      const lineAssignments = breakSchedules[BREAK_LINE_WIDE_KEY];
+      if (!lineAssignments || Object.keys(lineAssignments).length === 0) return null;
+      return { breakAssignments: lineAssignments, rotationCount };
+    }
+    const merged: Record<string, { breakRotation: 1 | 2 | 3 | 4 | 5 | 6; lunchRotation: 1 | 2 | 3 | 4 | 5 | 6 }> = {};
+    for (const areaId of areaIds) {
+      const assignments = breakSchedules[areaId];
+      if (assignments) {
+        for (const [personId, a] of Object.entries(assignments)) {
+          merged[personId] = a;
+        }
+      }
+    }
+    if (Object.keys(merged).length === 0) return null;
+    return { breakAssignments: merged, rotationCount };
+  }, [currentConfig, breakSchedules, areaIds]);
+
   const setSlotAssignment = useCallback((areaId: AreaId, slotId: string, personId: string | null) => {
     setSlots((prev) => ({
       ...prev,
@@ -479,6 +508,55 @@ export default function App() {
       return { ...prev, lines };
     });
   }, []);
+
+  const handleAddStation = useCallback(
+    (name: string, minSlots: number, maxSlots: number, hasLeadRole: boolean) => {
+      const trimmedName = name.trim();
+      if (!trimmedName) return;
+      const min = Math.max(1, Math.round(minSlots));
+      const max = Math.max(1, Math.round(maxSlots));
+      const slotsCount = Math.min(min, max);
+      setRootState((prev) => {
+        const lineIndex = prev.lines.findIndex((l) => l.id === prev.currentLineId);
+        if (lineIndex === -1) return prev;
+        const line = prev.lines[lineIndex];
+        if (line.id === 'ic') return prev;
+        const existingIds = new Set(prev.lines.flatMap((l) => l.areas.map((a) => a.id)));
+        const areaId = areaIdFromName(trimmedName, existingIds);
+        const newArea = {
+          id: areaId,
+          name: trimmedName,
+          minSlots: min,
+          maxSlots: max > min ? max : min,
+          requiresTrainedOrExpert: false,
+        };
+        const areas = [...line.areas, newArea];
+        const leadAreaIds = hasLeadRole ? [...line.leadAreaIds, areaId] : line.leadAreaIds;
+        const lines = prev.lines.slice();
+        lines[lineIndex] = { ...line, areas, leadAreaIds };
+
+        const lineState = prev.lineStates[prev.currentLineId];
+        if (!lineState) return { ...prev, lines };
+        const newSlots = { ...lineState.slots, [areaId]: Array.from({ length: slotsCount }, () => createEmptySlot()) };
+        const newSectionTasks = { ...lineState.sectionTasks, [areaId]: [] };
+        const newLeadSlots = hasLeadRole ? { ...lineState.leadSlots, [areaId]: null } : lineState.leadSlots;
+        const roster = (lineState.roster ?? []).map((p) => ({
+          ...p,
+          skills: { ...p.skills, [areaId]: 'no_experience' as SkillLevel },
+        }));
+        const newLineState = {
+          ...lineState,
+          slots: newSlots,
+          sectionTasks: newSectionTasks,
+          leadSlots: newLeadSlots,
+          roster,
+        };
+        const lineStates = { ...prev.lineStates, [prev.currentLineId]: newLineState };
+        return { ...prev, lines, lineStates };
+      });
+    },
+    []
+  );
 
   const handleAreaCapacityChange = useCallback((areaId: AreaId, payload: { min?: number; max?: number }) => {
     const nextMin = payload.min != null && !Number.isNaN(payload.min) ? Math.max(1, Math.round(payload.min)) : undefined;
@@ -1093,6 +1171,8 @@ export default function App() {
           leadAreaIds={leadAreaIds}
           getSlotLabel={getSlotLabel}
           areaRequiresTrainedOrExpert={areaRequiresTrainedOrExpert}
+          breakAssignments={presentationBreakData?.breakAssignments}
+          rotationCount={presentationBreakData?.rotationCount}
         />
         <div style={{ maxWidth: 520, margin: '0 auto', padding: '0 12px 24px' }}>
           <TrainingReport roster={roster} slots={slots} areaLabels={areaLabels} effectiveCapacity={effectiveCapacity} presentationMode areaIds={areaIds} />
@@ -1216,6 +1296,93 @@ export default function App() {
         */}
         <button type="button" onClick={handleClearLine}>Clear line</button>
       </div>
+
+      {currentConfig && currentConfig.id !== 'ic' && (
+        <div style={{ marginBottom: 16 }}>
+          {!showAddStationForm ? (
+            <button
+              type="button"
+              onClick={() => setShowAddStationForm(true)}
+              style={{ padding: '8px 14px', fontSize: '0.95rem' }}
+            >
+              + Add station
+            </button>
+          ) : (
+            <div
+              style={{
+                background: '#f8f9fa',
+                border: '1px solid #dee2e6',
+                borderRadius: 8,
+                padding: 14,
+                maxWidth: 420,
+              }}
+            >
+              <h3 style={{ margin: '0 0 10px 0', fontSize: '1rem' }}>Add station</h3>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 10 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ minWidth: 70 }}>Name</span>
+                  <input
+                    type="text"
+                    value={addStationName}
+                    onChange={(e) => setAddStationName(e.target.value)}
+                    placeholder="e.g. Assembly"
+                    style={{ padding: '6px 10px', width: 140 }}
+                    autoFocus
+                  />
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ minWidth: 70 }}>Min slots</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={addStationMin}
+                    onChange={(e) => setAddStationMin(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    style={{ padding: '6px 10px', width: 56 }}
+                  />
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ minWidth: 70 }}>Max slots</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={addStationMax}
+                    onChange={(e) => setAddStationMax(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    style={{ padding: '6px 10px', width: 56 }}
+                  />
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={addStationHasLead}
+                    onChange={(e) => setAddStationHasLead(e.target.checked)}
+                  />
+                  <span>Has lead role</span>
+                </label>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleAddStation(addStationName, addStationMin, addStationMax, addStationHasLead);
+                    setAddStationName('');
+                    setAddStationMin(2);
+                    setAddStationMax(5);
+                    setAddStationHasLead(false);
+                    setShowAddStationForm(false);
+                  }}
+                  disabled={!addStationName.trim()}
+                  style={{ padding: '6px 14px', fontWeight: 600 }}
+                >
+                  Add
+                </button>
+                <button type="button" onClick={() => setShowAddStationForm(false)} style={{ padding: '6px 14px' }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="areas-grid">
         {lineSections.map((section) => {
