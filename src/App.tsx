@@ -1093,6 +1093,13 @@ export default function App() {
           cloudPasswordRef.current = password;
           setAppMode('app');
         }}
+        onJoinGroupPresentation={(root, lineId, password) => {
+          setRootState(root);
+          setCloudLineId(lineId);
+          cloudPasswordRef.current = password;
+          setAdminVisible(false);
+          setAppMode('app');
+        }}
       />
     );
   }

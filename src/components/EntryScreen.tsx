@@ -47,11 +47,12 @@ export function clearCloudSession(): void {
 interface EntryScreenProps {
   onSelectLocal: () => void;
   onJoinGroup: (rootState: RootState, lineId: string, password: string) => void;
+  onJoinGroupPresentation?: (rootState: RootState, lineId: string, password: string) => void;
   /** Existing area IDs from app (for wizard when configuring new cloud line). */
   existingAreaIds?: Set<string>;
 }
 
-export function EntryScreen({ onSelectLocal, onJoinGroup, existingAreaIds = new Set() }: EntryScreenProps) {
+export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentation, existingAreaIds = new Set() }: EntryScreenProps) {
   const [step, setStep] = useState<'choose' | 'list' | 'create' | 'join' | 'configure'>('choose');
   const [lines, setLines] = useState<CloudLineSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -346,6 +347,16 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, existingAreaIds = new 
         <button type="button" onClick={handleJoin} disabled={loading || !joinLineId} style={btnPrimary}>
           {loading ? 'Joining…' : 'Join'}
         </button>
+        {onJoinGroupPresentation && (
+          <button
+            type="button"
+            onClick={handleJoinPresentation}
+            disabled={loading || !joinLineId}
+            style={{ ...btnStyle, marginLeft: 0, marginTop: 12 }}
+          >
+            {loading ? 'Joining…' : 'Join Staffing View'}
+          </button>
+        )}
       </div>
       <button type="button" onClick={() => setStep('list')} style={btnStyle}>
         Back
