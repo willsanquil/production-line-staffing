@@ -120,7 +120,7 @@ function LineViewInner({
     color: '#1a1a1a',
     marginBottom: 10,
   };
-  const nameFontSize = '1.28rem';
+  const nameFontSize = 'clamp(1.1rem, 3vw, 1.28rem)';
 
   const presentationTableStyle: CSSProperties = {
     width: '100%',
@@ -187,13 +187,13 @@ function LineViewInner({
         : null;
 
     return (
-      <div key={areaId} style={{ marginBottom: 12 }}>
+      <div key={areaId} className="presentation-area-block" style={{ marginBottom: 16 }}>
         {!hideTitle && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
-            <h3 style={{ margin: 0, fontWeight: 700, fontSize: '1.15rem' }}>
+          <div className="presentation-area-header" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+            <h3 style={{ margin: 0, fontWeight: 700, fontSize: 'clamp(1.05rem, 2.5vw, 1.2rem)' }}>
               {subLabel} — {metricText}{metricExtra}
             </h3>
-            <div style={{ flex: '1 1 120px', minWidth: 120, maxWidth: 200 }}>
+            <div className="presentation-area-bar" style={{ flex: '1 1 100px', minWidth: 100, maxWidth: 180 }}>
               <KnowledgeBar position={areaKnowledgePosition} />
             </div>
           </div>
@@ -255,15 +255,15 @@ function LineViewInner({
   };
 
   return (
-    <div className="line-view" style={{ maxWidth: 960, margin: '0 auto', padding: '0 16px 80px' }}>
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1a1a1a', marginBottom: 12 }}>
+    <div className="line-view line-view-presentation" style={{ maxWidth: 960, margin: '0 auto', padding: '12px 16px 80px' }}>
+      <header className="line-view-summary" style={{ marginBottom: 20 }}>
+        <div className="line-view-headline" style={{ fontSize: 'clamp(1.75rem, 6vw, 2.25rem)', fontWeight: 700, color: '#1a1a1a', marginBottom: 12, letterSpacing: '-0.02em' }}>
           {totalOnLine}/{fullStaff}
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
-          <div style={{ minWidth: 160 }}>
-            <div style={{ fontSize: '0.85rem', marginBottom: 4, color: '#555', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Staffing</div>
-            <div style={{ height: BAR_HEIGHT, borderRadius: 6, overflow: 'hidden', background: '#eee', position: 'relative' }}>
+        <div className="line-view-metrics" style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <span style={{ fontSize: '0.8rem', color: '#555', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Staffing</span>
+            <div style={{ height: BAR_HEIGHT, width: 100, borderRadius: 6, overflow: 'hidden', background: '#eee', position: 'relative', flexShrink: 0 }}>
               <div
                 style={{
                   position: 'absolute',
@@ -276,17 +276,19 @@ function LineViewInner({
                 }}
               />
             </div>
-            <div style={{ fontSize: '0.9rem', marginTop: 4, color: '#333' }}>{staffingPct}%</div>
+            <span style={{ fontSize: '1rem', fontWeight: 600, color: '#1a1a1a' }}>{staffingPct}%</span>
           </div>
-          <div style={{ minWidth: 160 }}>
-            <div style={{ fontSize: '0.85rem', marginBottom: 4, color: '#555', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Knowledge</div>
-            <KnowledgeBar position={knowledgePosition} />
-            <div style={{ fontSize: '0.9rem', marginTop: 4, color: '#333' }}>
-              {lineHealthScore != null ? `${(lineHealthScore).toFixed(1)} / 3` : '—'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <span style={{ fontSize: '0.8rem', color: '#555', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Knowledge</span>
+            <div style={{ width: 100, flexShrink: 0 }}>
+              <KnowledgeBar position={knowledgePosition} />
             </div>
+            <span style={{ fontSize: '1rem', fontWeight: 600, color: '#1a1a1a' }}>
+              {lineHealthScore != null ? `${(lineHealthScore).toFixed(1)}/3` : '—'}
+            </span>
           </div>
         </div>
-      </div>
+      </header>
 
       {assignedLeadKeys.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
@@ -336,7 +338,7 @@ function LineViewInner({
       )}
 
       {breaksScope === 'line' && breakSchedules?.[BREAK_LINE_WIDE_KEY] && Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).length > 0 && rotationCount >= 1 && assignedLeadKeys.length === 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
+        <div className="presentation-row" style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
           <div />
           <BreakTable
             people={Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).map((id) => {
@@ -359,13 +361,13 @@ function LineViewInner({
           const slotsA = slots[idA] ?? [];
           const slotsB = slots[idB] ?? [];
           return (
-            <div key={rowKey} style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
+            <div key={rowKey} className="presentation-row" style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
               <section style={sectionStyle}>
                 <h2 style={sectionTitleStyle}>{areaLabels[idA] ?? idA} & {areaLabels[idB] ?? idB}</h2>
                 {renderStaffingTable(idA, slotsA, { subLabel: areaLabels[idA] ?? idA })}
                 {renderStaffingTable(idB, slotsB, { subLabel: areaLabels[idB] ?? idB })}
               </section>
-              <div>
+              <div className="presentation-breaks">
                 {renderBreakMatrix(idA, areaLabels[idA] ?? idA)}
                 {renderBreakMatrix(idB, areaLabels[idB] ?? idB)}
               </div>
@@ -375,28 +377,12 @@ function LineViewInner({
         const areaId = section as string;
         const allAreaSlots = slots[areaId] ?? [];
         const areaLabel = areaLabels[areaId] ?? areaId;
-        const areaSlots = allAreaSlots.filter((s) => !s.disabled);
-        const filled = areaSlots.filter((s) => s.personId).length;
-        const min = effectiveCapacity[areaId]?.min ?? 0;
-        const risks = getAreaRisks({
-          filled,
-          min,
-          disabledCount: allAreaSlots.length - areaSlots.length,
-          needsTrainedOrExpert: requiresTrainedOrExpert(areaId) && filled >= 1 && !areaSlots.some((s) => {
-            if (!s.personId) return false;
-            const p = roster.find((r) => r.id === s.personId);
-            const sk = p?.skills[areaId] ?? 'no_experience';
-            return sk === 'trained' || sk === 'expert';
-          }),
-        });
-        const metricExtra = risks.length > 0 ? ` · ${risks.join(' · ')}` : '';
         return (
-          <div key={rowKey} style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
+          <div key={rowKey} className="presentation-row" style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
             <section style={sectionStyle}>
-              <h2 style={sectionTitleStyle}>{areaLabel} — {filled}/{min}{metricExtra}</h2>
-              {renderStaffingTable(areaId, allAreaSlots, { hideTitle: true })}
+              {renderStaffingTable(areaId, allAreaSlots)}
             </section>
-            <div>
+            <div className="presentation-breaks">
               {renderBreakMatrix(areaId, areaLabel)}
             </div>
           </div>
