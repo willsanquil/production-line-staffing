@@ -1,5 +1,5 @@
 import { memo, type CSSProperties } from 'react';
-import type { AreaId, BreakRotation, LunchRotation, RosterPerson, SlotsByArea } from '../types';
+import type { AreaId, BreakRotation, BreakSchedulesByArea, LunchRotation, RosterPerson, SlotsByArea } from '../types';
 import type { SkillLevel } from '../types';
 import { LINE_SECTIONS, LEAD_SLOT_AREAS, areaRequiresTrainedOrExpert as defaultRequiresTrainedOrExpert } from '../types';
 import { BREAK_LINE_WIDE_KEY } from '../lib/lineConfig';
@@ -78,7 +78,7 @@ interface LineViewProps {
   getSlotLabel?: (areaId: string, slotIndex: number) => string;
   areaRequiresTrainedOrExpert?: (areaId: string) => boolean;
   /** For presentation mode: break schedules per area (or __line__ for line-wide). */
-  breakSchedules?: Record<string, Record<string, { breakRotation: BreakRotation; lunchRotation: LunchRotation }>>;
+  breakSchedules?: BreakSchedulesByArea;
   /** Number of rotations (1–6). */
   rotationCount?: number;
   /** 'line' = one set for whole line; 'station' = per area. */
