@@ -135,6 +135,26 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
       .finally(() => setLoading(false));
   };
 
+  const handleJoinPresentation = () => {
+    if (!joinLineId || !joinPassword) {
+      setError('Select a line and enter password');
+      return;
+    }
+    if (!onJoinGroupPresentation) {
+      handleJoin();
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    getLineState(joinLineId, joinPassword)
+      .then((rootState) => {
+        setCloudSession(joinLineId, joinPassword);
+        onJoinGroupPresentation(rootState, joinLineId, joinPassword);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false));
+  };
+
   const cardStyle: React.CSSProperties = {
     background: '#fff',
     borderRadius: 12,
