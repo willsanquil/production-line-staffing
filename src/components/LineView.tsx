@@ -233,11 +233,11 @@ function LineViewInner({
         style={{ marginBottom: compact ? 6 : 16 }}
       >
         {!hideTitle && (
-          <div className={`presentation-area-header${compact ? ' presentation-area-header-compact' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: compact ? 8 : 12, flexWrap: 'wrap', marginBottom: compact ? 4 : 10 }}>
+          <div className={`presentation-area-header${compact ? ' presentation-area-header-compact' : ''}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: compact ? 8 : 12, flexWrap: 'wrap', marginBottom: compact ? 4 : 10 }}>
             <h3 style={{ margin: 0, fontWeight: 700, fontSize: compact ? '0.8rem' : 'clamp(1.05rem, 2.5vw, 1.2rem)' }}>
               {subLabel} — {metricText}{metricExtra}
             </h3>
-            <div className={compact ? 'presentation-area-bar-compact' : ''} style={compact ? undefined : { flex: '1 1 100px', minWidth: 100, maxWidth: 180 }}>
+            <div className={compact ? 'presentation-area-bar-compact' : ''} style={compact ? undefined : { width: 120, flexShrink: 0 }}>
               <KnowledgeBar position={areaKnowledgePosition} compact={compact} />
             </div>
           </div>
@@ -309,6 +309,7 @@ function LineViewInner({
           <div className="line-view-summary-compact">
             <span className="line-view-headline-compact">{totalOnLine}/{fullStaff}</span>
             <span className="line-view-metric-compact">{staffingPct}%</span>
+            <span className="line-view-metric-compact">Leads: {assignedLeadKeys.length}</span>
             <div className="line-view-bar-compact" style={{ width: 48, height: BAR_HEIGHT_COMPACT, position: 'relative', borderRadius: 3, overflow: 'hidden', background: '#eee' }}>
               <div
                 style={{
@@ -351,6 +352,10 @@ function LineViewInner({
                   />
                 </div>
                 <span style={{ fontSize: '1rem', fontWeight: 600, color: '#1a1a1a' }}>{staffingPct}%</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <span style={{ fontSize: '0.8rem', color: '#555', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Leads</span>
+                <span style={{ fontSize: '1rem', fontWeight: 600, color: '#1a1a1a' }}>{assignedLeadKeys.length}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                 <span style={{ fontSize: '0.8rem', color: '#555', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Knowledge</span>
