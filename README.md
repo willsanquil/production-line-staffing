@@ -1,6 +1,6 @@
 # Production Line Staffing App
 
-Single-page app for managing production line staffing: roster with skill depth, per-area slot assignments, break/lunch schedule, task lists, and save/load of configurations and days. roster with skill depth, per-area slot assignments, break/lunch schedule, task lists, and save/load of configurations and days.
+Single-page app for managing production line staffing: roster with skill depth, per-area slot assignments, break/lunch schedule, task lists, and save/load of configurations and days.
 
 ## Run locally
 
