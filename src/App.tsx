@@ -74,7 +74,7 @@ import { generateBreakSchedules } from './lib/breakSchedules';
 import { saveRootState, loadSavedDays, addSavedDay, removeSavedDay, exportStateToJson, importStateFromJson } from './lib/persist';
 import { saveToFile, overwriteFile, openFromFile, isSaveToFileSupported } from './lib/fileStorage';
 import { getLineState, setLineState, createCloudLine, deleteCloudLine } from './lib/cloudLines';
-import { getCloudSession, clearCloudSession, EntryScreen } from './components/EntryScreen';
+import { getCloudSession, setCloudSession, clearCloudSession, EntryScreen } from './components/EntryScreen';
 import { LineManager } from './components/LineManager';
 import { BuildLineWizard } from './components/BuildLineWizard';
 import { BreakTable } from './components/BreakTable';
