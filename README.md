@@ -55,10 +55,38 @@ The repo is ready to push:
 3. Vercel will detect Vite; **Build Command**: `npm run build`, **Output Directory**: `dist`. Deploy.
 4. The app is static; no server or env vars required for the current localStorage-only setup.
 
-## Supabase (when you add it)
+## Supabase (Group / cloud lines)
 
-- Create a project in [Supabase](https://supabase.com).
-- In Vercel → your project → **Settings → Environment Variables**, add:
-  - `VITE_SUPABASE_URL` – your Supabase project URL
-  - `VITE_SUPABASE_ANON_KEY` – your anon/public key
-- In the app, use `import.meta.env.VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`; never commit `.env` (already in `.gitignore`).
+The app supports **Local / Demo** (data in browser only) and **Group** (shared lines in the cloud, password-protected).
+
+### 1. Supabase project
+
+- Create a project at [Supabase](https://supabase.com).
+- Run migrations (from the repo root):
+  ```bash
+  npx supabase db push
+  ```
+  Or in the Supabase SQL editor, run the contents of `supabase/migrations/20250128000000_cloud_lines.sql` and `supabase/migrations/20250128100000_cloud_lines_view_security.sql`.
+
+### 2. Edge Functions
+
+Deploy the Edge Functions (create-line, get-line-state, set-line-state):
+
+```bash
+npx supabase functions deploy create-line
+npx supabase functions deploy get-line-state
+npx supabase functions deploy set-line-state
+```
+
+### 3. Environment variables
+
+- **Vercel** (or your host) → project → **Settings → Environment Variables**:
+  - `VITE_SUPABASE_URL` – Supabase project URL
+  - `VITE_SUPABASE_ANON_KEY` – Supabase anon/public key
+
+- **Supabase** → Project Settings → Edge Functions: ensure the project has the default `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (set automatically).
+
+### 4. App flow
+
+- On open, users choose **Local / Demo** (browser-only) or **Group**.
+- **Group**: list public lines → **Create a new line** (name + password) or **Join an existing line** (select line + password). Data is saved to the cloud; anyone with the password can join and edit. **Leave line** returns to local and shows the entry screen again on next open (or refresh after leaving).

@@ -69,6 +69,8 @@ import { randomizeAssignments, spreadTalent, maxSpeedAssignments, lightStretchAs
 import { generateBreakSchedules } from './lib/breakSchedules';
 import { saveRootState, loadSavedDays, addSavedDay, removeSavedDay, exportStateToJson, importStateFromJson } from './lib/persist';
 import { saveToFile, overwriteFile, openFromFile, isSaveToFileSupported } from './lib/fileStorage';
+import { getLineState, setLineState } from './lib/cloudLines';
+import { getCloudSession, clearCloudSession, EntryScreen } from './components/EntryScreen';
 import { LineManager } from './components/LineManager';
 import { BuildLineWizard } from './components/BuildLineWizard';
 
@@ -114,7 +116,13 @@ function updatePersonInRoot(
 const rootInitial = getHydratedRootState();
 const firstLineState = rootInitial.lineStates[rootInitial.currentLineId] ?? getEmptyLineState(getDefaultICLineConfig());
 
+type AppMode = 'entry' | 'loading-cloud' | 'app';
+
 export default function App() {
+  const [appMode, setAppMode] = useState<AppMode>(() => (getCloudSession() ? 'loading-cloud' : 'entry'));
+  const [cloudLineId, setCloudLineId] = useState<string | null>(null);
+  const cloudPasswordRef = useRef<string | null>(null);
+
   const [rootState, setRootState] = useState(rootInitial);
   const [view, setView] = useState<'staffing' | 'line-manager' | 'build-line'>('staffing');
 
@@ -197,6 +205,26 @@ export default function App() {
   rootStateRef.current = rootState;
 
   useEffect(() => {
+    if (appMode !== 'loading-cloud') return;
+    const session = getCloudSession();
+    if (!session) {
+      setAppMode('entry');
+      return;
+    }
+    getLineState(session.lineId, session.password)
+      .then((root) => {
+        setRootState(root);
+        setCloudLineId(session.lineId);
+        cloudPasswordRef.current = session.password;
+        setAppMode('app');
+      })
+      .catch(() => {
+        clearCloudSession();
+        setAppMode('entry');
+      });
+  }, [appMode]);
+
+  useEffect(() => {
     const lineState = rootState.lineStates[rootState.currentLineId];
     if (!lineState) return;
     setSlots(lineState.slots ?? {});
@@ -215,15 +243,25 @@ export default function App() {
 
   const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
+    if (appMode !== 'app') return;
     const id = setTimeout(() => {
       const root = rootStateRef.current;
-      saveRootState({
+      const payload = {
         ...root,
         lineStates: {
           ...root.lineStates,
           [root.currentLineId]: { ...root.lineStates[root.currentLineId], ...stateRef.current } as AppState,
         },
-      });
+      };
+      const lineId = cloudLineId;
+      const password = cloudPasswordRef.current;
+      if (lineId && password) {
+        setLineState(lineId, password, payload).catch((e) => {
+          console.error('Cloud save failed:', e);
+        });
+      } else {
+        saveRootState(payload);
+      }
       persistTimeoutRef.current = null;
     }, PERSIST_DEBOUNCE_MS);
     persistTimeoutRef.current = id;
@@ -233,15 +271,22 @@ export default function App() {
         persistTimeoutRef.current = null;
       }
       const root = rootStateRef.current;
-      saveRootState({
+      const payload = {
         ...root,
         lineStates: {
           ...root.lineStates,
           [root.currentLineId]: { ...root.lineStates[root.currentLineId], ...stateRef.current } as AppState,
         },
-      });
+      };
+      const lineId = cloudLineId;
+      const password = cloudPasswordRef.current;
+      if (lineId && password) {
+        setLineState(lineId, password, payload).catch((e) => console.error('Cloud save failed:', e));
+      } else {
+        saveRootState(payload);
+      }
     };
-  }, [slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea]);
+  }, [appMode, cloudLineId, slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea]);
 
   const allAssignedPersonIds = useMemo(() => getAssignedPersonIds(slots, areaIds), [slots, areaIds]);
   const leadAssignedPersonIds = useMemo(() => {
@@ -722,6 +767,35 @@ export default function App() {
     e.target.value = '';
   }, [applyImportedState]);
 
+  const handleLeaveLine = useCallback(() => {
+    clearCloudSession();
+    setCloudLineId(null);
+    cloudPasswordRef.current = null;
+    setRootState(getHydratedRootState());
+  }, []);
+
+  if (appMode === 'entry') {
+    return (
+      <EntryScreen
+        onSelectLocal={() => setAppMode('app')}
+        onJoinGroup={(root, lineId, password) => {
+          setRootState(root);
+          setCloudLineId(lineId);
+          cloudPasswordRef.current = password;
+          setAppMode('app');
+        }}
+      />
+    );
+  }
+
+  if (appMode === 'loading-cloud') {
+    return (
+      <div style={{ padding: 48, textAlign: 'center' }}>
+        <p>Loading group line…</p>
+      </div>
+    );
+  }
+
   if (view === 'line-manager') {
     return (
       <>
@@ -773,7 +847,12 @@ export default function App() {
     return (
       <>
         <header className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-          <span>Production Line Staffing — {currentConfig.name}</span>
+          <span>Production Line Staffing — {currentConfig.name}{cloudLineId ? ' (Group)' : ''}</span>
+          {cloudLineId && (
+            <button type="button" onClick={handleLeaveLine} style={{ marginRight: 8, padding: '6px 12px', fontSize: '0.9rem' }}>
+              Leave line
+            </button>
+          )}
           <button type="button" onClick={() => setView('line-manager')} style={{ marginRight: 8 }}>
             Lines
           </button>
@@ -811,7 +890,12 @@ export default function App() {
   return (
     <>
       <header className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-        <span>Production Line Staffing — {currentConfig.name}</span>
+        <span>Production Line Staffing — {currentConfig.name}{cloudLineId ? ' (Group)' : ''}</span>
+        {cloudLineId && (
+          <button type="button" onClick={handleLeaveLine} style={{ marginRight: 4, padding: '6px 12px', fontSize: '0.9rem' }}>
+            Leave line
+          </button>
+        )}
         <button type="button" onClick={() => setView('line-manager')} style={{ marginRight: 4 }}>
           Lines
         </button>
