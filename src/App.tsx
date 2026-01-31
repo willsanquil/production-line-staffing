@@ -148,6 +148,7 @@ export default function App() {
   const [rosterVisible, setRosterVisible] = useState(true);
   const [adminVisible, setAdminVisible] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [shareLinkCopied, setShareLinkCopied] = useState(false);
   const [shareName, setShareName] = useState('');
   const [sharePassword, setSharePassword] = useState('');
   const [shareError, setShareError] = useState<string | null>(null);
@@ -1081,6 +1082,17 @@ export default function App() {
       .catch((e) => alert(e instanceof Error ? e.message : String(e)));
   }, [cloudLineId]);
 
+  const handleCopyShareLink = useCallback(() => {
+    if (!cloudLineId) return;
+    const url = `${window.location.origin}${window.location.pathname}?cloudLine=${cloudLineId}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setShareLinkCopied(true);
+      setTimeout(() => setShareLinkCopied(false), 3000);
+    }).catch(() => {
+      alert(`Share this link:\n\n${url}`);
+    });
+  }, [cloudLineId]);
+
   if (appMode === 'entry') {
     const entryExistingAreaIds = new Set(rootState.lines.flatMap((l) => l.areas.map((a) => a.id)));
     return (
@@ -1243,6 +1255,9 @@ export default function App() {
             </button>
           {cloudLineId && (
             <>
+              <button type="button" onClick={handleCopyShareLink} style={{ padding: '6px 12px', fontSize: '0.9rem', background: shareLinkCopied ? '#27ae60' : undefined, color: shareLinkCopied ? '#fff' : undefined }}>
+                {shareLinkCopied ? 'Link Copied!' : 'Share Link'}
+              </button>
               <button type="button" onClick={handleLeaveLine} style={{ padding: '6px 12px', fontSize: '0.9rem' }}>
                 Leave line
               </button>

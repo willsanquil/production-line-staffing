@@ -75,7 +75,16 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
     setLoading(true);
     setError(null);
     listCloudLines()
-      .then(setLines)
+      .then((fetchedLines) => {
+        setLines(fetchedLines);
+        // Check for cloudLine URL param to pre-select and go to join step
+        const params = new URLSearchParams(window.location.search);
+        const cloudLineParam = params.get('cloudLine');
+        if (cloudLineParam && fetchedLines.some((l) => l.id === cloudLineParam)) {
+          setJoinLineId(cloudLineParam);
+          setStep('join');
+        }
+      })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
   }, [step, cloudAvailable]);
