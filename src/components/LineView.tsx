@@ -1,4 +1,4 @@
-import { memo, type CSSProperties } from 'react';
+import { memo, useState, useEffect, type CSSProperties } from 'react';
 import type { AreaId, BreakSchedulesByArea, RosterPerson, SlotsByArea } from '../types';
 import type { SkillLevel } from '../types';
 import { LINE_SECTIONS, LEAD_SLOT_AREAS, areaRequiresTrainedOrExpert as defaultRequiresTrainedOrExpert } from '../types';
@@ -9,11 +9,24 @@ import type { SlotLabelsByArea } from '../types';
 import { getAreaRisks } from '../lib/lineViewRisks';
 
 const BAR_HEIGHT = 18;
+const BAR_HEIGHT_COMPACT = 10;
 
-function KnowledgeBar({ position }: { position: number | null }) {
+function useCompactPresentation() {
+  const [compact, setCompact] = useState(typeof window !== 'undefined' && window.matchMedia('(max-width: 480px)').matches);
+  useEffect(() => {
+    const m = window.matchMedia('(max-width: 480px)');
+    const fn = () => setCompact(m.matches);
+    m.addEventListener('change', fn);
+    return () => m.removeEventListener('change', fn);
+  }, []);
+  return compact;
+}
+
+function KnowledgeBar({ position, compact = false }: { position: number | null; compact?: boolean }) {
+  const h = compact ? BAR_HEIGHT_COMPACT : BAR_HEIGHT;
   return (
     <div className="seniority-spectrum-wrap" style={{ marginBottom: 0 }}>
-      <div className="seniority-spectrum" style={{ position: 'relative', height: BAR_HEIGHT, borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
+      <div className="seniority-spectrum" style={{ position: 'relative', height: h, borderRadius: 3, overflow: 'hidden', display: 'flex' }}>
         <div className="skill-no_experience" style={{ flex: 1, minWidth: 0 }} />
         <div className="skill-training" style={{ flex: 1, minWidth: 0 }} />
         <div className="skill-trained" style={{ flex: 1, minWidth: 0 }} />
@@ -23,14 +36,14 @@ function KnowledgeBar({ position }: { position: number | null }) {
             className="seniority-spectrum-arrow"
             style={{
               position: 'absolute',
-              left: `clamp(4px, ${position}%, calc(100% - 8px))`,
+              left: `clamp(2px, ${position}%, calc(100% - 4px))`,
               top: '50%',
               transform: 'translate(-50%, -50%)',
               width: 0,
               height: 0,
-              borderLeft: '5px solid transparent',
-              borderRight: '5px solid transparent',
-              borderTop: '7px solid #1a1a1a',
+              borderLeft: compact ? '3px solid transparent' : '5px solid transparent',
+              borderRight: compact ? '3px solid transparent' : '5px solid transparent',
+              borderTop: compact ? '4px solid #1a1a1a' : '7px solid #1a1a1a',
               filter: 'drop-shadow(0 0 1px #fff)',
               pointerEvents: 'none',
             }}
@@ -90,6 +103,7 @@ function LineViewInner({
   rotationCount = 3,
   breaksScope = 'station',
 }: LineViewProps) {
+  const isCompact = useCompactPresentation();
   const sections = lineSectionsProp ?? LINE_SECTIONS;
   const leadSlotKeys = leadSlotKeysProp ?? [...LEAD_SLOT_AREAS];
   const getLeadSlotLabel = getLeadSlotLabelProp ?? ((key: string) => areaLabels[key] ?? key);
@@ -235,6 +249,96 @@ function LineViewInner({
     );
   };
 
+  /** Mobile compact: one table per area with Name + Break slot. */
+  const renderCompactAreaBlock = (
+    areaId: string,
+    allSlots: { id: string; personId: string | null; disabled?: boolean }[],
+    subLabel: string
+  ) => {
+    const areaSlots = allSlots.filter((s) => !s.disabled);
+    const filled = areaSlots.filter((s) => s.personId).length;
+    const min = effectiveCapacity[areaId]?.min ?? 0;
+    const areaRequiresTrained = requiresTrainedOrExpert(areaId);
+    const hasTrainedOrExpert =
+      filled > 0 &&
+      areaSlots.some((s) => {
+        if (!s.personId) return false;
+        const p = roster.find((r) => r.id === s.personId);
+        const sk = p?.skills[areaId] ?? 'no_experience';
+        return sk === 'trained' || sk === 'expert';
+      });
+    const risks = getAreaRisks({
+      filled,
+      min,
+      disabledCount: allSlots.length - areaSlots.length,
+      needsTrainedOrExpert: areaRequiresTrained && filled >= 1 && !hasTrainedOrExpert,
+    });
+    const metricExtra = risks.length > 0 ? ` · ${risks.join(' · ')}` : '';
+    const hasRoleLabels = areaSlots.some((_, idx) => !isGenericSlotLabel(getLabel(areaId, idx)));
+    const personIds = areaSlots.map((s) => s.personId).filter(Boolean) as string[];
+    const areaKnowledgePosition =
+      personIds.length > 0
+        ? (personIds.reduce((sum, id) => {
+            const p = roster.find((r) => r.id === id);
+            const level = p?.skills[areaId] ?? 'no_experience';
+            const score = level === 'expert' ? 3 : level === 'trained' ? 2 : level === 'training' ? 1 : 0;
+            return sum + score;
+          }, 0) /
+            personIds.length /
+            3) *
+          100
+        : null;
+    const breakAssignments = breakSchedules?.[areaId];
+    const showBreakCol = !!breakAssignments && Object.keys(breakAssignments).length > 0 && rotationCount >= 1;
+
+    return (
+      <div key={areaId} className="presentation-area-block presentation-area-block-compact">
+        <div className="presentation-area-header presentation-area-header-compact">
+          <span className="presentation-area-title-compact">
+            {subLabel} {filled}/{min}{metricExtra}
+          </span>
+          <div className="presentation-area-bar-compact">
+            <KnowledgeBar position={areaKnowledgePosition} compact />
+          </div>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="presentation-table-compact">
+            <thead>
+              <tr>
+                {hasRoleLabels && <th className="presentation-th-compact">Role</th>}
+                <th className="presentation-th-compact">Name</th>
+                {showBreakCol && <th className="presentation-th-compact">Break</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {allSlots.map((slot, idx) => {
+                if (slot.disabled) return null;
+                const slotLabel = getLabel(areaId, idx);
+                const name = getName(slot.personId);
+                const skill = getSkillInArea(areaId, slot.personId);
+                const showLabel = !isGenericSlotLabel(slotLabel);
+                const breakRot = slot.personId && breakAssignments?.[slot.personId]?.breakRotation;
+                return (
+                  <tr key={slot.id}>
+                    {hasRoleLabels && (
+                      <td className="presentation-td-compact">{showLabel ? slotLabel : '—'}</td>
+                    )}
+                    <td className="presentation-td-compact">
+                      <span className={`skill-name-${skill}`}>{name}</span>
+                    </td>
+                    {showBreakCol && (
+                      <td className="presentation-td-compact presentation-td-break">{breakRot ?? '—'}</td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   const rotCount = Math.min(6, Math.max(1, rotationCount));
   const renderBreakMatrix = (areaId: string, areaLabel: string) => {
     const assignments = breakSchedules?.[areaId];
@@ -255,15 +359,16 @@ function LineViewInner({
   };
 
   return (
-    <div className="line-view line-view-presentation" style={{ maxWidth: 960, margin: '0 auto', padding: '12px 16px 80px' }}>
-      <header className="line-view-summary" style={{ marginBottom: 20 }}>
-        <div className="line-view-headline" style={{ fontSize: 'clamp(1.75rem, 6vw, 2.25rem)', fontWeight: 700, color: '#1a1a1a', marginBottom: 12, letterSpacing: '-0.02em' }}>
-          {totalOnLine}/{fullStaff}
-        </div>
-        <div className="line-view-metrics" style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-            <span style={{ fontSize: '0.8rem', color: '#555', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Staffing</span>
-            <div style={{ height: BAR_HEIGHT, width: 100, borderRadius: 6, overflow: 'hidden', background: '#eee', position: 'relative', flexShrink: 0 }}>
+    <div
+      className={`line-view line-view-presentation${isCompact ? ' line-view-compact' : ''}`}
+      style={{ maxWidth: 960, margin: '0 auto', padding: isCompact ? '6px 8px 60px' : '12px 16px 80px' }}
+    >
+      <header className="line-view-summary" style={{ marginBottom: isCompact ? 8 : 20 }}>
+        {isCompact ? (
+          <div className="line-view-summary-compact">
+            <span className="line-view-headline-compact">{totalOnLine}/{fullStaff}</span>
+            <span className="line-view-metric-compact">{staffingPct}%</span>
+            <div className="line-view-bar-compact" style={{ width: 48, height: BAR_HEIGHT_COMPACT, position: 'relative', borderRadius: 3, overflow: 'hidden', background: '#eee' }}>
               <div
                 style={{
                   position: 'absolute',
@@ -272,34 +377,64 @@ function LineViewInner({
                   bottom: 0,
                   width: `${Math.min(100, staffingPct)}%`,
                   background: staffingPct >= 80 ? '#27ae60' : staffingPct >= 50 ? '#f1c40f' : '#e74c3c',
-                  transition: 'width 0.2s ease',
+                  borderRadius: 0,
                 }}
               />
             </div>
-            <span style={{ fontSize: '1rem', fontWeight: 600, color: '#1a1a1a' }}>{staffingPct}%</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-            <span style={{ fontSize: '0.8rem', color: '#555', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Knowledge</span>
-            <div style={{ width: 100, flexShrink: 0 }}>
-              <KnowledgeBar position={knowledgePosition} />
-            </div>
-            <span style={{ fontSize: '1rem', fontWeight: 600, color: '#1a1a1a' }}>
+            <span className="line-view-metric-compact">
               {lineHealthScore != null ? `${(lineHealthScore).toFixed(1)}/3` : '—'}
             </span>
+            <div className="line-view-bar-compact line-view-knowledge-bar-compact">
+              <KnowledgeBar position={knowledgePosition} compact />
+            </div>
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="line-view-headline" style={{ fontSize: 'clamp(1.75rem, 6vw, 2.25rem)', fontWeight: 700, color: '#1a1a1a', marginBottom: 12, letterSpacing: '-0.02em' }}>
+              {totalOnLine}/{fullStaff}
+            </div>
+            <div className="line-view-metrics" style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <span style={{ fontSize: '0.8rem', color: '#555', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Staffing</span>
+                <div style={{ height: BAR_HEIGHT, width: 100, borderRadius: 6, overflow: 'hidden', background: '#eee', position: 'relative', flexShrink: 0 }}>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: `${Math.min(100, staffingPct)}%`,
+                      background: staffingPct >= 80 ? '#27ae60' : staffingPct >= 50 ? '#f1c40f' : '#e74c3c',
+                      transition: 'width 0.2s ease',
+                    }}
+                  />
+                </div>
+                <span style={{ fontSize: '1rem', fontWeight: 600, color: '#1a1a1a' }}>{staffingPct}%</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <span style={{ fontSize: '0.8rem', color: '#555', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Knowledge</span>
+                <div style={{ width: 100, flexShrink: 0 }}>
+                  <KnowledgeBar position={knowledgePosition} />
+                </div>
+                <span style={{ fontSize: '1rem', fontWeight: 600, color: '#1a1a1a' }}>
+                  {lineHealthScore != null ? `${(lineHealthScore).toFixed(1)}/3` : '—'}
+                </span>
+              </div>
+            </div>
+          </>
+        )}
       </header>
 
       {assignedLeadKeys.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
-          <section style={sectionStyle}>
-            <h2 style={sectionTitleStyle}>Leads</h2>
+        isCompact ? (
+          <section className="presentation-section-compact" style={{ ...sectionStyle, padding: 6, marginBottom: 8 }}>
+            <h2 style={{ ...sectionTitleStyle, fontSize: '0.8rem', marginBottom: 4 }}>Leads</h2>
             <div style={{ overflowX: 'auto' }}>
-              <table style={presentationTableStyle}>
+              <table className="presentation-table-compact">
                 <thead>
                   <tr>
-                    <th style={presentationThStyle}>Position</th>
-                    <th style={presentationThStyle}>Name</th>
+                    <th className="presentation-th-compact">Position</th>
+                    <th className="presentation-th-compact">Name</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -309,9 +444,9 @@ function LineViewInner({
                     const skill = getSkillInArea(skillAreaId as AreaId, personId);
                     return (
                       <tr key={key}>
-                        <td style={presentationTdStyle}>{getLeadSlotLabel(key)}</td>
-                        <td style={presentationTdStyle}>
-                          <span className={`skill-name-${skill}`} style={{ fontSize: nameFontSize, fontWeight: 600 }}>{getName(personId)}</span>
+                        <td className="presentation-td-compact">{getLeadSlotLabel(key)}</td>
+                        <td className="presentation-td-compact">
+                          <span className={`skill-name-${skill}`}>{getName(personId)}</span>
                         </td>
                       </tr>
                     );
@@ -320,24 +455,55 @@ function LineViewInner({
               </table>
             </div>
           </section>
-          <div>
-            {breaksScope === 'line' && breakSchedules?.[BREAK_LINE_WIDE_KEY] && Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).length > 0 && rotationCount >= 1 && (
-              <BreakTable
-                people={Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).map((id) => {
-                  const p = roster.find((r) => r.id === id);
-                  return { id, name: p?.name ?? id };
-                })}
-                assignments={breakSchedules[BREAK_LINE_WIDE_KEY]}
-                rotationCount={rotCount}
-                title="Break Schedule"
-                presentationMode
-              />
-            )}
+        ) : (
+          <div className="presentation-row" style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
+            <section style={sectionStyle}>
+              <h2 style={sectionTitleStyle}>Leads</h2>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={presentationTableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={presentationThStyle}>Position</th>
+                      <th style={presentationThStyle}>Name</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assignedLeadKeys.map((key: string) => {
+                      const personId = leadSlots[key]!;
+                      const skillAreaId = /^\d+$/.test(key) ? (firstAreaId ?? '') : key;
+                      const skill = getSkillInArea(skillAreaId as AreaId, personId);
+                      return (
+                        <tr key={key}>
+                          <td style={presentationTdStyle}>{getLeadSlotLabel(key)}</td>
+                          <td style={presentationTdStyle}>
+                            <span className={`skill-name-${skill}`} style={{ fontSize: nameFontSize, fontWeight: 600 }}>{getName(personId)}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <div>
+              {breaksScope === 'line' && breakSchedules?.[BREAK_LINE_WIDE_KEY] && Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).length > 0 && rotationCount >= 1 && (
+                <BreakTable
+                  people={Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).map((id) => {
+                    const p = roster.find((r) => r.id === id);
+                    return { id, name: p?.name ?? id };
+                  })}
+                  assignments={breakSchedules[BREAK_LINE_WIDE_KEY]}
+                  rotationCount={rotCount}
+                  title="Break Schedule"
+                  presentationMode
+                />
+              )}
+            </div>
           </div>
-        </div>
+        )
       )}
 
-      {breaksScope === 'line' && breakSchedules?.[BREAK_LINE_WIDE_KEY] && Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).length > 0 && rotationCount >= 1 && assignedLeadKeys.length === 0 && (
+      {!isCompact && breaksScope === 'line' && breakSchedules?.[BREAK_LINE_WIDE_KEY] && Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).length > 0 && rotationCount >= 1 && assignedLeadKeys.length === 0 && (
         <div className="presentation-row" style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
           <div />
           <BreakTable
@@ -356,6 +522,28 @@ function LineViewInner({
       {sections.map((section) => {
         const isCombined = Array.isArray(section);
         const rowKey = isCombined ? `row-${(section as [string, string]).join('-')}` : `row-${section as string}`;
+        if (isCompact) {
+          if (isCombined) {
+            const [idA, idB] = section as [string, string];
+            const slotsA = slots[idA] ?? [];
+            const slotsB = slots[idB] ?? [];
+            return (
+              <div key={rowKey} className="presentation-section-compact" style={{ ...sectionStyle, padding: 6, marginBottom: 8 }}>
+                <h2 style={{ ...sectionTitleStyle, fontSize: '0.8rem', marginBottom: 4 }}>{areaLabels[idA] ?? idA} & {areaLabels[idB] ?? idB}</h2>
+                {renderCompactAreaBlock(idA, slotsA, areaLabels[idA] ?? idA)}
+                {renderCompactAreaBlock(idB, slotsB, areaLabels[idB] ?? idB)}
+              </div>
+            );
+          }
+          const areaId = section as string;
+          const allAreaSlots = slots[areaId] ?? [];
+          const areaLabel = areaLabels[areaId] ?? areaId;
+          return (
+            <div key={rowKey} className="presentation-section-compact" style={{ ...sectionStyle, padding: 6, marginBottom: 8 }}>
+              {renderCompactAreaBlock(areaId, allAreaSlots, areaLabel)}
+            </div>
+          );
+        }
         if (isCombined) {
           const [idA, idB] = section as [string, string];
           const slotsA = slots[idA] ?? [];

@@ -111,6 +111,85 @@ body {
   .line-view { padding-left: 8px; padding-right: 8px; }
 }
 
+/* Compact presentation (≤480px): dense layout so one area + breaks fits on screen */
+.line-view-compact .line-view-summary-compact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 0.75rem;
+}
+.line-view-compact .line-view-headline-compact {
+  font-weight: 700;
+  color: #1a1a1a;
+  font-size: 1.1rem;
+}
+.line-view-compact .line-view-metric-compact {
+  font-weight: 600;
+  color: #333;
+}
+.line-view-compact .line-view-knowledge-bar-compact {
+  width: 48px;
+}
+.line-view-compact .presentation-section-compact {
+  background: #fff;
+  border-radius: 6px;
+  border: 1px solid #e5e5e5;
+}
+.line-view-compact .presentation-area-block-compact {
+  margin-bottom: 6px;
+}
+.line-view-compact .presentation-area-block-compact:last-child {
+  margin-bottom: 0;
+}
+.line-view-compact .presentation-area-header-compact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.line-view-compact .presentation-area-title-compact {
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: #1a1a1a;
+}
+.line-view-compact .presentation-area-bar-compact {
+  width: 56px;
+  flex-shrink: 0;
+}
+.line-view-compact .presentation-table-compact {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.7rem;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.line-view-compact .presentation-th-compact {
+  border: 1px solid #ccc;
+  padding: 3px 5px;
+  text-align: left;
+  background: #f5f5f5;
+  font-weight: 600;
+  font-size: 0.65rem;
+}
+.line-view-compact .presentation-td-compact {
+  border: 1px solid #ddd;
+  padding: 3px 5px;
+  font-size: 0.7rem;
+}
+.line-view-compact .presentation-td-break {
+  text-align: center;
+  width: 2em;
+}
+.line-view-compact .skill-name-no_experience,
+.line-view-compact .skill-name-training,
+.line-view-compact .skill-name-trained,
+.line-view-compact .skill-name-expert {
+  font-weight: 600;
+}
+
 .section-card {
   background: #fff;
   border-radius: 8px;
