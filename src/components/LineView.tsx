@@ -208,6 +208,14 @@ function LineViewInner({
         : null;
     const breakAssignments = breakSchedules?.[areaId];
     const showBreakCols = !!breakAssignments && Object.keys(breakAssignments).length > 0 && rotCount >= 1;
+    const understaffed = filled < min;
+    const uncoveredRotations: number[] = [];
+    if (understaffed && showBreakCols && breakAssignments) {
+      for (let r = 1; r <= rotCount; r++) {
+        const hasSomeone = areaSlots.some((s) => s.personId && breakAssignments[s.personId]?.breakRotation === r);
+        if (!hasSomeone) uncoveredRotations.push(r);
+      }
+    }
 
     const tableClassName = compact ? 'presentation-table-compact' : undefined;
     const thClassName = compact ? 'presentation-th-compact' : undefined;
@@ -240,9 +248,24 @@ function LineViewInner({
               <tr>
                 <th style={thStyle} className={thClassName}>Role</th>
                 <th style={thStyle} className={thClassName}>Name</th>
-                {showBreakCols && breakSlotLabels.map((label, i) => (
-                  <th key={i} style={thCenterStyle} className={thClassName}>{label}</th>
-                ))}
+                {showBreakCols && breakSlotLabels.map((label, i) => {
+                  const rot = i + 1;
+                  const isUncovered = uncoveredRotations.includes(rot);
+                  return (
+                    <th
+                      key={i}
+                      style={{
+                        ...thCenterStyle,
+                        ...(isUncovered ? { color: '#c0392b', fontWeight: 700, background: 'rgba(192, 57, 43, 0.08)' } : {}),
+                      }}
+                      className={thClassName}
+                      title={isUncovered ? 'Uncovered break — no one in this area is off during this slot' : undefined}
+                    >
+                      {label}
+                      {isUncovered && <div style={{ fontSize: '0.7em', marginTop: 2 }}>Uncovered</div>}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>

@@ -91,6 +91,21 @@ export function getLinkedSlotGroupsForArea(
   return Object.values(byLabel).filter((g) => g.length > 1);
 }
 
+/** Slot indices in an area whose label contains "float" (case-insensitive). Floats are assigned breaks last so others get preferred slots. */
+export function getFloatSlotIndicesForArea(
+  config: LineConfig,
+  areaId: string,
+  slotCount: number,
+  slotLabelsByArea?: SlotLabelsByArea | null
+): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < slotCount; i++) {
+    const label = getSlotLabelForLine(config, areaId, i, slotLabelsByArea);
+    if (label.toLowerCase().includes('float')) out.push(i);
+  }
+  return out;
+}
+
 /** Whether the area requires at least one trained or expert to run. Default false (unchecked). */
 export function areaRequiresTrainedOrExpertFromConfig(config: LineConfig, areaId: string): boolean {
   const area = config.areas.find((a) => a.id === areaId);

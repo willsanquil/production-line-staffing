@@ -145,21 +145,20 @@ function assignLinkedPersonToBucket(
 
 /**
  * Per-area assignment when some slots are linked (same label): people in a linked group get distinct rotations.
+ * Float slots (indices in floatSlotIndices) are assigned last so others get preferred break slots.
  */
 function runAssignmentWithLinkedSlots(
   peopleWithSlot: { personId: string; skillScore: number; preference: BreakPreference; slotIndex: number }[],
   rotationCount: number,
-  linkedGroups: number[][]
+  linkedGroups: number[][],
+  floatSlotIndices: number[] = []
 ): Record<string, { breakRotation: BreakRotation; lunchRotation: LunchRotation }> {
   const assignments: Record<string, { breakRotation: BreakRotation; lunchRotation: LunchRotation }> = {};
   const breakBuckets: Record<number, Bucket> = {};
   for (let r = 1; r <= rotationCount; r++) {
     breakBuckets[r] = { skillSum: 0, personIds: [] };
   }
-  const slotToGroup = new Map<number, number[]>();
-  for (const group of linkedGroups) {
-    for (const idx of group) slotToGroup.set(idx, group);
-  }
+  const floatSet = new Set(floatSlotIndices);
   const prefOrder = (p: BreakPreference) =>
     p === 'prefer_early' ? 0 : p === 'prefer_middle' ? 1 : p === 'prefer_late' ? 2 : 3;
   const assignedPersonIds = new Set<string>();
@@ -184,7 +183,9 @@ function runAssignmentWithLinkedSlots(
     }
   }
 
-  const remaining = peopleWithSlot.filter((p) => !assignedPersonIds.has(p.personId));
+  const remaining = peopleWithSlot
+    .filter((p) => !assignedPersonIds.has(p.personId))
+    .sort((a, b) => (floatSet.has(a.slotIndex) ? 1 : 0) - (floatSet.has(b.slotIndex) ? 1 : 0));
   for (const { personId, skillScore, preference } of remaining) {
     const rot = assignToBestBucket(personId, skillScore, preference, breakBuckets, rotationCount);
     assignments[personId] = { breakRotation: rot as BreakRotation, lunchRotation: rot as LunchRotation };
@@ -204,6 +205,8 @@ export interface GenerateBreakSchedulesOptions {
   leadSlots?: Record<string, string | null>;
   /** Per area: groups of slot indices that share a break slot (e.g. same role); people in a group get distinct rotations. */
   linkedSlotsByArea?: Record<string, number[][]>;
+  /** Per area: slot indices whose role contains "float"; they are assigned breaks last so others get preferred slots. */
+  floatSlotIndicesByArea?: Record<string, number[]>;
 }
 
 /**
@@ -216,7 +219,7 @@ export function generateBreakSchedules(
   areaIds: string[] = [...AREA_IDS],
   options: GenerateBreakSchedulesOptions = {}
 ): BreakSchedulesByArea {
-  const { rotationCount = 3, scope = 'station', leadSlots = {}, linkedSlotsByArea = {} } = options;
+  const { rotationCount = 3, scope = 'station', leadSlots = {}, linkedSlotsByArea = {}, floatSlotIndicesByArea = {} } = options;
   const n = Math.min(6, Math.max(1, rotationCount));
   const result: BreakSchedulesByArea = {};
 
@@ -273,10 +276,11 @@ export function generateBreakSchedules(
     if (peopleWithSlot.length === 0) continue;
 
     const linkedGroups = linkedSlotsByArea[areaId] ?? [];
+    const floatIndices = floatSlotIndicesByArea[areaId] ?? [];
     const people = peopleWithSlot.map(({ personId, skillScore, preference }) => ({ personId, skillScore, preference }));
 
-    if (linkedGroups.length > 0) {
-      result[areaId] = runAssignmentWithLinkedSlots(peopleWithSlot, n, linkedGroups);
+    if (linkedGroups.length > 0 || floatIndices.length > 0) {
+      result[areaId] = runAssignmentWithLinkedSlots(peopleWithSlot, n, linkedGroups, floatIndices);
     } else {
       result[areaId] = runAssignmentForPeople(people, n);
     }

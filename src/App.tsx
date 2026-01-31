@@ -63,6 +63,7 @@ import {
   getLeadSlotKeys,
   getLeadSlotLabel,
   getLinkedSlotGroupsForArea,
+  getFloatSlotIndicesForArea,
 } from './lib/lineConfig';
 import { createEmptyPerson, createEmptyOTPerson, createEmptySlot, getEmptyLineState, normalizeSlotsToCapacity, normalizeSlotsToLineCapacity } from './data/initialState';
 import { RosterGrid } from './components/RosterGrid';
@@ -221,6 +222,7 @@ export default function App() {
   const rootStateRef = useRef(rootState);
   rootStateRef.current = rootState;
   const lastLocalChangeRef = useRef(0);
+  const cloudSaveInProgressRef = useRef(false);
 
   useEffect(() => {
     if (appMode !== 'loading-cloud') return;
@@ -299,7 +301,12 @@ export default function App() {
       const lineId = cloudLineId;
       const password = cloudPasswordRef.current;
       if (lineId && password) {
-        setLineState(lineId, password, payload).catch((e) => console.error('Cloud save failed:', e));
+        cloudSaveInProgressRef.current = true;
+        setLineState(lineId, password, payload)
+          .catch((e) => console.error('Cloud save failed:', e))
+          .finally(() => {
+            cloudSaveInProgressRef.current = false;
+          });
       } else {
         saveRootState(payload);
       }
@@ -317,8 +324,12 @@ export default function App() {
     if (!password) return;
     const intervalId = setInterval(() => {
       if (Date.now() - lastLocalChangeRef.current < CLOUD_POLL_SKIP_AFTER_LOCAL_CHANGE_MS) return;
+      if (cloudSaveInProgressRef.current) return;
       getLineState(cloudLineId, password)
-        .then((root) => setRootState(root))
+        .then((root) => {
+          if (cloudSaveInProgressRef.current) return;
+          setRootState(root);
+        })
         .catch(() => { /* ignore poll errors (e.g. network) */ });
     }, CLOUD_POLL_MS);
     return () => clearInterval(intervalId);
@@ -375,6 +386,7 @@ export default function App() {
   }, []);
 
   const setLeadSlot = useCallback((areaId: string, personId: string | null) => {
+    lastLocalChangeRef.current = Date.now();
     setLeadSlots((prev) => ({ ...prev, [areaId]: personId }));
     if (personId) {
       setSlots((prev) => {
@@ -717,9 +729,11 @@ export default function App() {
     setSlots(nextSlots);
     if (currentConfig && getBreaksEnabled(currentConfig)) {
       const linkedSlotsByArea: Record<string, number[][]> = {};
+      const floatSlotIndicesByArea: Record<string, number[]> = {};
       for (const areaId of areaIds) {
         const areaSlots = nextSlots[areaId] ?? [];
         linkedSlotsByArea[areaId] = getLinkedSlotGroupsForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
+        floatSlotIndicesByArea[areaId] = getFloatSlotIndicesForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
       }
       setBreakSchedules(
         generateBreakSchedules(roster, nextSlots, areaIds, {
@@ -727,6 +741,7 @@ export default function App() {
           scope: getBreaksScope(currentConfig),
           leadSlots,
           linkedSlotsByArea,
+          floatSlotIndicesByArea,
         })
       );
     } else {
