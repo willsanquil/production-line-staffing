@@ -1,5 +1,5 @@
 import { memo, type CSSProperties } from 'react';
-import type { AreaId, BreakRotation, BreakSchedulesByArea, LunchRotation, RosterPerson, SlotsByArea } from '../types';
+import type { AreaId, BreakSchedulesByArea, RosterPerson, SlotsByArea } from '../types';
 import type { SkillLevel } from '../types';
 import { LINE_SECTIONS, LEAD_SLOT_AREAS, areaRequiresTrainedOrExpert as defaultRequiresTrainedOrExpert } from '../types';
 import { BREAK_LINE_WIDE_KEY } from '../lib/lineConfig';
