@@ -73,7 +73,7 @@ import { CombinedAreaStaffing } from './components/CombinedAreaStaffing';
 import { LineView } from './components/LineView';
 import { DayBank } from './components/DayBank';
 import { TrainingReport } from './components/TrainingReport';
-import { randomizeAssignments, spreadTalent } from './lib/automation';
+import { randomizeAssignments, spreadTalent, fillRemainingAssignments } from './lib/automation';
 import { generateBreakSchedules } from './lib/breakSchedules';
 import { saveRootState, loadSavedDays, addSavedDay, removeSavedDay, exportStateToJson, importStateFromJson } from './lib/persist';
 import { saveToFile, overwriteFile, openFromFile, isSaveToFileSupported } from './lib/fileStorage';
@@ -631,6 +631,26 @@ export default function App() {
     setBreakSchedules({});
   }, [areaIds]);
 
+  const handleRegenerateBreaks = useCallback(() => {
+    if (!currentConfig || !getBreaksEnabled(currentConfig)) return;
+    const linkedSlotsByArea: Record<string, number[][]> = {};
+    const floatSlotIndicesByArea: Record<string, number[]> = {};
+    for (const areaId of areaIds) {
+      const areaSlots = slots[areaId] ?? [];
+      linkedSlotsByArea[areaId] = getLinkedSlotGroupsForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
+      floatSlotIndicesByArea[areaId] = getFloatSlotIndicesForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
+    }
+    setBreakSchedules(
+      generateBreakSchedules(roster, slots, areaIds, {
+        rotationCount: getBreakRotations(currentConfig),
+        scope: getBreaksScope(currentConfig),
+        leadSlots,
+        linkedSlotsByArea,
+        floatSlotIndicesByArea,
+      })
+    );
+  }, [currentConfig, areaIds, slots, roster, leadSlots, slotLabelsByArea]);
+
   const handleSaveDay = useCallback((date: string, name?: string) => {
     const state = stateRef.current;
     addSavedDay(
@@ -726,6 +746,31 @@ export default function App() {
 
   const handleSpreadTalent = useCallback(() => {
     const nextSlots = spreadTalent(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
+    setSlots(nextSlots);
+    if (currentConfig && getBreaksEnabled(currentConfig)) {
+      const linkedSlotsByArea: Record<string, number[][]> = {};
+      const floatSlotIndicesByArea: Record<string, number[]> = {};
+      for (const areaId of areaIds) {
+        const areaSlots = nextSlots[areaId] ?? [];
+        linkedSlotsByArea[areaId] = getLinkedSlotGroupsForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
+        floatSlotIndicesByArea[areaId] = getFloatSlotIndicesForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
+      }
+      setBreakSchedules(
+        generateBreakSchedules(roster, nextSlots, areaIds, {
+          rotationCount: getBreakRotations(currentConfig),
+          scope: getBreaksScope(currentConfig),
+          leadSlots,
+          linkedSlotsByArea,
+          floatSlotIndicesByArea,
+        })
+      );
+    } else {
+      setBreakSchedules({});
+    }
+  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, currentConfig, leadSlots, slotLabelsByArea]);
+
+  const handleFillRemaining = useCallback(() => {
+    const nextSlots = fillRemainingAssignments(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
     setSlots(nextSlots);
     if (currentConfig && getBreaksEnabled(currentConfig)) {
       const linkedSlotsByArea: Record<string, number[][]> = {};
@@ -1356,11 +1401,17 @@ export default function App() {
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <button type="button" onClick={handleSpreadTalent}>Spread talent</button>
+        <button type="button" onClick={handleFillRemaining}>Fill remaining</button>
         <button type="button" onClick={handleRandomize}>Randomize</button>
         {/* STRETCH temporarily disabled
         <button type="button" onClick={handleStretch} title="Push team outside comfort zone; prefer areas they want to learn">STRETCH</button>
         */}
         <button type="button" onClick={handleClearLine}>Clear line</button>
+        {currentConfig && getBreaksEnabled(currentConfig) && (
+          <button type="button" onClick={handleRegenerateBreaks} title="Regenerate break schedule from current assignments and preferences">
+            Regenerate breaks
+          </button>
+        )}
       </div>
 
       {currentConfig && currentConfig.id !== 'ic' && (

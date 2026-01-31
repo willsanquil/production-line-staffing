@@ -61,6 +61,20 @@ function copySlotsPreservingLocked(slotsByArea: SlotsByArea, areaIds: string[]):
   return { out, assignedFromLocked };
 }
 
+/** Copy slots as-is; preserve every slot that already has a personId and return their ids so fill-remaining skips those people elsewhere. */
+function copySlotsPreservingFilled(slotsByArea: SlotsByArea, areaIds: string[]): { out: SlotsByArea; assignedFromFilled: Set<string> } {
+  const assignedFromFilled = new Set<string>();
+  const out = {} as SlotsByArea;
+  for (const areaId of areaIds) {
+    const list = slotsByArea[areaId] ?? [];
+    out[areaId] = list.map((s) => {
+      if (s.personId) assignedFromFilled.add(s.personId);
+      return { ...s };
+    });
+  }
+  return { out, assignedFromFilled };
+}
+
 /** Phase 1: assign first enabled, unlocked slot of each area that requires trained/expert to a trained or expert person. */
 function fillAnchorSlots(
   out: SlotsByArea,
@@ -138,6 +152,66 @@ export function spreadTalent(
   );
   const { out, assignedFromLocked } = copySlotsPreservingLocked(slotsByArea, areaIds);
   const assigned = new Set(assignedFromLocked);
+  fillAnchorSlots(out, available, assigned, areaIds, requiresFn);
+  const fillableIdx = (areaId: AreaId) =>
+    (out[areaId] ?? []).map((_, i) => i).filter((i) => !out[areaId][i].disabled && !out[areaId][i].locked);
+  const minSlotOrder: { areaId: AreaId; slotIdx: number }[] = [];
+  for (const areaId of areaIds) {
+    const c = cap[areaId];
+    if (c) fillableIdx(areaId).slice(0, c.min).forEach((slotIdx) => minSlotOrder.push({ areaId, slotIdx }));
+  }
+  minSlotOrder.sort((a, b) => {
+    const priority = (areaId: AreaId) =>
+      juicedAreas[areaId] ? 1 : deJuicedAreas[areaId] ? -1 : 0;
+    const pA = priority(a.areaId);
+    const pB = priority(b.areaId);
+    if (pB !== pA) return pB - pA;
+    if (a.areaId !== b.areaId) return areaIds.indexOf(a.areaId) - areaIds.indexOf(b.areaId);
+    return a.slotIdx - b.slotIdx;
+  });
+  const overflowOrder: { areaId: AreaId; slotIdx: number }[] = [];
+  for (const areaId of areaIds) {
+    const c = cap[areaId];
+    if (c) fillableIdx(areaId).slice(c.min).forEach((slotIdx) => overflowOrder.push({ areaId, slotIdx }));
+  }
+  const slotOrder = [...minSlotOrder, ...overflowOrder];
+  for (const { areaId, slotIdx } of slotOrder) {
+    const slot = out[areaId]?.[slotIdx];
+    if (!slot || slot.personId != null) continue;
+    const candidates = [...available]
+      .filter((p) => !assigned.has(p.id) && eligibleForArea(p, areaId, requiresFn))
+      .sort((a, b) => scoreForArea(b, areaId) - scoreForArea(a, areaId));
+    if (candidates.length > 0) {
+      slot.personId = candidates[0].id;
+      assigned.add(candidates[0].id);
+    }
+  }
+  return out;
+}
+
+/** Fill remaining: leave already-filled slots unchanged; fill only empty slots using same rules as spread talent (best fit, eligibility, juiced/dejuiced order). */
+export function fillRemainingAssignments(
+  roster: RosterPerson[],
+  slotsByArea: SlotsByArea,
+  juicedAreas: JuicedAreas = {},
+  leadAssignedPersonIds: Set<string> = new Set(),
+  deJuicedAreas: DeJuicedAreas = {},
+  capacity?: EffectiveCapacity | null,
+  areaIds: string[] = [...AREA_IDS],
+  areaRequiresTrainedOrExpertFn?: (areaId: string) => boolean
+): SlotsByArea {
+  const requiresFn = areaRequiresTrainedOrExpertFn ?? areaRequiresTrainedOrExpert;
+  const cap = capacity ?? AREA_CAPACITY;
+  const available = shuffle(
+    roster.filter(
+      (p) =>
+        !p.absent &&
+        !leadAssignedPersonIds.has(p.id) &&
+        (!p.ot || p.otHereToday)
+    )
+  );
+  const { out, assignedFromFilled } = copySlotsPreservingFilled(slotsByArea, areaIds);
+  const assigned = new Set(assignedFromFilled);
   fillAnchorSlots(out, available, assigned, areaIds, requiresFn);
   const fillableIdx = (areaId: AreaId) =>
     (out[areaId] ?? []).map((_, i) => i).filter((i) => !out[areaId][i].disabled && !out[areaId][i].locked);
