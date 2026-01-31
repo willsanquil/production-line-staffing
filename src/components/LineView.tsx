@@ -160,6 +160,9 @@ function LineViewInner({
     width: '100%',
     borderCollapse: 'collapse',
     fontSize: '1.05rem',
+    border: '1px solid #ccc',
+    borderRadius: 4,
+    overflow: 'hidden',
   };
   const presentationThStyle: CSSProperties = {
     border: '1px solid #ccc',
@@ -172,6 +175,7 @@ function LineViewInner({
     border: '1px solid #ccc',
     padding: '10px 12px',
   };
+  const COLUMNS_GRID = '1.5fr 0.5fr';
 
   /** Renders one area's staffing as a table (Role | Name) with optional metric title. */
   const renderStaffingTable = (
@@ -223,7 +227,8 @@ function LineViewInner({
               </tr>
             </thead>
             <tbody>
-              {areaSlots.map((slot, idx) => {
+              {allSlots.map((slot, idx) => {
+                if (slot.disabled) return null;
                 const slotLabel = getLabel(areaId, idx);
                 const name = getName(slot.personId);
                 const skill = getSkillInArea(areaId, slot.personId);
@@ -345,7 +350,7 @@ function LineViewInner({
         })}
         assignments={assignments}
         rotationCount={rotCount}
-        title={`${areaLabel} — Rotations`}
+        title={`${areaLabel} — Break Schedule`}
         presentationMode
       />
     );
@@ -386,7 +391,7 @@ function LineViewInner({
       </div>
 
       {assignedLeadAreas.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start', marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
           <section style={sectionStyle}>
             <h2 style={sectionTitleStyle}>Leads</h2>
             <div style={{ overflowX: 'auto' }}>
@@ -423,7 +428,7 @@ function LineViewInner({
                 })}
                 assignments={breakSchedules[BREAK_LINE_WIDE_KEY]}
                 rotationCount={rotCount}
-                title="Rotations"
+                title="Break Schedule"
                 presentationMode
               />
             )}
@@ -432,7 +437,7 @@ function LineViewInner({
       )}
 
       {breaksScope === 'line' && breakSchedules?.[BREAK_LINE_WIDE_KEY] && Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).length > 0 && rotationCount >= 1 && assignedLeadAreas.length === 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start', marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
           <div />
           <BreakTable
             people={Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).map((id) => {
@@ -441,7 +446,7 @@ function LineViewInner({
             })}
             assignments={breakSchedules[BREAK_LINE_WIDE_KEY]}
             rotationCount={rotCount}
-            title="Rotations"
+            title="Break Schedule"
             presentationMode
           />
         </div>
@@ -455,7 +460,7 @@ function LineViewInner({
           const slotsA = slots[idA] ?? [];
           const slotsB = slots[idB] ?? [];
           return (
-            <div key={rowKey} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start', marginBottom: 20 }}>
+            <div key={rowKey} style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
               <section style={sectionStyle}>
                 <h2 style={sectionTitleStyle}>{areaLabels[idA] ?? idA} & {areaLabels[idB] ?? idB}</h2>
                 {renderStaffingTable(idA, slotsA, { subLabel: areaLabels[idA] ?? idA })}
@@ -487,7 +492,7 @@ function LineViewInner({
         });
         const metricExtra = risks.length > 0 ? ` · ${risks.join(' · ')}` : '';
         return (
-          <div key={rowKey} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start', marginBottom: 20 }}>
+          <div key={rowKey} style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
             <section style={sectionStyle}>
               <h2 style={sectionTitleStyle}>{areaLabel} — {filled}/{min}{metricExtra}</h2>
               {renderStaffingTable(areaId, allAreaSlots, { hideTitle: true })}
