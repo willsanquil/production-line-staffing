@@ -339,7 +339,7 @@ export function stretchAssignments(
     const slot = out[areaId]?.[slotIdx];
     if (slot.personId != null) continue;
     const candidates = [...available]
-      .filter((p) => !assigned.has(p.id) && eligibleForArea(p, areaId, requiresFn))
+      .filter((p) => !assigned.has(p.id) && eligibleForArea(p, areaId))
       .sort((a, b) => stretchScoreForArea(b, areaId) - stretchScoreForArea(a, areaId));
     if (candidates.length > 0) {
       slot.personId = candidates[0].id;
