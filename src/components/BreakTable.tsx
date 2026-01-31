@@ -9,15 +9,15 @@ interface Person {
 }
 
 interface BreakTableProps {
-  /** People on the line (assigned to slots or leads). */
+  /** People in this area (or line). */
   people: Person[];
-  /** Per-person break/lunch rotation assignments (from breakSchedules area or __line__). */
+  /** Per-person rotation assignment (we use breakRotation; rotation count is per area). */
   assignments: Record<string, { breakRotation: BreakRotation; lunchRotation: LunchRotation }>;
-  /** Number of rotations (1–6), user-defined. */
+  /** Number of rotations (1–6), user-defined per area. */
   rotationCount: number;
-  /** Optional title for the section (e.g. "Break schedule (line-wide)"). */
+  /** Optional title (e.g. "Rotations" or area name). */
   title?: string;
-  /** When true, use larger text and clearer styling for presentation mode. */
+  /** When true, use larger text for presentation mode. */
   presentationMode?: boolean;
 }
 
@@ -41,43 +41,32 @@ const tdCenter: React.CSSProperties = { ...tdStyle, textAlign: 'center' as const
 const xStyle: React.CSSProperties = { fontWeight: 700, fontSize: '1.1rem' };
 const xStylePresentation: React.CSSProperties = { fontWeight: 700, fontSize: '1.35rem' };
 
-function SingleBreakMatrix({
-  people,
-  assignments,
-  rotationCount,
-  label,
-  getRotation,
-  presentationMode,
-}: {
-  people: Person[];
-  assignments: Record<string, { breakRotation: BreakRotation; lunchRotation: LunchRotation }>;
-  rotationCount: number;
-  label: string;
-  getRotation: (a: { breakRotation: BreakRotation; lunchRotation: LunchRotation }) => number;
-  presentationMode?: boolean;
-}) {
+function BreakTableInner({ people, assignments, rotationCount, title, presentationMode = false }: BreakTableProps) {
+  if (people.length === 0 || Object.keys(assignments).length === 0) return null;
+
   const n = Math.min(6, Math.max(1, rotationCount));
   const rotations = Array.from({ length: n }, (_, i) => i + 1);
   const fontSize = presentationMode ? '1.1rem' : undefined;
   const cellPad = presentationMode ? '12px 14px' : '10px 12px';
 
   return (
-    <div style={{ marginBottom: presentationMode ? 20 : 16 }}>
-      <h3
-        style={{
-          margin: '0 0 10px 0',
-          textAlign: 'center',
-          fontWeight: 700,
-          fontSize: presentationMode ? '1.35rem' : '1.2rem',
-        }}
-      >
-        {label}
-      </h3>
+    <div className="section-card" style={{ marginTop: title ? 12 : 0 }}>
+      {title && (
+        <h3
+          style={{
+            margin: '0 0 8px 0',
+            fontWeight: 700,
+            fontSize: presentationMode ? '1.2rem' : '1.05rem',
+          }}
+        >
+          {title}
+        </h3>
+      )}
       <div style={{ overflowX: 'auto' }}>
         <table style={{ ...tableStyle, fontSize }}>
           <thead>
             <tr>
-              <th style={{ ...thStyle, textAlign: 'left', minWidth: 140, padding: cellPad }}>Name</th>
+              <th style={{ ...thStyle, textAlign: 'left', minWidth: 120, padding: cellPad }}>Name</th>
               {rotations.map((r) => (
                 <th key={r} style={{ ...thStyle, padding: cellPad }}>
                   {SLOT_LABELS[r - 1] ?? `Slot ${r}`}
@@ -89,7 +78,7 @@ function SingleBreakMatrix({
             {people.map((p) => {
               const a = assignments[p.id];
               if (!a) return null;
-              const rot = getRotation(a);
+              const rot = a.breakRotation;
               return (
                 <tr key={p.id}>
                   <td style={{ ...tdStyle, padding: cellPad }}>{p.name}</td>
@@ -104,46 +93,6 @@ function SingleBreakMatrix({
           </tbody>
         </table>
       </div>
-    </div>
-  );
-}
-
-function BreakTableInner({ people, assignments, rotationCount, title, presentationMode = false }: BreakTableProps) {
-  if (people.length === 0 || Object.keys(assignments).length === 0) return null;
-
-  const sectionTitle = title ?? 'Break schedule';
-
-  return (
-    <div className="section-card" style={{ marginTop: 16 }}>
-      {sectionTitle && (
-        <h2
-          style={{
-            marginTop: 0,
-            marginBottom: 14,
-            textAlign: 'center',
-            fontWeight: 700,
-            fontSize: presentationMode ? '1.4rem' : '1.25rem',
-          }}
-        >
-          {sectionTitle}
-        </h2>
-      )}
-      <SingleBreakMatrix
-        people={people}
-        assignments={assignments}
-        rotationCount={rotationCount}
-        label="BREAKS"
-        getRotation={(a) => a.breakRotation}
-        presentationMode={presentationMode}
-      />
-      <SingleBreakMatrix
-        people={people}
-        assignments={assignments}
-        rotationCount={rotationCount}
-        label="LUNCH"
-        getRotation={(a) => a.lunchRotation}
-        presentationMode={presentationMode}
-      />
     </div>
   );
 }

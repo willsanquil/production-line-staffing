@@ -2,6 +2,7 @@ import { memo, type CSSProperties } from 'react';
 import type { AreaId, BreakRotation, LunchRotation, RosterPerson, SlotsByArea } from '../types';
 import type { SkillLevel } from '../types';
 import { LINE_SECTIONS, LEAD_SLOT_AREAS, areaRequiresTrainedOrExpert as defaultRequiresTrainedOrExpert } from '../types';
+import { BREAK_LINE_WIDE_KEY } from '../lib/lineConfig';
 import { BreakTable } from './BreakTable';
 import { getSlotLabel as getSlotLabelDefault, isGenericSlotLabel } from '../lib/areaConfig';
 import type { SlotLabelsByArea } from '../types';
@@ -76,10 +77,12 @@ interface LineViewProps {
   leadAreaIds?: string[];
   getSlotLabel?: (areaId: string, slotIndex: number) => string;
   areaRequiresTrainedOrExpert?: (areaId: string) => boolean;
-  /** For presentation mode: whole-line break/lunch assignments so team can see coverage. */
-  breakAssignments?: Record<string, { breakRotation: BreakRotation; lunchRotation: LunchRotation }>;
-  /** Number of break/lunch slots (1–6). */
+  /** For presentation mode: break schedules per area (or __line__ for line-wide). */
+  breakSchedules?: Record<string, Record<string, { breakRotation: BreakRotation; lunchRotation: LunchRotation }>>;
+  /** Number of rotations (1–6). */
   rotationCount?: number;
+  /** 'line' = one set for whole line; 'station' = per area. */
+  breaksScope?: 'line' | 'station';
 }
 
 /** Compact, screenshot- and phone-friendly view: line health, areas, who is running each, and risks. */
@@ -98,8 +101,9 @@ function LineViewInner({
   leadAreaIds: leadAreaIdsProp,
   getSlotLabel: getSlotLabelProp,
   areaRequiresTrainedOrExpert: areaRequiresTrainedOrExpertProp,
-  breakAssignments,
+  breakSchedules,
   rotationCount = 3,
+  breaksScope = 'station',
 }: LineViewProps) {
   const sections = lineSectionsProp ?? LINE_SECTIONS;
   const leadAreaIds = leadAreaIdsProp ?? [...LEAD_SLOT_AREAS];
@@ -285,8 +289,40 @@ function LineViewInner({
         </section>
       )}
 
+      {breaksScope === 'line' && breakSchedules?.[BREAK_LINE_WIDE_KEY] && Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).length > 0 && rotationCount >= 1 && (
+        <section style={sectionStyle}>
+          <h2 style={sectionTitleStyle}>Rotations</h2>
+          <BreakTable
+            people={Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).map((id) => {
+              const p = roster.find((r) => r.id === id);
+              return { id, name: p?.name ?? id };
+            })}
+            assignments={breakSchedules[BREAK_LINE_WIDE_KEY]}
+            rotationCount={Math.min(6, Math.max(1, rotationCount))}
+            presentationMode
+          />
+        </section>
+      )}
+
       {sections.map((section) => {
         const isCombined = Array.isArray(section);
+        const renderBreakMatrix = (areaId: string, areaLabel: string) => {
+          const assignments = breakSchedules?.[areaId];
+          if (breaksScope !== 'station' || !assignments || Object.keys(assignments).length === 0 || rotationCount < 1) return null;
+          return (
+            <BreakTable
+              key={`break-${areaId}`}
+              people={Object.keys(assignments).map((id) => {
+                const p = roster.find((r) => r.id === id);
+                return { id, name: p?.name ?? id };
+              })}
+              assignments={assignments}
+              rotationCount={Math.min(6, Math.max(1, rotationCount))}
+              title={`${areaLabel} — Rotations`}
+              presentationMode
+            />
+          );
+        };
         if (isCombined) {
           const [idA, idB] = section as [string, string];
           const label = `${areaLabels[idA] ?? idA} & ${areaLabels[idB] ?? idB}`;
@@ -295,39 +331,26 @@ function LineViewInner({
           return (
             <section key={`${idA}-${idB}`} style={sectionStyle}>
               <h2 style={sectionTitleStyle}>{label}</h2>
-              {[idA, idB].map((areaId) =>
-                renderAreaBlock(areaId, areaId === idA ? slotsA : slotsB, { subLabel: areaLabels[areaId] ?? areaId })
-              )}
+              {[idA, idB].map((areaId) => (
+                <div key={areaId}>
+                  {renderAreaBlock(areaId, areaId === idA ? slotsA : slotsB, { subLabel: areaLabels[areaId] ?? areaId })}
+                  {renderBreakMatrix(areaId, areaLabels[areaId] ?? areaId)}
+                </div>
+              ))}
             </section>
           );
         }
         const areaId = section as string;
         const allAreaSlots = slots[areaId] ?? [];
+        const areaLabel = areaLabels[areaId] ?? areaId;
         return (
           <section key={areaId} style={sectionStyle}>
-            <h2 style={sectionTitleStyle}>{areaLabels[areaId] ?? areaId}</h2>
+            <h2 style={sectionTitleStyle}>{areaLabel}</h2>
             {renderAreaBlock(areaId, allAreaSlots, { hideTitleRow: true })}
+            {renderBreakMatrix(areaId, areaLabel)}
           </section>
         );
       })}
-
-      {breakAssignments && Object.keys(breakAssignments).length > 0 && rotationCount >= 1 && (
-        <section style={sectionStyle}>
-          <h2 style={sectionTitleStyle}>Break &amp; lunch coverage</h2>
-          <p style={{ fontSize: '0.95rem', color: '#555', margin: '0 0 12px 0' }}>
-            Who is on break or lunch in each slot. Balanced so coverage stays strong.
-          </p>
-          <BreakTable
-            people={Object.keys(breakAssignments).map((id) => {
-              const p = roster.find((r) => r.id === id);
-              return { id, name: p?.name ?? id };
-            })}
-            assignments={breakAssignments}
-            rotationCount={Math.min(6, Math.max(1, rotationCount))}
-            presentationMode
-          />
-        </section>
-      )}
     </div>
   );
 }

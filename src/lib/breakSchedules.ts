@@ -65,10 +65,8 @@ function runAssignmentForPeople(
   rotationCount: number
 ): Record<string, { breakRotation: BreakRotation; lunchRotation: LunchRotation }> {
   const breakBuckets: Record<number, Bucket> = {};
-  const lunchBuckets: Record<number, Bucket> = {};
   for (let r = 1; r <= rotationCount; r++) {
     breakBuckets[r] = { skillSum: 0, personIds: [] };
-    lunchBuckets[r] = { skillSum: 0, personIds: [] };
   }
   const prefOrder = (pref: BreakPreference) =>
     pref === 'prefer_early' ? 0 : pref === 'prefer_late' ? 2 : 1;
@@ -78,11 +76,10 @@ function runAssignmentForPeople(
   });
   const assignments: Record<string, { breakRotation: BreakRotation; lunchRotation: LunchRotation }> = {};
   for (const { personId, skillScore, preference } of people) {
-    const breakRot = assignToBestBucket(personId, skillScore, preference, breakBuckets, rotationCount);
-    const lunchRot = assignToBestBucket(personId, skillScore, preference, lunchBuckets, rotationCount);
+    const rot = assignToBestBucket(personId, skillScore, preference, breakBuckets, rotationCount);
     assignments[personId] = {
-      breakRotation: breakRot as BreakRotation,
-      lunchRotation: lunchRot as LunchRotation,
+      breakRotation: rot as BreakRotation,
+      lunchRotation: rot as LunchRotation,
     };
   }
   return assignments;

@@ -328,28 +328,13 @@ export default function App() {
   const lineHealthSpectrumPosition =
     lineHealthScore != null ? (lineHealthScore / 3) * 100 : null;
 
-  /** Whole-team break assignments for presentation mode (line-wide or merged per-station). */
+  /** Break schedule data for presentation mode: full schedules, rotation count, scope. */
   const presentationBreakData = useMemo(() => {
     if (!currentConfig || !getBreaksEnabled(currentConfig) || !breakSchedules) return null;
     const rotationCount = getBreakRotations(currentConfig);
     const scope = getBreaksScope(currentConfig);
-    if (scope === 'line') {
-      const lineAssignments = breakSchedules[BREAK_LINE_WIDE_KEY];
-      if (!lineAssignments || Object.keys(lineAssignments).length === 0) return null;
-      return { breakAssignments: lineAssignments, rotationCount };
-    }
-    const merged: Record<string, { breakRotation: 1 | 2 | 3 | 4 | 5 | 6; lunchRotation: 1 | 2 | 3 | 4 | 5 | 6 }> = {};
-    for (const areaId of areaIds) {
-      const assignments = breakSchedules[areaId];
-      if (assignments) {
-        for (const [personId, a] of Object.entries(assignments)) {
-          merged[personId] = a;
-        }
-      }
-    }
-    if (Object.keys(merged).length === 0) return null;
-    return { breakAssignments: merged, rotationCount };
-  }, [currentConfig, breakSchedules, areaIds]);
+    return { breakSchedules, rotationCount, breaksScope: scope };
+  }, [currentConfig, breakSchedules]);
 
   const setSlotAssignment = useCallback((areaId: AreaId, slotId: string, personId: string | null) => {
     setSlots((prev) => ({
@@ -1171,8 +1156,9 @@ export default function App() {
           leadAreaIds={leadAreaIds}
           getSlotLabel={getSlotLabel}
           areaRequiresTrainedOrExpert={areaRequiresTrainedOrExpert}
-          breakAssignments={presentationBreakData?.breakAssignments}
+          breakSchedules={presentationBreakData?.breakSchedules}
           rotationCount={presentationBreakData?.rotationCount}
+          breaksScope={presentationBreakData?.breaksScope}
         />
         <div style={{ maxWidth: 520, margin: '0 auto', padding: '0 12px 24px' }}>
           <TrainingReport roster={roster} slots={slots} areaLabels={areaLabels} effectiveCapacity={effectiveCapacity} presentationMode areaIds={areaIds} />
