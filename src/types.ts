@@ -1,7 +1,7 @@
 export type SkillLevel = 'no_experience' | 'training' | 'trained' | 'expert';
 
-/** Break preference for schedule generation: early = rot 1, late = rot 3. */
-export type BreakPreference = 'prefer_early' | 'prefer_late' | 'no_preference';
+/** Break preference for schedule generation: early = rot 1, middle = rot 2, late = rot N. */
+export type BreakPreference = 'prefer_early' | 'prefer_middle' | 'prefer_late' | 'no_preference';
 
 export const AREA_IDS = [
   'area_14_5',

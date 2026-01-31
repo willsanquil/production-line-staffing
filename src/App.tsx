@@ -69,11 +69,9 @@ import { LeadSlotsSection } from './components/LeadSlotsSection';
 import { AreaStaffing } from './components/AreaStaffing';
 import { CombinedAreaStaffing } from './components/CombinedAreaStaffing';
 import { LineView } from './components/LineView';
-import { DayTimeline } from './components/DayTimeline';
-import { NotesAndDocuments } from './components/NotesAndDocuments';
 import { DayBank } from './components/DayBank';
 import { TrainingReport } from './components/TrainingReport';
-import { randomizeAssignments, spreadTalent, maxSpeedAssignments, lightStretchAssignments } from './lib/automation';
+import { randomizeAssignments, spreadTalent } from './lib/automation';
 import { generateBreakSchedules } from './lib/breakSchedules';
 import { saveRootState, loadSavedDays, addSavedDay, removeSavedDay, exportStateToJson, importStateFromJson } from './lib/persist';
 import { saveToFile, overwriteFile, openFromFile, isSaveToFileSupported } from './lib/fileStorage';
@@ -304,7 +302,21 @@ export default function App() {
         saveRootState(payload);
       }
     };
-  }, [appMode, cloudLineId, slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea]);
+  }, [appMode, cloudLineId, rootState, slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea]);
+
+  // When in cloud mode, poll for updates so other users' changes show up (live-ish updates).
+  const CLOUD_POLL_MS = 4000;
+  useEffect(() => {
+    if (appMode !== 'app' || !cloudLineId) return;
+    const password = cloudPasswordRef.current;
+    if (!password) return;
+    const intervalId = setInterval(() => {
+      getLineState(cloudLineId, password)
+        .then((root) => setRootState(root))
+        .catch(() => { /* ignore poll errors (e.g. network) */ });
+    }, CLOUD_POLL_MS);
+    return () => clearInterval(intervalId);
+  }, [appMode, cloudLineId]);
 
   const allAssignedPersonIds = useMemo(() => getAssignedPersonIds(slots, areaIds), [slots, areaIds]);
   const leadAssignedPersonIds = useMemo(() => {
@@ -702,38 +714,6 @@ export default function App() {
     }
   }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, currentConfig, leadSlots]);
 
-  const handleMaxSpeed = useCallback(() => {
-    const nextSlots = maxSpeedAssignments(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
-    setSlots(nextSlots);
-    if (currentConfig && getBreaksEnabled(currentConfig)) {
-      setBreakSchedules(
-        generateBreakSchedules(roster, nextSlots, areaIds, {
-          rotationCount: getBreakRotations(currentConfig),
-          scope: getBreaksScope(currentConfig),
-          leadSlots,
-        })
-      );
-    } else {
-      setBreakSchedules({});
-    }
-  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, currentConfig, leadSlots, areaRequiresTrainedOrExpert]);
-
-  const handleLightStretch = useCallback(() => {
-    const nextSlots = lightStretchAssignments(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
-    setSlots(nextSlots);
-    if (currentConfig && getBreaksEnabled(currentConfig)) {
-      setBreakSchedules(
-        generateBreakSchedules(roster, nextSlots, areaIds, {
-          rotationCount: getBreakRotations(currentConfig),
-          scope: getBreaksScope(currentConfig),
-          leadSlots,
-        })
-      );
-    } else {
-      setBreakSchedules({});
-    }
-  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, currentConfig, leadSlots, areaRequiresTrainedOrExpert]);
-
   const handleRemoveDay = useCallback((id: string) => {
     removeSavedDay(id);
     setSavedDays(loadSavedDays());
@@ -796,6 +776,7 @@ export default function App() {
   }, [rootState.lines, rootState.currentLineId]);
 
   const importFileRef = useRef<HTMLInputElement>(null);
+  const addToRosterFileRef = useRef<HTMLInputElement>(null);
   const savedFileHandleRef = useRef<FileSystemFileHandle | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
@@ -901,6 +882,58 @@ export default function App() {
     reader.readAsText(file);
     e.target.value = '';
   }, [applyImportedState]);
+
+  const handleAddToRosterFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = reader.result as string;
+        const imported = importStateFromJson(text);
+        if (!imported || !Array.isArray(imported.roster)) {
+          alert('Invalid file or no roster in file.');
+          e.target.value = '';
+          return;
+        }
+        setRootState((prev) => {
+          const lineId = prev.currentLineId;
+          const currentRoster = prev.lineStates[lineId]?.roster ?? [];
+          const toAdd: RosterPerson[] = (imported.roster as RosterPerson[]).map((p) => {
+            const id = Math.random().toString(36).slice(2, 11);
+            const skills = { ...p.skills } as Record<AreaId, SkillLevel>;
+            for (const aid of areaIds) {
+              if (skills[aid] === undefined) skills[aid] = 'no_experience';
+            }
+            return {
+              ...p,
+              id,
+              skills,
+              areasWantToLearn: p.areasWantToLearn ?? [],
+              flexedToLineId: null,
+            };
+          });
+          return {
+            ...prev,
+            lineStates: {
+              ...prev.lineStates,
+              [lineId]: {
+                ...prev.lineStates[lineId],
+                roster: [...currentRoster, ...toAdd],
+              },
+            },
+          };
+        });
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    },
+    [areaIds]
+  );
+
+  const handleAddToRoster = useCallback(() => {
+    addToRosterFileRef.current?.click();
+  }, []);
 
   const handleLeaveLine = useCallback(() => {
     clearCloudSession();
@@ -1235,6 +1268,11 @@ export default function App() {
         onSkillChange={handleSkillChange}
         onAreasWantToLearnChange={handleAreasWantToLearnChange}
         onFlexedToLineChange={handleFlexedToLineChange}
+        saveMessage={saveMessage}
+        onSaveToFile={handleSaveToFile}
+        onOpenFromFile={handleOpenFromFile}
+        onAddToRoster={handleAddToRoster}
+        isSaveToFileSupported={isSaveToFileSupported}
       />
 
       <div className="totals-and-leads-row" style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', marginBottom: 12 }}>
@@ -1284,8 +1322,6 @@ export default function App() {
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <button type="button" onClick={handleSpreadTalent}>Spread talent</button>
         <button type="button" onClick={handleRandomize}>Randomize</button>
-        <button type="button" onClick={handleMaxSpeed} title="Experts in their places — best skill match, deterministic">MAX SPEED</button>
-        <button type="button" onClick={handleLightStretch} title="Some of the team in no-experience or training positions">Light stretch</button>
         {/* STRETCH temporarily disabled
         <button type="button" onClick={handleStretch} title="Push team outside comfort zone; prefer areas they want to learn">STRETCH</button>
         */}
@@ -1456,15 +1492,6 @@ export default function App() {
 
       <TrainingReport roster={roster} slots={slots} areaLabels={areaLabels} effectiveCapacity={effectiveCapacity} areaIds={areaIds} />
 
-      <NotesAndDocuments
-        dayNotes={dayNotes}
-        documents={documents}
-        onDayNotesChange={setDayNotes}
-        onDocumentsChange={setDocuments}
-      />
-
-      <DayTimeline schedule={schedule} onScheduleChange={setSchedule} />
-
       {currentConfig && getBreaksEnabled(currentConfig) && (() => {
         const rotationCount = getBreakRotations(currentConfig);
         const scope = getBreaksScope(currentConfig);
@@ -1508,25 +1535,16 @@ export default function App() {
       })()}
 
       <div className="save-load-section" style={{ marginBottom: 12 }}>
-        <h3 style={{ marginTop: 0 }}>Save &amp; open (file)</h3>
-        <p style={{ fontSize: '0.9rem', color: '#555', margin: '0 0 8px 0' }}>
-          Save your roster and settings to a real file on your computer. Once saved, use Save again to overwrite the same file. Open loads from a file you previously saved.
-        </p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-          {isSaveToFileSupported() ? (
-            <>
-              <button type="button" onClick={handleSaveToFile}>Save to file</button>
-              {saveMessage && <span style={{ color: '#27ae60', fontWeight: 500 }}>✓ {saveMessage}</span>}
-              <button type="button" onClick={handleOpenFromFile}>Open from file</button>
-            </>
-          ) : (
-            <span style={{ fontSize: '0.9rem', color: '#666' }}>
-              Save to file is supported in Chrome and Edge. Use the buttons below in other browsers.
-            </span>
-          )}
-        </div>
-        <p style={{ fontSize: '0.85rem', color: '#666', margin: '12px 0 8px 0' }}>
-          Or download / import a one-off backup (works in any browser):
+        <input
+          ref={addToRosterFileRef}
+          type="file"
+          accept=".json,application/json"
+          onChange={handleAddToRosterFileChange}
+          style={{ display: 'none' }}
+          aria-hidden
+        />
+        <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 8px 0' }}>
+          Download or import a one-off backup (works in any browser):
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
           <button type="button" onClick={handleExportBackup}>Download backup</button>

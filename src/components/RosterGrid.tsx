@@ -29,6 +29,12 @@ interface RosterGridProps {
   onBreakPreferenceChange: (personId: string, preference: BreakPreference) => void;
   onSkillChange: (personId: string, areaId: AreaId, level: SkillLevel) => void;
   onAreasWantToLearnChange: (personId: string, areaId: AreaId, checked: boolean) => void;
+  /** Roster file actions (optional; when provided, shown in header next to Hide roster) */
+  saveMessage?: string | null;
+  onSaveToFile?: () => void;
+  onOpenFromFile?: () => void;
+  onAddToRoster?: () => void;
+  isSaveToFileSupported?: () => boolean;
 }
 
 const SKILL_LEVELS: SkillLevel[] = ['no_experience', 'training', 'trained', 'expert'];
@@ -122,6 +128,11 @@ function RosterGridInner({
   onBreakPreferenceChange,
   onSkillChange,
   onAreasWantToLearnChange,
+  saveMessage,
+  onSaveToFile,
+  onOpenFromFile,
+  onAddToRoster,
+  isSaveToFileSupported,
 }: RosterGridProps) {
   const areaIds = areaIdsProp ?? [...AREA_IDS];
   const otherLines = useMemo(() => lines.filter((l) => l.id !== currentLineId), [lines, currentLineId]);
@@ -202,11 +213,23 @@ function RosterGridInner({
 
   return (
     <section className="section-card">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem', flexWrap: 'wrap', gap: 8 }}>
         <h2 style={{ margin: 0 }}>Roster – talent depth</h2>
-        <button type="button" onClick={onToggleVisible}>
-          {visible ? 'Hide roster' : 'Show roster'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" onClick={onToggleVisible}>
+            {visible ? 'Hide roster' : 'Show roster'}
+          </button>
+          {onSaveToFile && onOpenFromFile && (isSaveToFileSupported?.() ?? true) && (
+            <>
+              <button type="button" onClick={onSaveToFile}>Save to file</button>
+              {saveMessage != null && saveMessage !== '' && <span style={{ color: '#27ae60', fontWeight: 500 }}>✓ {saveMessage}</span>}
+              <button type="button" onClick={onOpenFromFile}>Open from file</button>
+            </>
+          )}
+          {onAddToRoster && (
+            <button type="button" onClick={onAddToRoster}>Add to roster</button>
+          )}
+        </div>
       </div>
       {visible && (
         <>
@@ -235,7 +258,6 @@ function RosterGridInner({
                   )}
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 70 }}>Absent</th>
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 60 }}>Lead</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 50 }}>OT</th>
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 55 }}>Late</th>
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 90 }}>Leave early</th>
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 100 }}>Break</th>
@@ -249,7 +271,7 @@ function RosterGridInner({
                   </th>
                 </tr>
                 <tr>
-                  <th colSpan={8 + (showFlexedColumn ? 1 : 0)} style={{ padding: 0, border: 'none' }} />
+                  <th colSpan={7 + (showFlexedColumn ? 1 : 0)} style={{ padding: 0, border: 'none' }} />
                   {areaIds.map((areaId) => (
                     <th key={areaId} style={{ padding: '2px 4px', textAlign: 'center', borderBottom: '2px solid #ddd', fontSize: '0.75rem' }}>
                       {areaLabels[areaId]}
@@ -321,15 +343,6 @@ function RosterGridInner({
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
                       <input
                         type="checkbox"
-                        checked={person.ot ?? false}
-                        onChange={(e) => onToggleOT(person.id, e.target.checked)}
-                        aria-label={`Move ${person.name} to OT pool`}
-                        title="Move to OT pool"
-                      />
-                    </td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
-                      <input
-                        type="checkbox"
                         checked={person.late ?? false}
                         onChange={(e) => onToggleLate(person.id, e.target.checked)}
                         aria-label={`Mark ${person.name} late`}
@@ -345,7 +358,7 @@ function RosterGridInner({
                     </td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
                       <select
-                        value={person.breakPreference ?? 'no_preference'}
+                        value={person.breakPreference ?? 'prefer_middle'}
                         onChange={(e) => onBreakPreferenceChange(person.id, e.target.value as BreakPreference)}
                         style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 100 }}
                         title="Break schedule preference"
@@ -507,14 +520,15 @@ function RosterGridInner({
                         </td>
                         <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
                           <select
-                            value={person.breakPreference ?? 'no_preference'}
+                            value={person.breakPreference ?? 'prefer_middle'}
                             onChange={(e) => onBreakPreferenceChange(person.id, e.target.value as BreakPreference)}
                             style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 100 }}
                             title="Break preference"
                           >
                             <option value="prefer_early">Prefer early</option>
-                            <option value="no_preference">No preference</option>
+                            <option value="prefer_middle">Prefer middle</option>
                             <option value="prefer_late">Prefer late</option>
+                            <option value="no_preference">No preference</option>
                           </select>
                         </td>
                         {areaIds.map((areaId) => {
@@ -688,7 +702,7 @@ function RosterGridInner({
                     </td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
                       <select
-                        value={person.breakPreference ?? 'no_preference'}
+                        value={person.breakPreference ?? 'prefer_middle'}
                         onChange={(e) => onBreakPreferenceChange(person.id, e.target.value as BreakPreference)}
                         style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 100 }}
                         title="Break schedule preference"

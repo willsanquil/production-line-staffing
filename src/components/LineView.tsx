@@ -11,6 +11,9 @@ import { getAreaRisks } from '../lib/lineViewRisks';
 const BAR_HEIGHT = 18;
 const BAR_HEIGHT_COMPACT = 10;
 
+const BREAK_SLOT_LABELS = ['First Slot', 'Second Slot', 'Third Slot', 'Fourth Slot', 'Fifth Slot', 'Sixth Slot'] as const;
+const ROLE_PA = 'PA';
+
 function useCompactPresentation() {
   const [compact, setCompact] = useState(typeof window !== 'undefined' && window.matchMedia('(max-width: 480px)').matches);
   useEffect(() => {
@@ -156,15 +159,20 @@ function LineViewInner({
     padding: '10px 12px',
   };
   const COLUMNS_GRID = '1.5fr 0.5fr';
+  const rotCount = Math.min(6, Math.max(1, rotationCount));
+  const breakSlotLabels = Array.from({ length: rotCount }, (_, i) => BREAK_SLOT_LABELS[i] ?? `Slot ${i + 1}`);
 
-  /** Renders one area's staffing as a table (Role | Name) with optional metric title. */
-  const renderStaffingTable = (
+  /**
+   * One combined table per area: Role (custom or "PA") | Name (skill-colored) | First Slot | Second Slot | ... with X for break assignment.
+   */
+  const renderCombinedAreaTable = (
     areaId: string,
     allSlots: { id: string; personId: string | null; disabled?: boolean }[],
-    options?: { subLabel?: string; hideTitle?: boolean }
+    options?: { subLabel?: string; hideTitle?: boolean; compact?: boolean }
   ) => {
     const subLabel = options?.subLabel ?? areaLabels[areaId];
     const hideTitle = options?.hideTitle;
+    const compact = options?.compact ?? false;
     const areaSlots = allSlots.filter((s) => !s.disabled);
     const filled = areaSlots.filter((s) => s.personId).length;
     const min = effectiveCapacity[areaId]?.min ?? 0;
@@ -185,96 +193,6 @@ function LineViewInner({
     });
     const metricText = `${filled}/${min}`;
     const metricExtra = risks.length > 0 ? ` · ${risks.join(' · ')}` : '';
-    const hasRoleLabels = areaSlots.some((_, idx) => !isGenericSlotLabel(getLabel(areaId, idx)));
-    const personIds = areaSlots.map((s) => s.personId).filter(Boolean) as string[];
-    const areaKnowledgePosition =
-      personIds.length > 0
-        ? (personIds.reduce((sum, id) => {
-            const p = roster.find((r) => r.id === id);
-            const level = p?.skills[areaId] ?? 'no_experience';
-            const score = level === 'expert' ? 3 : level === 'trained' ? 2 : level === 'training' ? 1 : 0;
-            return sum + score;
-          }, 0) /
-            personIds.length /
-            3) *
-          100
-        : null;
-
-    return (
-      <div key={areaId} className="presentation-area-block" style={{ marginBottom: 16 }}>
-        {!hideTitle && (
-          <div className="presentation-area-header" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
-            <h3 style={{ margin: 0, fontWeight: 700, fontSize: 'clamp(1.05rem, 2.5vw, 1.2rem)' }}>
-              {subLabel} — {metricText}{metricExtra}
-            </h3>
-            <div className="presentation-area-bar" style={{ flex: '1 1 100px', minWidth: 100, maxWidth: 180 }}>
-              <KnowledgeBar position={areaKnowledgePosition} />
-            </div>
-          </div>
-        )}
-        <div style={{ overflowX: 'auto' }}>
-          <table style={presentationTableStyle}>
-            <thead>
-              <tr>
-                {hasRoleLabels && <th style={presentationThStyle}>Role</th>}
-                <th style={presentationThStyle}>Name</th>
-              </tr>
-            </thead>
-            <tbody>
-              {allSlots.map((slot, idx) => {
-                if (slot.disabled) return null;
-                const slotLabel = getLabel(areaId, idx);
-                const name = getName(slot.personId);
-                const skill = getSkillInArea(areaId, slot.personId);
-                const showLabel = !isGenericSlotLabel(slotLabel);
-                return (
-                  <tr key={slot.id}>
-                    {hasRoleLabels && (
-                      <td style={presentationTdStyle}>
-                        {showLabel ? slotLabel : '—'}
-                      </td>
-                    )}
-                    <td style={presentationTdStyle}>
-                      <span className={`skill-name-${skill}`} style={{ fontSize: nameFontSize, fontWeight: 600 }}>
-                        {name}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
-
-  /** Mobile compact: one table per area with Name + Break slot. */
-  const renderCompactAreaBlock = (
-    areaId: string,
-    allSlots: { id: string; personId: string | null; disabled?: boolean }[],
-    subLabel: string
-  ) => {
-    const areaSlots = allSlots.filter((s) => !s.disabled);
-    const filled = areaSlots.filter((s) => s.personId).length;
-    const min = effectiveCapacity[areaId]?.min ?? 0;
-    const areaRequiresTrained = requiresTrainedOrExpert(areaId);
-    const hasTrainedOrExpert =
-      filled > 0 &&
-      areaSlots.some((s) => {
-        if (!s.personId) return false;
-        const p = roster.find((r) => r.id === s.personId);
-        const sk = p?.skills[areaId] ?? 'no_experience';
-        return sk === 'trained' || sk === 'expert';
-      });
-    const risks = getAreaRisks({
-      filled,
-      min,
-      disabledCount: allSlots.length - areaSlots.length,
-      needsTrainedOrExpert: areaRequiresTrained && filled >= 1 && !hasTrainedOrExpert,
-    });
-    const metricExtra = risks.length > 0 ? ` · ${risks.join(' · ')}` : '';
-    const hasRoleLabels = areaSlots.some((_, idx) => !isGenericSlotLabel(getLabel(areaId, idx)));
     const personIds = areaSlots.map((s) => s.personId).filter(Boolean) as string[];
     const areaKnowledgePosition =
       personIds.length > 0
@@ -289,46 +207,65 @@ function LineViewInner({
           100
         : null;
     const breakAssignments = breakSchedules?.[areaId];
-    const showBreakCol = !!breakAssignments && Object.keys(breakAssignments).length > 0 && rotationCount >= 1;
+    const showBreakCols = !!breakAssignments && Object.keys(breakAssignments).length > 0 && rotCount >= 1;
+
+    const tableClassName = compact ? 'presentation-table-compact' : undefined;
+    const thClassName = compact ? 'presentation-th-compact' : undefined;
+    const tdClassName = compact ? 'presentation-td-compact' : undefined;
+    const thStyle = compact ? undefined : presentationThStyle;
+    const tdStyle = compact ? undefined : presentationTdStyle;
+    const tableStyle = compact ? undefined : presentationTableStyle;
+    const thCenterStyle = compact ? undefined : { ...presentationThStyle, textAlign: 'center' as const };
+    const tdCenterStyle = compact ? undefined : { ...presentationTdStyle, textAlign: 'center' as const };
 
     return (
-      <div key={areaId} className="presentation-area-block presentation-area-block-compact">
-        <div className="presentation-area-header presentation-area-header-compact">
-          <span className="presentation-area-title-compact">
-            {subLabel} {filled}/{min}{metricExtra}
-          </span>
-          <div className="presentation-area-bar-compact">
-            <KnowledgeBar position={areaKnowledgePosition} compact />
+      <div
+        key={areaId}
+        className={`presentation-area-block${compact ? ' presentation-area-block-compact' : ''}`}
+        style={{ marginBottom: compact ? 6 : 16 }}
+      >
+        {!hideTitle && (
+          <div className={`presentation-area-header${compact ? ' presentation-area-header-compact' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: compact ? 8 : 12, flexWrap: 'wrap', marginBottom: compact ? 4 : 10 }}>
+            <h3 style={{ margin: 0, fontWeight: 700, fontSize: compact ? '0.8rem' : 'clamp(1.05rem, 2.5vw, 1.2rem)' }}>
+              {subLabel} — {metricText}{metricExtra}
+            </h3>
+            <div className={compact ? 'presentation-area-bar-compact' : ''} style={compact ? undefined : { flex: '1 1 100px', minWidth: 100, maxWidth: 180 }}>
+              <KnowledgeBar position={areaKnowledgePosition} compact={compact} />
+            </div>
           </div>
-        </div>
+        )}
         <div style={{ overflowX: 'auto' }}>
-          <table className="presentation-table-compact">
+          <table style={tableStyle} className={tableClassName}>
             <thead>
               <tr>
-                {hasRoleLabels && <th className="presentation-th-compact">Role</th>}
-                <th className="presentation-th-compact">Name</th>
-                {showBreakCol && <th className="presentation-th-compact">Break</th>}
+                <th style={thStyle} className={thClassName}>Role</th>
+                <th style={thStyle} className={thClassName}>Name</th>
+                {showBreakCols && breakSlotLabels.map((label, i) => (
+                  <th key={i} style={thCenterStyle} className={thClassName}>{label}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {allSlots.map((slot, idx) => {
                 if (slot.disabled) return null;
                 const slotLabel = getLabel(areaId, idx);
+                const roleDisplay = isGenericSlotLabel(slotLabel) ? ROLE_PA : slotLabel;
                 const name = getName(slot.personId);
                 const skill = getSkillInArea(areaId, slot.personId);
-                const showLabel = !isGenericSlotLabel(slotLabel);
                 const breakRot = slot.personId && breakAssignments?.[slot.personId]?.breakRotation;
                 return (
                   <tr key={slot.id}>
-                    {hasRoleLabels && (
-                      <td className="presentation-td-compact">{showLabel ? slotLabel : '—'}</td>
-                    )}
-                    <td className="presentation-td-compact">
-                      <span className={`skill-name-${skill}`}>{name}</span>
+                    <td style={tdStyle} className={tdClassName}>{roleDisplay}</td>
+                    <td style={tdStyle} className={tdClassName}>
+                      <span className={`skill-name-${skill}`} style={compact ? undefined : { fontSize: nameFontSize, fontWeight: 600 }}>
+                        {name}
+                      </span>
                     </td>
-                    {showBreakCol && (
-                      <td className="presentation-td-compact presentation-td-break">{breakRot ?? '—'}</td>
-                    )}
+                    {showBreakCols && breakSlotLabels.map((_, i) => (
+                      <td key={i} style={tdCenterStyle} className={compact ? `${tdClassName} presentation-td-break` : 'presentation-td-break'}>
+                        {breakRot === i + 1 ? <span style={{ fontWeight: 700, fontSize: compact ? undefined : '1.1rem' }}>X</span> : ''}
+                      </td>
+                    ))}
                   </tr>
                 );
               })}
@@ -336,25 +273,6 @@ function LineViewInner({
           </table>
         </div>
       </div>
-    );
-  };
-
-  const rotCount = Math.min(6, Math.max(1, rotationCount));
-  const renderBreakMatrix = (areaId: string, areaLabel: string) => {
-    const assignments = breakSchedules?.[areaId];
-    if (!assignments || Object.keys(assignments).length === 0 || rotationCount < 1) return null;
-    return (
-      <BreakTable
-        key={`break-${areaId}`}
-        people={Object.keys(assignments).map((id) => {
-          const p = roster.find((r) => r.id === id);
-          return { id, name: p?.name ?? id };
-        })}
-        assignments={assignments}
-        rotationCount={rotCount}
-        title={`${areaLabel} — Break Schedule`}
-        presentationMode
-      />
     );
   };
 
@@ -522,58 +440,26 @@ function LineViewInner({
       {sections.map((section) => {
         const isCombined = Array.isArray(section);
         const rowKey = isCombined ? `row-${(section as [string, string]).join('-')}` : `row-${section as string}`;
-        if (isCompact) {
-          if (isCombined) {
-            const [idA, idB] = section as [string, string];
-            const slotsA = slots[idA] ?? [];
-            const slotsB = slots[idB] ?? [];
-            return (
-              <div key={rowKey} className="presentation-section-compact" style={{ ...sectionStyle, padding: 6, marginBottom: 8 }}>
-                <h2 style={{ ...sectionTitleStyle, fontSize: '0.8rem', marginBottom: 4 }}>{areaLabels[idA] ?? idA} & {areaLabels[idB] ?? idB}</h2>
-                {renderCompactAreaBlock(idA, slotsA, areaLabels[idA] ?? idA)}
-                {renderCompactAreaBlock(idB, slotsB, areaLabels[idB] ?? idB)}
-              </div>
-            );
-          }
-          const areaId = section as string;
-          const allAreaSlots = slots[areaId] ?? [];
-          const areaLabel = areaLabels[areaId] ?? areaId;
-          return (
-            <div key={rowKey} className="presentation-section-compact" style={{ ...sectionStyle, padding: 6, marginBottom: 8 }}>
-              {renderCompactAreaBlock(areaId, allAreaSlots, areaLabel)}
-            </div>
-          );
-        }
+        const sectionStyleWithCompact = isCompact ? { ...sectionStyle, padding: 6, marginBottom: 8 } : sectionStyle;
         if (isCombined) {
           const [idA, idB] = section as [string, string];
           const slotsA = slots[idA] ?? [];
           const slotsB = slots[idB] ?? [];
           return (
-            <div key={rowKey} className="presentation-row" style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
-              <section style={sectionStyle}>
-                <h2 style={sectionTitleStyle}>{areaLabels[idA] ?? idA} & {areaLabels[idB] ?? idB}</h2>
-                {renderStaffingTable(idA, slotsA, { subLabel: areaLabels[idA] ?? idA })}
-                {renderStaffingTable(idB, slotsB, { subLabel: areaLabels[idB] ?? idB })}
-              </section>
-              <div className="presentation-breaks">
-                {renderBreakMatrix(idA, areaLabels[idA] ?? idA)}
-                {renderBreakMatrix(idB, areaLabels[idB] ?? idB)}
-              </div>
-            </div>
+            <section key={rowKey} style={sectionStyleWithCompact} className={isCompact ? 'presentation-section-compact' : ''}>
+              <h2 style={{ ...sectionTitleStyle, ...(isCompact ? { fontSize: '0.8rem', marginBottom: 4 } : {}) }}>{areaLabels[idA] ?? idA} & {areaLabels[idB] ?? idB}</h2>
+              {renderCombinedAreaTable(idA, slotsA, { subLabel: areaLabels[idA] ?? idA, compact: isCompact })}
+              {renderCombinedAreaTable(idB, slotsB, { subLabel: areaLabels[idB] ?? idB, compact: isCompact })}
+            </section>
           );
         }
         const areaId = section as string;
         const allAreaSlots = slots[areaId] ?? [];
         const areaLabel = areaLabels[areaId] ?? areaId;
         return (
-          <div key={rowKey} className="presentation-row" style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
-            <section style={sectionStyle}>
-              {renderStaffingTable(areaId, allAreaSlots)}
-            </section>
-            <div className="presentation-breaks">
-              {renderBreakMatrix(areaId, areaLabel)}
-            </div>
-          </div>
+          <section key={rowKey} style={sectionStyleWithCompact} className={isCompact ? 'presentation-section-compact' : ''}>
+            {renderCombinedAreaTable(areaId, allAreaSlots, { subLabel: areaLabel, compact: isCompact })}
+          </section>
         );
       })}
     </div>
