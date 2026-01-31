@@ -156,6 +156,100 @@ function LineViewInner({
   };
   const nameFontSize = '1.28rem';
 
+  const presentationTableStyle: CSSProperties = {
+    width: '100%',
+    borderCollapse: 'collapse',
+    fontSize: '1.05rem',
+  };
+  const presentationThStyle: CSSProperties = {
+    border: '1px solid #ccc',
+    padding: '10px 12px',
+    textAlign: 'left',
+    background: '#f8f8f8',
+    fontWeight: 600,
+  };
+  const presentationTdStyle: CSSProperties = {
+    border: '1px solid #ccc',
+    padding: '10px 12px',
+  };
+
+  /** Renders one area's staffing as a table (Role | Name) with optional metric title. */
+  const renderStaffingTable = (
+    areaId: string,
+    allSlots: { id: string; personId: string | null; disabled?: boolean }[],
+    options?: { subLabel?: string; hideTitle?: boolean }
+  ) => {
+    const subLabel = options?.subLabel ?? areaLabels[areaId];
+    const hideTitle = options?.hideTitle;
+    const areaSlots = allSlots.filter((s) => !s.disabled);
+    const disabledLabels = allSlots
+      .map((s, idx) => (s.disabled ? getLabel(areaId, idx) : null))
+      .filter((l): l is string => l != null);
+    const filled = areaSlots.filter((s) => s.personId).length;
+    const min = effectiveCapacity[areaId]?.min ?? 0;
+    const max = effectiveCapacity[areaId]?.max ?? min;
+    const areaRequiresTrained = requiresTrainedOrExpert(areaId);
+    const hasTrainedOrExpert =
+      filled > 0 &&
+      areaSlots.some((s) => {
+        if (!s.personId) return false;
+        const p = roster.find((r) => r.id === s.personId);
+        const sk = p?.skills[areaId] ?? 'no_experience';
+        return sk === 'trained' || sk === 'expert';
+      });
+    const risks = getAreaRisks({
+      filled,
+      min,
+      disabledCount: allSlots.length - areaSlots.length,
+      needsTrainedOrExpert: areaRequiresTrained && filled >= 1 && !hasTrainedOrExpert,
+    });
+    const metricText = `${filled}/${min}`;
+    const metricExtra = risks.length > 0 ? ` · ${risks.join(' · ')}` : '';
+    const hasRoleLabels = areaSlots.some((s, idx) => !isGenericSlotLabel(getLabel(areaId, idx)));
+
+    return (
+      <div key={areaId} style={{ marginBottom: 12 }}>
+        {!hideTitle && (
+          <h3 style={{ margin: '0 0 8px 0', fontWeight: 700, fontSize: '1.15rem' }}>
+            {subLabel} — {metricText}{metricExtra}
+          </h3>
+        )}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={presentationTableStyle}>
+            <thead>
+              <tr>
+                {hasRoleLabels && <th style={presentationThStyle}>Role</th>}
+                <th style={presentationThStyle}>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {areaSlots.map((slot, idx) => {
+                const slotLabel = getLabel(areaId, idx);
+                const name = getName(slot.personId);
+                const skill = getSkillInArea(areaId, slot.personId);
+                const showLabel = !isGenericSlotLabel(slotLabel);
+                return (
+                  <tr key={slot.id}>
+                    {hasRoleLabels && (
+                      <td style={presentationTdStyle}>
+                        {showLabel ? slotLabel : '—'}
+                      </td>
+                    )}
+                    <td style={presentationTdStyle}>
+                      <span className={`skill-name-${skill}`} style={{ fontSize: nameFontSize, fontWeight: 600 }}>
+                        {name}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   const renderAreaBlock = (
     areaId: string,
     allSlots: { id: string; personId: string | null; disabled?: boolean }[],
@@ -291,60 +385,37 @@ function LineViewInner({
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28, alignItems: 'start' }}>
-        <div>
-          {assignedLeadAreas.length > 0 && (
-            <section style={sectionStyle}>
-              <h2 style={sectionTitleStyle}>Leads</h2>
-              <div style={staffRowStyle}>
-                {assignedLeadAreas.map((areaId) => {
-                  const personId = leadSlots[areaId]!;
-                  const skill = getSkillInArea(areaId, personId);
-                  return (
-                    <span key={areaId}>
-                      <span style={{ color: '#666', marginRight: 6, fontSize: '0.95rem' }}>{areaLabels[areaId]}:</span>
-                      <span className={`skill-name-${skill}`} style={{ fontSize: nameFontSize, fontWeight: 600 }}>{getName(personId)}</span>
-                    </span>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {sections.map((section) => {
-            const isCombined = Array.isArray(section);
-            if (isCombined) {
-              const [idA, idB] = section as [string, string];
-              const label = `${areaLabels[idA] ?? idA} & ${areaLabels[idB] ?? idB}`;
-              const slotsA = slots[idA] ?? [];
-              const slotsB = slots[idB] ?? [];
-              return (
-                <section key={`${idA}-${idB}`} style={sectionStyle}>
-                  <h2 style={sectionTitleStyle}>{label}</h2>
-                  {[idA, idB].map((areaId) => (
-                    <div key={areaId}>
-                      {renderAreaBlock(areaId, areaId === idA ? slotsA : slotsB, { subLabel: areaLabels[areaId] ?? areaId })}
-                    </div>
-                  ))}
-                </section>
-              );
-            }
-            const areaId = section as string;
-            const allAreaSlots = slots[areaId] ?? [];
-            const areaLabel = areaLabels[areaId] ?? areaId;
-            return (
-              <section key={areaId} style={sectionStyle}>
-                <h2 style={sectionTitleStyle}>{areaLabel}</h2>
-                {renderAreaBlock(areaId, allAreaSlots, { hideTitleRow: true })}
-              </section>
-            );
-          })}
-        </div>
-
-        <div>
-          {breaksScope === 'line' && breakSchedules?.[BREAK_LINE_WIDE_KEY] && Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).length > 0 && rotationCount >= 1 && (
-            <section style={sectionStyle}>
-              <h2 style={sectionTitleStyle}>Rotations</h2>
+      {assignedLeadAreas.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start', marginBottom: 20 }}>
+          <section style={sectionStyle}>
+            <h2 style={sectionTitleStyle}>Leads</h2>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={presentationTableStyle}>
+                <thead>
+                  <tr>
+                    <th style={presentationThStyle}>Area</th>
+                    <th style={presentationThStyle}>Name</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {assignedLeadAreas.map((areaId) => {
+                    const personId = leadSlots[areaId]!;
+                    const skill = getSkillInArea(areaId, personId);
+                    return (
+                      <tr key={areaId}>
+                        <td style={presentationTdStyle}>{areaLabels[areaId]}</td>
+                        <td style={presentationTdStyle}>
+                          <span className={`skill-name-${skill}`} style={{ fontSize: nameFontSize, fontWeight: 600 }}>{getName(personId)}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <div>
+            {breaksScope === 'line' && breakSchedules?.[BREAK_LINE_WIDE_KEY] && Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).length > 0 && rotationCount >= 1 && (
               <BreakTable
                 people={Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).map((id) => {
                   const p = roster.find((r) => r.id === id);
@@ -352,28 +423,81 @@ function LineViewInner({
                 })}
                 assignments={breakSchedules[BREAK_LINE_WIDE_KEY]}
                 rotationCount={rotCount}
+                title="Rotations"
                 presentationMode
               />
-            </section>
-          )}
-
-          {breaksScope === 'station' &&
-            sections.map((section) => {
-              const isCombined = Array.isArray(section);
-              if (isCombined) {
-                const [idA, idB] = section as [string, string];
-                return (
-                  <div key={`break-${idA}-${idB}`}>
-                    {renderBreakMatrix(idA, areaLabels[idA] ?? idA)}
-                    {renderBreakMatrix(idB, areaLabels[idB] ?? idB)}
-                  </div>
-                );
-              }
-              const areaId = section as string;
-              return <div key={`break-${areaId}`}>{renderBreakMatrix(areaId, areaLabels[areaId] ?? areaId)}</div>;
-            })}
+            )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {breaksScope === 'line' && breakSchedules?.[BREAK_LINE_WIDE_KEY] && Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).length > 0 && rotationCount >= 1 && assignedLeadAreas.length === 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start', marginBottom: 20 }}>
+          <div />
+          <BreakTable
+            people={Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).map((id) => {
+              const p = roster.find((r) => r.id === id);
+              return { id, name: p?.name ?? id };
+            })}
+            assignments={breakSchedules[BREAK_LINE_WIDE_KEY]}
+            rotationCount={rotCount}
+            title="Rotations"
+            presentationMode
+          />
+        </div>
+      )}
+
+      {sections.map((section) => {
+        const isCombined = Array.isArray(section);
+        const rowKey = isCombined ? `row-${(section as [string, string]).join('-')}` : `row-${section as string}`;
+        if (isCombined) {
+          const [idA, idB] = section as [string, string];
+          const slotsA = slots[idA] ?? [];
+          const slotsB = slots[idB] ?? [];
+          return (
+            <div key={rowKey} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start', marginBottom: 20 }}>
+              <section style={sectionStyle}>
+                <h2 style={sectionTitleStyle}>{areaLabels[idA] ?? idA} & {areaLabels[idB] ?? idB}</h2>
+                {renderStaffingTable(idA, slotsA, { subLabel: areaLabels[idA] ?? idA })}
+                {renderStaffingTable(idB, slotsB, { subLabel: areaLabels[idB] ?? idB })}
+              </section>
+              <div>
+                {renderBreakMatrix(idA, areaLabels[idA] ?? idA)}
+                {renderBreakMatrix(idB, areaLabels[idB] ?? idB)}
+              </div>
+            </div>
+          );
+        }
+        const areaId = section as string;
+        const allAreaSlots = slots[areaId] ?? [];
+        const areaLabel = areaLabels[areaId] ?? areaId;
+        const areaSlots = allAreaSlots.filter((s) => !s.disabled);
+        const filled = areaSlots.filter((s) => s.personId).length;
+        const min = effectiveCapacity[areaId]?.min ?? 0;
+        const risks = getAreaRisks({
+          filled,
+          min,
+          disabledCount: allAreaSlots.length - areaSlots.length,
+          needsTrainedOrExpert: requiresTrainedOrExpert(areaId) && filled >= 1 && !areaSlots.some((s) => {
+            if (!s.personId) return false;
+            const p = roster.find((r) => r.id === s.personId);
+            const sk = p?.skills[areaId] ?? 'no_experience';
+            return sk === 'trained' || sk === 'expert';
+          }),
+        });
+        const metricExtra = risks.length > 0 ? ` · ${risks.join(' · ')}` : '';
+        return (
+          <div key={rowKey} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start', marginBottom: 20 }}>
+            <section style={sectionStyle}>
+              <h2 style={sectionTitleStyle}>{areaLabel} — {filled}/{min}{metricExtra}</h2>
+              {renderStaffingTable(areaId, allAreaSlots, { hideTitle: true })}
+            </section>
+            <div>
+              {renderBreakMatrix(areaId, areaLabel)}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
