@@ -562,20 +562,20 @@ export default function App() {
   );
 
   const handleAreaCapacityChange = useCallback((areaId: AreaId, payload: { min?: number; max?: number }) => {
+    const base = effectiveCapacity[areaId];
+    if (!base) return;
     const nextMin = payload.min != null && !Number.isNaN(payload.min) ? Math.max(1, Math.round(payload.min)) : undefined;
     const nextMax = payload.max != null && !Number.isNaN(payload.max) ? Math.max(1, Math.round(payload.max)) : undefined;
-    setAreaCapacityOverrides((prev) => {
-      const base = effectiveCapacity[areaId];
-      const next = {
-        ...prev[areaId],
-        min: nextMin ?? base.min,
-        max: nextMax ?? base.max,
-      };
-      if (next.min > next.max) next.max = next.min;
-      return { ...prev, [areaId]: next };
-    });
+    const cap = {
+      min: nextMin ?? base.min,
+      max: nextMax ?? base.max,
+    };
+    if (cap.min > cap.max) cap.max = cap.min;
+    setAreaCapacityOverrides((prev) => ({
+      ...prev,
+      [areaId]: { ...prev[areaId], min: cap.min, max: cap.max },
+    }));
     setSlots((prev) => {
-      const cap = getEffectiveCapacity({ ...areaCapacityOverrides, [areaId]: { min: nextMin ?? effectiveCapacity[areaId].min, max: nextMax ?? effectiveCapacity[areaId].max } })[areaId];
       const list = prev[areaId] ?? [];
       let nextList = [...list];
       if (cap.max < nextList.length) nextList = nextList.slice(0, cap.max);
@@ -584,7 +584,7 @@ export default function App() {
       }
       return { ...prev, [areaId]: nextList };
     });
-  }, [effectiveCapacity, areaCapacityOverrides]);
+  }, [effectiveCapacity]);
 
   const handleAreaNameChange = useCallback((areaId: AreaId, name: string) => {
     setAreaNameOverrides((prev) => ({ ...prev, [areaId]: name.trim() || undefined }));
