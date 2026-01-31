@@ -17,6 +17,9 @@ function buildDefaultRootState(lineId: string, lineName: string) {
     ],
     leadAreaIds: [] as string[],
     combinedSections: [] as [string, string][],
+    breaksEnabled: true,
+    breaksScope: 'line' as const,
+    breakRotations: 3,
   };
   const slots: Record<string, { id: string; personId: string | null }[]> = {};
   slots[areaId] = [{ id: nanoid(), personId: null }];

@@ -1,7 +1,6 @@
 import { memo } from 'react';
 import type { AreaId, BreakRotation, LunchRotation, RosterPerson, Slot, TaskItem } from '../types';
 import type { SkillLevel } from '../types';
-import { areaRequiresTrainedOrExpert } from '../types';
 import { createEmptySlot } from '../data/initialState';
 import { getSlotLabel } from '../lib/areaConfig';
 import { SlotDropdown } from './SlotDropdown';
@@ -53,6 +52,10 @@ interface AreaStaffingProps {
   showBreakSchedule?: boolean;
   /** Called when user clicks the break schedule visibility toggle for this area. */
   onToggleBreakSchedule?: () => void;
+  /** When true, area needs at least one Trained or Expert to run. */
+  requiresTrainedOrExpert?: boolean;
+  /** Called when user toggles "Needs experience" for this area. */
+  onRequiresTrainedOrExpertChange?: (value: boolean) => void;
 }
 
 function AreaStaffingInner({
@@ -79,6 +82,8 @@ function AreaStaffingInner({
   breakSchedule,
   showBreakSchedule = true,
   onToggleBreakSchedule,
+  requiresTrainedOrExpert = true,
+  onRequiresTrainedOrExpertChange,
 }: AreaStaffingProps) {
   const hasBreakScheduleData = breakSchedule && Object.keys(breakSchedule).length > 0;
   const enabledSlots = slots.filter((s) => !s.disabled);
@@ -88,7 +93,6 @@ function AreaStaffingInner({
   const pct = totalEnabled > 0 ? Math.round((filled / totalEnabled) * 100) : 0;
   const belowMin = filled < min;
   const atMax = slots.length >= max;
-  const requiresTrainedOrExpert = areaRequiresTrainedOrExpert(areaId);
   const hasTrainedOrExpert =
     filled > 0 &&
     enabledSlots.some((s) => {
@@ -159,6 +163,17 @@ function AreaStaffingInner({
             />
             De-juice it
           </label>
+          {onRequiresTrainedOrExpertChange != null && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.9rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={requiresTrainedOrExpert}
+                onChange={(e) => onRequiresTrainedOrExpertChange(e.target.checked)}
+                aria-label={`${areaLabel} needs experience (at least one Trained or Expert)`}
+              />
+              Needs experience
+            </label>
+          )}
           {hasBreakScheduleData && onToggleBreakSchedule && (
             <button
               type="button"

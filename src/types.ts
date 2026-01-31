@@ -112,8 +112,8 @@ export interface TaskItem {
   done: boolean;
 }
 
-export type BreakRotation = 1 | 2 | 3;
-export type LunchRotation = 1 | 2 | 3;
+export type BreakRotation = 1 | 2 | 3 | 4 | 5 | 6;
+export type LunchRotation = 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface ScheduleHour {
   hour: number; // 6-17 (6am-5pm display, 6pm is end)
@@ -203,7 +203,10 @@ export interface AreaConfigInLine {
   requiresTrainedOrExpert?: boolean;
 }
 
-/** Full definition of a line: name, sections (areas), which have leads, optional combined sections. */
+/** Break scope: line-wide (one set of rotations for the whole line) or per-station (per area). */
+export type BreakScope = 'line' | 'station';
+
+/** Full definition of a line: name, sections (areas), which have leads, optional combined sections, break options. */
 export interface LineConfig {
   id: string;
   name: string;
@@ -212,6 +215,12 @@ export interface LineConfig {
   leadAreaIds: string[];
   /** Pairs of area IDs to show as one combined section (e.g. 14.5 & Flip). */
   combinedSections: [string, string][];
+  /** If false, no break/lunch scheduling for this line. Default true. */
+  breaksEnabled?: boolean;
+  /** Line-wide (one rotation set) or station-specific (per area). Default 'station'. */
+  breaksScope?: BreakScope;
+  /** Number of break/lunch rotations (1–6). Default 3. */
+  breakRotations?: number;
 }
 
 /** Same shape as AppState; each line has its own roster and slots. */

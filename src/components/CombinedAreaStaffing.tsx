@@ -1,7 +1,6 @@
 import { memo } from 'react';
 import type { AreaId, BreakRotation, LunchRotation, RosterPerson, Slot, TaskItem } from '../types';
 import type { SkillLevel } from '../types';
-import { areaRequiresTrainedOrExpert } from '../types';
 import { createEmptySlot } from '../data/initialState';
 import { getSlotLabel } from '../lib/areaConfig';
 import { SlotDropdown } from './SlotDropdown';
@@ -64,6 +63,10 @@ interface CombinedAreaStaffingProps {
   breakScheduleB?: BreakScheduleRecord;
   showBreakSchedule: boolean;
   onToggleBreakSchedule: () => void;
+  requiresTrainedOrExpertA?: boolean;
+  requiresTrainedOrExpertB?: boolean;
+  onRequiresTrainedOrExpertChangeA?: (value: boolean) => void;
+  onRequiresTrainedOrExpertChangeB?: (value: boolean) => void;
 }
 
 function CombinedAreaStaffingInner({
@@ -100,6 +103,10 @@ function CombinedAreaStaffingInner({
   breakScheduleB,
   showBreakSchedule,
   onToggleBreakSchedule,
+  requiresTrainedOrExpertA = true,
+  requiresTrainedOrExpertB = true,
+  onRequiresTrainedOrExpertChangeA,
+  onRequiresTrainedOrExpertChangeB,
 }: CombinedAreaStaffingProps) {
   const hasBreakData =
     (breakScheduleA && Object.keys(breakScheduleA).length > 0) ||
@@ -122,7 +129,9 @@ function CombinedAreaStaffingInner({
     min: number,
     max: number,
     slotLabels: string[],
-    sectionTasks: TaskItem[]
+    sectionTasks: TaskItem[],
+    requiresTrainedOrExpert: boolean,
+    onRequiresTrainedOrExpertChange?: (value: boolean) => void
   ) {
     const enabledSlots = slots.filter((s) => !s.disabled);
     const filled = enabledSlots.filter((s) => s.personId).length;
@@ -131,7 +140,6 @@ function CombinedAreaStaffingInner({
     const pct = totalEnabled > 0 ? Math.round((filled / totalEnabled) * 100) : 0;
     const belowMin = filled < min;
     const atMax = slots.length >= max;
-    const requiresTrainedOrExpert = areaRequiresTrainedOrExpert(areaId);
     const hasTrainedOrExpert =
       filled > 0 &&
       enabledSlots.some((s) => {
@@ -153,7 +161,20 @@ function CombinedAreaStaffingInner({
 
     return (
       <div key={areaId} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid #eee' }}>
-        <div style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 8 }}>{areaLabel}</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+          <div style={{ fontSize: '1rem', fontWeight: 600 }}>{areaLabel}</div>
+          {onRequiresTrainedOrExpertChange != null && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={requiresTrainedOrExpert}
+                onChange={(e) => onRequiresTrainedOrExpertChange(e.target.checked)}
+                aria-label={`${areaLabel} needs experience`}
+              />
+              Needs experience
+            </label>
+          )}
+        </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginBottom: 8 }}>
           <span style={{ fontSize: '0.95rem' }}>
             Staffing: {filled}/{totalEnabled} ({pct}%)
@@ -364,8 +385,8 @@ function CombinedAreaStaffingInner({
         </div>
       </div>
 
-      {renderSubArea(areaIdA, areaLabelA, slotsA, minA, maxA, slotLabelsA, sectionTasksA)}
-      {renderSubArea(areaIdB, areaLabelB, slotsB, minB, maxB, slotLabelsB, sectionTasksB)}
+      {renderSubArea(areaIdA, areaLabelA, slotsA, minA, maxA, slotLabelsA, sectionTasksA, requiresTrainedOrExpertA, onRequiresTrainedOrExpertChangeA)}
+      {renderSubArea(areaIdB, areaLabelB, slotsB, minB, maxB, slotLabelsB, sectionTasksB, requiresTrainedOrExpertB, onRequiresTrainedOrExpertChangeB)}
 
       {mergedBreakSchedule && (
         <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #eee' }}>

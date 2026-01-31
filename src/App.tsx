@@ -54,6 +54,10 @@ import {
   getSlotLabelForLine,
   areaRequiresTrainedOrExpertFromConfig,
   getDefaultICLineConfig,
+  getBreaksEnabled,
+  getBreaksScope,
+  getBreakRotations,
+  BREAK_LINE_WIDE_KEY,
 } from './lib/lineConfig';
 import { createEmptyPerson, createEmptyOTPerson, createEmptySlot, getEmptyLineState, normalizeSlotsToCapacity, normalizeSlotsToLineCapacity } from './data/initialState';
 import { RosterGrid } from './components/RosterGrid';
@@ -73,6 +77,7 @@ import { getLineState, setLineState } from './lib/cloudLines';
 import { getCloudSession, clearCloudSession, EntryScreen } from './components/EntryScreen';
 import { LineManager } from './components/LineManager';
 import { BuildLineWizard } from './components/BuildLineWizard';
+import { BreakTable } from './components/BreakTable';
 
 const FULL_STAFF = 30;
 
@@ -186,7 +191,7 @@ export default function App() {
   );
   const areaRequiresTrainedOrExpert = useCallback(
     (areaId: string) =>
-      currentConfig ? (currentConfig.id === 'ic' ? areaId !== 'area_flip' : areaRequiresTrainedOrExpertFromConfig(currentConfig, areaId)) : true,
+      currentConfig ? areaRequiresTrainedOrExpertFromConfig(currentConfig, areaId) : true,
     [currentConfig]
   );
 
@@ -455,6 +460,21 @@ export default function App() {
     );
   }, []);
 
+  const handleAreaRequiresTrainedOrExpertChange = useCallback((areaId: string, value: boolean) => {
+    setRootState((prev) => {
+      const lineIndex = prev.lines.findIndex((l) => l.id === prev.currentLineId);
+      if (lineIndex === -1) return prev;
+      const line = prev.lines[lineIndex];
+      const areaIndex = line.areas.findIndex((a) => a.id === areaId);
+      if (areaIndex === -1) return prev;
+      const areas = line.areas.slice();
+      areas[areaIndex] = { ...areas[areaIndex], requiresTrainedOrExpert: value };
+      const lines = prev.lines.slice();
+      lines[lineIndex] = { ...line, areas };
+      return { ...prev, lines };
+    });
+  }, []);
+
   const handleAreaCapacityChange = useCallback((areaId: AreaId, payload: { min?: number; max?: number }) => {
     const nextMin = payload.min != null && !Number.isNaN(payload.min) ? Math.max(1, Math.round(payload.min)) : undefined;
     const nextMax = payload.max != null && !Number.isNaN(payload.max) ? Math.max(1, Math.round(payload.max)) : undefined;
@@ -576,28 +596,68 @@ export default function App() {
   }, [areaCapacityOverrides, areaNameOverrides, leadAreaIds, rootState.currentLineId, rootState.lineStates, slotLabelsByArea]);
 
   const handleRandomize = useCallback(() => {
-    const nextSlots = randomizeAssignments(roster, slots, leadAssignedPersonIds, areaIds);
+    const nextSlots = randomizeAssignments(roster, slots, leadAssignedPersonIds, areaIds, areaRequiresTrainedOrExpert);
     setSlots(nextSlots);
-    setBreakSchedules(generateBreakSchedules(roster, nextSlots, areaIds));
-  }, [roster, slots, leadAssignedPersonIds, areaIds]);
+    if (currentConfig && getBreaksEnabled(currentConfig)) {
+      setBreakSchedules(
+        generateBreakSchedules(roster, nextSlots, areaIds, {
+          rotationCount: getBreakRotations(currentConfig),
+          scope: getBreaksScope(currentConfig),
+          leadSlots,
+        })
+      );
+    } else {
+      setBreakSchedules({});
+    }
+  }, [roster, slots, leadAssignedPersonIds, areaIds, currentConfig, leadSlots, areaRequiresTrainedOrExpert]);
 
   const handleSpreadTalent = useCallback(() => {
-    const nextSlots = spreadTalent(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds);
+    const nextSlots = spreadTalent(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
     setSlots(nextSlots);
-    setBreakSchedules(generateBreakSchedules(roster, nextSlots, areaIds));
-  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds]);
+    if (currentConfig && getBreaksEnabled(currentConfig)) {
+      setBreakSchedules(
+        generateBreakSchedules(roster, nextSlots, areaIds, {
+          rotationCount: getBreakRotations(currentConfig),
+          scope: getBreaksScope(currentConfig),
+          leadSlots,
+        })
+      );
+    } else {
+      setBreakSchedules({});
+    }
+  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, currentConfig, leadSlots]);
 
   const handleMaxSpeed = useCallback(() => {
-    const nextSlots = maxSpeedAssignments(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds);
+    const nextSlots = maxSpeedAssignments(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
     setSlots(nextSlots);
-    setBreakSchedules(generateBreakSchedules(roster, nextSlots, areaIds));
-  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds]);
+    if (currentConfig && getBreaksEnabled(currentConfig)) {
+      setBreakSchedules(
+        generateBreakSchedules(roster, nextSlots, areaIds, {
+          rotationCount: getBreakRotations(currentConfig),
+          scope: getBreaksScope(currentConfig),
+          leadSlots,
+        })
+      );
+    } else {
+      setBreakSchedules({});
+    }
+  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, currentConfig, leadSlots, areaRequiresTrainedOrExpert]);
 
   const handleLightStretch = useCallback(() => {
-    const nextSlots = lightStretchAssignments(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds);
+    const nextSlots = lightStretchAssignments(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
     setSlots(nextSlots);
-    setBreakSchedules(generateBreakSchedules(roster, nextSlots, areaIds));
-  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds]);
+    if (currentConfig && getBreaksEnabled(currentConfig)) {
+      setBreakSchedules(
+        generateBreakSchedules(roster, nextSlots, areaIds, {
+          rotationCount: getBreakRotations(currentConfig),
+          scope: getBreaksScope(currentConfig),
+          leadSlots,
+        })
+      );
+    } else {
+      setBreakSchedules({});
+    }
+  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, currentConfig, leadSlots, areaRequiresTrainedOrExpert]);
 
   const handleRemoveDay = useCallback((id: string) => {
     removeSavedDay(id);
@@ -1025,15 +1085,19 @@ export default function App() {
                 onSlotsChange={setSlotsForArea}
                 onSectionTasksChange={setSectionTasksForArea}
                 onAssign={setSlotAssignment}
-                breakScheduleA={breakSchedules?.[idA]}
-                breakScheduleB={breakSchedules?.[idB]}
-                showBreakSchedule={breakScheduleVisibleByArea[idA] !== false}
+                breakScheduleA={currentConfig && getBreaksEnabled(currentConfig) ? breakSchedules?.[idA] : undefined}
+                breakScheduleB={currentConfig && getBreaksEnabled(currentConfig) ? breakSchedules?.[idB] : undefined}
+                showBreakSchedule={currentConfig && getBreaksEnabled(currentConfig) && breakScheduleVisibleByArea[idA] !== false}
                 onToggleBreakSchedule={() =>
                   setBreakScheduleVisibleByArea((prev) => ({
                     ...prev,
                     [idA]: prev[idA] === false,
                   }))
                 }
+                requiresTrainedOrExpertA={areaRequiresTrainedOrExpert(idA)}
+                requiresTrainedOrExpertB={areaRequiresTrainedOrExpert(idB)}
+                onRequiresTrainedOrExpertChangeA={(value) => handleAreaRequiresTrainedOrExpertChange(idA, value)}
+                onRequiresTrainedOrExpertChangeB={(value) => handleAreaRequiresTrainedOrExpertChange(idB, value)}
               />
             );
           }
@@ -1061,14 +1125,16 @@ export default function App() {
               onSlotsChange={setSlotsForArea}
               onSectionTasksChange={setSectionTasksForArea}
               onAssign={setSlotAssignment}
-              breakSchedule={breakSchedules?.[areaId]}
-              showBreakSchedule={breakScheduleVisibleByArea[areaId] !== false}
+              breakSchedule={currentConfig && getBreaksEnabled(currentConfig) ? breakSchedules?.[areaId] : undefined}
+              showBreakSchedule={currentConfig && getBreaksEnabled(currentConfig) && breakScheduleVisibleByArea[areaId] !== false}
               onToggleBreakSchedule={() =>
                 setBreakScheduleVisibleByArea((prev) => ({
                   ...prev,
                   [areaId]: prev[areaId] === false,
                 }))
               }
+              requiresTrainedOrExpert={areaRequiresTrainedOrExpert(areaId)}
+              onRequiresTrainedOrExpertChange={(value) => handleAreaRequiresTrainedOrExpertChange(areaId, value)}
             />
           );
         })}
@@ -1084,6 +1150,48 @@ export default function App() {
       />
 
       <DayTimeline schedule={schedule} onScheduleChange={setSchedule} />
+
+      {currentConfig && getBreaksEnabled(currentConfig) && (() => {
+        const rotationCount = getBreakRotations(currentConfig);
+        const scope = getBreaksScope(currentConfig);
+        if (scope === 'line') {
+          const lineAssignments = breakSchedules?.[BREAK_LINE_WIDE_KEY];
+          if (!lineAssignments || Object.keys(lineAssignments).length === 0) return null;
+          const people = Object.keys(lineAssignments).map((id) => {
+            const p = roster.find((r) => r.id === id);
+            return { id, name: p?.name ?? id };
+          });
+          return (
+            <BreakTable
+              people={people}
+              assignments={lineAssignments}
+              rotationCount={rotationCount}
+              title="Break schedule (line-wide)"
+            />
+          );
+        }
+        return (
+          <>
+            {areaIds.map((areaId) => {
+              const assignments = breakSchedules?.[areaId];
+              if (!assignments || Object.keys(assignments).length === 0) return null;
+              const people = Object.keys(assignments).map((id) => {
+                const p = roster.find((r) => r.id === id);
+                return { id, name: p?.name ?? id };
+              });
+              return (
+                <BreakTable
+                  key={areaId}
+                  people={people}
+                  assignments={assignments}
+                  rotationCount={rotationCount}
+                  title={`Break schedule — ${areaLabels[areaId] ?? areaId}`}
+                />
+              );
+            })}
+          </>
+        );
+      })()}
 
       <div className="save-load-section" style={{ marginBottom: 12 }}>
         <h3 style={{ marginTop: 0 }}>Save &amp; open (file)</h3>

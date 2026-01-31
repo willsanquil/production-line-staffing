@@ -2,14 +2,25 @@ import { createClient, type SupabaseClient, FunctionsHttpError } from '@supabase
 import type { RootState } from '../types';
 
 /** Get a user-friendly error message from an Edge Function non-2xx response. */
-async function getFunctionErrorMessage(error: unknown): Promise<string> {
-  if (error instanceof FunctionsHttpError && error.context && typeof error.context.json === 'function') {
+async function getFunctionErrorMessage(error: unknown, functionName: string): Promise<string> {
+  const response = error instanceof FunctionsHttpError ? error.context : null;
+  if (response && typeof response.json === 'function') {
     try {
-      const body = (await error.context.json()) as { error?: string };
+      const body = (await response.json()) as { error?: string };
       if (body?.error && typeof body.error === 'string') return body.error;
     } catch {
-      // ignore parse errors
+      // body wasn't JSON (e.g. HTML 404 page)
     }
+  }
+  const status = response?.status;
+  if (status === 404) {
+    return `(404) Edge Function '${functionName}' not found. Deploy it: npx supabase functions deploy ${functionName} (after supabase link).`;
+  }
+  if (status === 500) {
+    return `(500) Server error. Check Supabase Dashboard → Edge Functions → ${functionName} → Logs.`;
+  }
+  if (typeof status === 'number') {
+    return `(${status}) Check Supabase Dashboard → Edge Functions → ${functionName} → Logs.`;
   }
   return error instanceof Error ? error.message : String(error);
 }
@@ -62,7 +73,7 @@ export async function createCloudLine(
     body: { name: name.trim(), password },
   });
   if (error) {
-    const message = await getFunctionErrorMessage(error);
+    const message = await getFunctionErrorMessage(error, 'create-line');
     throw new Error(message);
   }
   if (data?.error) throw new Error(data.error);
@@ -87,7 +98,7 @@ export async function getLineState(
     body: { lineId, password },
   });
   if (error) {
-    const message = await getFunctionErrorMessage(error);
+    const message = await getFunctionErrorMessage(error, 'get-line-state');
     throw new Error(message);
   }
   if (data?.error) throw new Error(data.error);
@@ -107,7 +118,7 @@ export async function setLineState(
     { body: { lineId, password, rootState } }
   );
   if (error) {
-    const message = await getFunctionErrorMessage(error);
+    const message = await getFunctionErrorMessage(error, 'set-line-state');
     throw new Error(message);
   }
   if (data?.error) throw new Error(data.error);

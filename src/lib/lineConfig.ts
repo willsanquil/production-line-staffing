@@ -18,6 +18,9 @@ export function getDefaultICLineConfig(): LineConfig {
     ],
     leadAreaIds: ['area_end_of_line', 'area_courtyard', 'area_bonding'],
     combinedSections: [['area_14_5', 'area_flip']],
+    breaksEnabled: true,
+    breaksScope: 'station',
+    breakRotations: 3,
   };
 }
 
@@ -101,8 +104,26 @@ export function createEmptyLineConfig(name: string, lineId?: string): LineConfig
     areas: [],
     leadAreaIds: [],
     combinedSections: [],
+    breaksEnabled: true,
+    breaksScope: 'station',
+    breakRotations: 3,
   };
 }
+
+/** Break options from line config (with defaults). */
+export function getBreaksEnabled(config: LineConfig): boolean {
+  return config.breaksEnabled !== false;
+}
+export function getBreaksScope(config: LineConfig): 'line' | 'station' {
+  return config.breaksScope ?? 'station';
+}
+export function getBreakRotations(config: LineConfig): number {
+  const n = config.breakRotations ?? 3;
+  return Math.min(6, Math.max(1, n));
+}
+
+/** Key used in breakSchedules for line-wide assignments. */
+export const BREAK_LINE_WIDE_KEY = '__line__';
 
 /** Effective capacity (min/max) for a line, with optional overrides. */
 export function getEffectiveCapacityForLine(

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { LineConfig, AreaConfigInLine } from '../types';
+import type { LineConfig, AreaConfigInLine, BreakScope } from '../types';
 import { areaIdFromName } from '../lib/lineConfig';
 
 interface BuildLineWizardProps {
@@ -9,7 +9,7 @@ interface BuildLineWizardProps {
   onCancel: () => void;
 }
 
-type Step = 'name' | 'sections' | 'leads' | 'done';
+type Step = 'name' | 'sections' | 'leads' | 'breaks' | 'done';
 
 interface SectionDraft {
   id: string;
@@ -23,6 +23,9 @@ export function BuildLineWizard({ existingAreaIds, onComplete, onCancel }: Build
   const [lineName, setLineName] = useState('');
   const [sections, setSections] = useState<SectionDraft[]>([]);
   const [leadAreaIds, setLeadAreaIds] = useState<Set<string>>(new Set());
+  const [breaksEnabled, setBreaksEnabled] = useState(true);
+  const [breaksScope, setBreaksScope] = useState<BreakScope>('station');
+  const [breakRotations, setBreakRotations] = useState(3);
 
   const addSection = useCallback(() => {
     const existingIds = new Set([...existingAreaIds, ...sections.map((s) => s.id)]);
@@ -62,7 +65,7 @@ export function BuildLineWizard({ existingAreaIds, onComplete, onCancel }: Build
       name: s.name,
       minSlots: Math.max(1, s.minSlots),
       maxSlots: Math.max(1, s.maxSlots),
-      requiresTrainedOrExpert: true,
+      requiresTrainedOrExpert: false,
     }));
     const config: LineConfig = {
       id: lineId,
@@ -70,9 +73,12 @@ export function BuildLineWizard({ existingAreaIds, onComplete, onCancel }: Build
       areas,
       leadAreaIds: sections.filter((s) => leadAreaIds.has(s.id)).map((s) => s.id),
       combinedSections: [],
+      breaksEnabled,
+      breaksScope,
+      breakRotations: Math.min(6, Math.max(1, breakRotations)),
     };
     onComplete(config);
-  }, [lineName, sections, leadAreaIds, onComplete]);
+  }, [lineName, sections, leadAreaIds, breaksEnabled, breaksScope, breakRotations, onComplete]);
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', padding: '24px 16px' }}>
@@ -200,6 +206,68 @@ export function BuildLineWizard({ existingAreaIds, onComplete, onCancel }: Build
           </ul>
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" onClick={() => setStep('sections')} style={{ padding: '10px 20px' }}>
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={() => setStep('breaks')}
+              style={{ padding: '10px 20px', fontWeight: 600 }}
+            >
+              Next: Breaks
+            </button>
+          </div>
+        </>
+      )}
+
+      {step === 'breaks' && (
+        <>
+          <p style={{ marginBottom: 12, color: '#555' }}>
+            Do you want break/lunch scheduling for this line?
+          </p>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={breaksEnabled}
+              onChange={(e) => setBreaksEnabled(e.target.checked)}
+            />
+            <span>Enable break & lunch rotations</span>
+          </label>
+          {breaksEnabled && (
+            <>
+              <p style={{ marginBottom: 8, color: '#555' }}>Line-wide (one set of rotations) or per station?</p>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="breaksScope"
+                    checked={breaksScope === 'line'}
+                    onChange={() => setBreaksScope('line')}
+                  />
+                  <span>Line-wide</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="breaksScope"
+                    checked={breaksScope === 'station'}
+                    onChange={() => setBreaksScope('station')}
+                  />
+                  <span>Station-specific</span>
+                </label>
+              </div>
+              <p style={{ marginBottom: 8, color: '#555' }}>Number of rotations (default 3):</p>
+              <input
+                type="number"
+                min={1}
+                max={6}
+                value={breakRotations}
+                onChange={(e) => setBreakRotations(Math.min(6, Math.max(1, parseInt(e.target.value, 10) || 3)))}
+                style={{ width: 72, padding: '8px 10px', marginBottom: 20 }}
+              />
+            </>
+          )}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={() => setStep('leads')} style={{ padding: '10px 20px' }}>
               Back
             </button>
             <button
