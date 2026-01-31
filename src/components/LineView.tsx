@@ -8,24 +8,6 @@ import { getSlotLabel as getSlotLabelDefault, isGenericSlotLabel } from '../lib/
 import type { SlotLabelsByArea } from '../types';
 import { getAreaRisks } from '../lib/lineViewRisks';
 
-const SKILL_SCORE: Record<SkillLevel, number> = {
-  no_experience: 0,
-  training: 1,
-  trained: 2,
-  expert: 3,
-};
-
-function averageKnowledge(areaId: AreaId, slots: { personId: string | null }[], roster: RosterPerson[]): number | null {
-  const personIds = slots.map((s) => s.personId).filter(Boolean) as string[];
-  if (personIds.length === 0) return null;
-  let sum = 0;
-  for (const id of personIds) {
-    const p = roster.find((r) => r.id === id);
-    if (p) sum += SKILL_SCORE[p.skills[areaId] ?? 'no_experience'];
-  }
-  return sum / personIds.length;
-}
-
 const BAR_HEIGHT = 18;
 
 function KnowledgeBar({ position }: { position: number | null }) {
@@ -133,27 +115,6 @@ function LineViewInner({
     color: '#1a1a1a',
     marginBottom: 10,
   };
-  const titleRowStyle: CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 8,
-    flexWrap: 'wrap',
-  };
-  const alertStyle: CSSProperties = {
-    fontSize: '0.95rem',
-    fontWeight: 600,
-    color: '#c0392b',
-    marginBottom: 8,
-    lineHeight: 1.4,
-  };
-  const staffRowStyle: CSSProperties = {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '10px 16px',
-    fontSize: '1rem',
-    lineHeight: 1.5,
-  };
   const nameFontSize = '1.28rem';
 
   const presentationTableStyle: CSSProperties = {
@@ -186,12 +147,8 @@ function LineViewInner({
     const subLabel = options?.subLabel ?? areaLabels[areaId];
     const hideTitle = options?.hideTitle;
     const areaSlots = allSlots.filter((s) => !s.disabled);
-    const disabledLabels = allSlots
-      .map((s, idx) => (s.disabled ? getLabel(areaId, idx) : null))
-      .filter((l): l is string => l != null);
     const filled = areaSlots.filter((s) => s.personId).length;
     const min = effectiveCapacity[areaId]?.min ?? 0;
-    const max = effectiveCapacity[areaId]?.max ?? min;
     const areaRequiresTrained = requiresTrainedOrExpert(areaId);
     const hasTrainedOrExpert =
       filled > 0 &&
@@ -209,7 +166,7 @@ function LineViewInner({
     });
     const metricText = `${filled}/${min}`;
     const metricExtra = risks.length > 0 ? ` · ${risks.join(' · ')}` : '';
-    const hasRoleLabels = areaSlots.some((s, idx) => !isGenericSlotLabel(getLabel(areaId, idx)));
+    const hasRoleLabels = areaSlots.some((_, idx) => !isGenericSlotLabel(getLabel(areaId, idx)));
 
     return (
       <div key={areaId} style={{ marginBottom: 12 }}>
@@ -250,88 +207,6 @@ function LineViewInner({
               })}
             </tbody>
           </table>
-        </div>
-      </div>
-    );
-  };
-
-  const renderAreaBlock = (
-    areaId: string,
-    allSlots: { id: string; personId: string | null; disabled?: boolean }[],
-    options?: { subLabel?: string; hideTitleRow?: boolean }
-  ) => {
-    const subLabel = options?.subLabel;
-    const hideTitleRow = options?.hideTitleRow;
-    const areaSlots = allSlots.filter((s) => !s.disabled);
-    const disabledLabels = allSlots
-      .map((s, idx) => (s.disabled ? getLabel(areaId, idx) : null))
-      .filter((l): l is string => l != null);
-    const filled = areaSlots.filter((s) => s.personId).length;
-    const min = effectiveCapacity[areaId]?.min ?? 0;
-    const disabledCount = allSlots.length - areaSlots.length;
-    const areaRequiresTrained = requiresTrainedOrExpert(areaId);
-    const hasTrainedOrExpert =
-      filled > 0 &&
-      areaSlots.some((s) => {
-        if (!s.personId) return false;
-        const p = roster.find((r) => r.id === s.personId);
-        const sk = p?.skills[areaId] ?? 'no_experience';
-        return sk === 'trained' || sk === 'expert';
-      });
-    const risks = getAreaRisks({
-      filled,
-      min,
-      disabledCount,
-      needsTrainedOrExpert: areaRequiresTrained && filled >= 1 && !hasTrainedOrExpert,
-    });
-    const avgKnowledge = averageKnowledge(areaId, areaSlots, roster);
-    const spectrumPos = avgKnowledge != null ? (avgKnowledge / 3) * 100 : null;
-    const alerts = [
-      ...disabledLabels.map((l) => `${l} disabled`),
-      ...risks,
-    ].filter(Boolean);
-
-    return (
-      <div key={areaId} style={{ marginBottom: subLabel ? 14 : 0 }}>
-        {hideTitleRow ? (
-          <div style={{ ...titleRowStyle, marginBottom: 6 }}>
-            <div style={{ width: 72, flexShrink: 0 }}>
-              <KnowledgeBar position={spectrumPos} />
-            </div>
-          </div>
-        ) : (
-          <div style={titleRowStyle}>
-            <span style={{ fontSize: '1rem', fontWeight: 600, color: '#333' }}>
-              {subLabel ?? areaLabels[areaId]}
-            </span>
-            <div style={{ width: 72, flexShrink: 0 }}>
-              <KnowledgeBar position={spectrumPos} />
-            </div>
-          </div>
-        )}
-        {alerts.length > 0 && (
-          <div style={alertStyle}>{alerts.join(' · ')}</div>
-        )}
-        <div style={staffRowStyle}>
-          {allSlots.map((slot, idx) => {
-            if (slot.disabled) return null;
-            const slotLabel = getLabel(areaId, idx);
-            const name = getName(slot.personId);
-            const skill = getSkillInArea(areaId, slot.personId);
-            const showLabel = !isGenericSlotLabel(slotLabel);
-            return (
-              <span key={slot.id}>
-                {showLabel ? (
-                  <>
-                    <span style={{ color: '#666', marginRight: 6, fontSize: '0.95rem' }}>{slotLabel}:</span>
-                    <span className={`skill-name-${skill}`} style={{ fontSize: nameFontSize, fontWeight: 600 }}>{name}</span>
-                  </>
-                ) : (
-                  <span className={`skill-name-${skill}`} style={{ fontSize: nameFontSize, fontWeight: 600 }}>{name}</span>
-                )}
-              </span>
-            );
-          })}
         </div>
       </div>
     );
