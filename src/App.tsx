@@ -307,13 +307,16 @@ export default function App() {
   }, [appMode, cloudLineId, rootState, slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea]);
 
   // When in cloud mode, poll for updates so other users' changes show up (live-ish updates).
+  // Skip applying poll for a while after any local slot/lead change so we don't overwrite the user's
+  // edit with stale server state before the debounced save has completed.
   const CLOUD_POLL_MS = 4000;
+  const CLOUD_POLL_SKIP_AFTER_LOCAL_CHANGE_MS = 12000;
   useEffect(() => {
     if (appMode !== 'app' || !cloudLineId) return;
     const password = cloudPasswordRef.current;
     if (!password) return;
     const intervalId = setInterval(() => {
-      if (Date.now() - lastLocalChangeRef.current < 2000) return;
+      if (Date.now() - lastLocalChangeRef.current < CLOUD_POLL_SKIP_AFTER_LOCAL_CHANGE_MS) return;
       getLineState(cloudLineId, password)
         .then((root) => setRootState(root))
         .catch(() => { /* ignore poll errors (e.g. network) */ });
