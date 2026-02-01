@@ -83,8 +83,6 @@ import { LineManager } from './components/LineManager';
 import { BuildLineWizard } from './components/BuildLineWizard';
 import { BreakTable } from './components/BreakTable';
 
-const FULL_STAFF = 30;
-
 const PERSIST_DEBOUNCE_MS = 400;
 
 function getAssignedPersonIds(slots: SlotsByArea, areaIds: string[]): Set<string> {
@@ -202,6 +200,11 @@ export default function App() {
         : ({} as Record<string, { min: number; max: number }>),
     [currentConfig, areaCapacityOverrides]
   );
+  // Full staff = leads + sum of all areas' min capacity
+  const fullStaff = useMemo(() => {
+    const minSlots = Object.values(effectiveCapacity).reduce((sum, cap) => sum + cap.min, 0);
+    return leadSlotKeys.length + minSlots;
+  }, [effectiveCapacity, leadSlotKeys]);
   const areaLabels = useMemo(
     () =>
       currentConfig
@@ -364,8 +367,8 @@ export default function App() {
     [allAssignedPersonIds, leadAssignedPersonIds]
   );
   const grandTotalPct = useMemo(
-    () => (FULL_STAFF > 0 ? Math.round((grandTotal / FULL_STAFF) * 100) : 0),
-    [grandTotal]
+    () => (fullStaff > 0 ? Math.round((grandTotal / fullStaff) * 100) : 0),
+    [grandTotal, fullStaff]
   );
 
   const lineHealthScore = useMemo(
@@ -1443,7 +1446,7 @@ export default function App() {
           slotLabelsByArea={slotLabelsByArea}
           effectiveCapacity={effectiveCapacity}
           totalOnLine={grandTotal}
-          fullStaff={FULL_STAFF}
+          fullStaff={fullStaff}
           staffingPct={grandTotalPct}
           lineHealthScore={lineHealthScore}
           lineSections={[...lineSections]}
@@ -1533,7 +1536,7 @@ export default function App() {
 
       <div className="totals-and-leads-row" style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', marginBottom: 12 }}>
         <div className="grand-total" style={{ marginBottom: 0 }}>
-          Total people on line: {grandTotal} ({grandTotalPct}%) — Full staff: {FULL_STAFF}
+          Total people on line: {grandTotal} ({grandTotalPct}%) — Full staff: {fullStaff}
         </div>
         <div className="seniority-spectrum-wrap" style={{ marginBottom: 0, minWidth: 160 }}>
           <div className="seniority-spectrum-label" style={{ fontSize: '0.75rem', marginBottom: 4 }}>
