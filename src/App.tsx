@@ -150,6 +150,15 @@ export default function App() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareLinkCopied, setShareLinkCopied] = useState(false);
   const [shareName, setShareName] = useState('');
+  const [directLinkPassword, setDirectLinkPassword] = useState('');
+  const [directLinkError, setDirectLinkError] = useState<string | null>(null);
+  const [directLinkLoading, setDirectLinkLoading] = useState(false);
+
+  const cloudLineFromUrl = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    const p = new URLSearchParams(window.location.search);
+    return p.get('cloudLine');
+  }, []);
   const [sharePassword, setSharePassword] = useState('');
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
@@ -1093,7 +1102,71 @@ export default function App() {
     });
   }, [cloudLineId]);
 
+  const handleDirectLinkView = useCallback(() => {
+    if (!cloudLineFromUrl || !directLinkPassword.trim()) {
+      setDirectLinkError('Enter the line password');
+      return;
+    }
+    setDirectLinkError(null);
+    setDirectLinkLoading(true);
+    getLineState(cloudLineFromUrl, directLinkPassword.trim())
+      .then((root) => {
+        setRootState(root);
+        setCloudLineId(cloudLineFromUrl);
+        cloudPasswordRef.current = directLinkPassword.trim();
+        setCloudSession(cloudLineFromUrl, directLinkPassword.trim());
+        setAdminVisible(false);
+        setAppMode('app');
+        if (typeof window !== 'undefined' && window.history.replaceState) {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('cloudLine');
+          window.history.replaceState({}, '', url.pathname + url.search);
+        }
+      })
+      .catch((e) => setDirectLinkError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setDirectLinkLoading(false));
+  }, [cloudLineFromUrl, directLinkPassword]);
+
   if (appMode === 'entry') {
+    if (cloudLineFromUrl) {
+      return (
+        <div style={{ padding: 24, maxWidth: 400, margin: '0 auto', textAlign: 'center' }}>
+          <h1 style={{ fontSize: '1.5rem', marginBottom: 8 }}>View this line</h1>
+          <p style={{ color: '#666', marginBottom: 20 }}>Enter the line password to view the staffing sheet.</p>
+          {directLinkError && (
+            <div style={{ background: '#fee', padding: 12, borderRadius: 8, marginBottom: 16 }}>{directLinkError}</div>
+          )}
+          <div style={{ marginBottom: 16 }}>
+            <input
+              type="password"
+              value={directLinkPassword}
+              onChange={(e) => setDirectLinkPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleDirectLinkView()}
+              placeholder="Line password"
+              style={{ width: '100%', padding: '12px 14px', fontSize: '1rem', borderRadius: 8, border: '1px solid #ccc', boxSizing: 'border-box' }}
+              autoFocus
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleDirectLinkView}
+            disabled={directLinkLoading || !directLinkPassword.trim()}
+            style={{ padding: '12px 24px', fontSize: '1rem', fontWeight: 600, borderRadius: 8, border: 'none', background: '#1a73e8', color: '#fff', cursor: 'pointer' }}
+          >
+            {directLinkLoading ? 'Loading…' : 'View'}
+          </button>
+          <p style={{ marginTop: 24 }}>
+            <button
+              type="button"
+              onClick={() => window.location.assign(window.location.pathname)}
+              style={{ padding: '8px 16px', fontSize: '0.9rem', background: 'transparent', border: '1px solid #ccc', borderRadius: 8, cursor: 'pointer' }}
+            >
+              Use app normally
+            </button>
+          </p>
+        </div>
+      );
+    }
     const entryExistingAreaIds = new Set(rootState.lines.flatMap((l) => l.areas.map((a) => a.id)));
     return (
       <EntryScreen

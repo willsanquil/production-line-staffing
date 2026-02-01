@@ -358,7 +358,7 @@ function LineViewInner({
                 <span style={{ fontSize: '1rem', fontWeight: 600, color: '#1a1a1a' }}>{assignedLeadKeys.length}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                <span style={{ fontSize: '0.8rem', color: '#555', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Knowledge</span>
+                <span style={{ fontSize: '0.8rem', color: '#555', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Experience</span>
                 <div style={{ width: 100, flexShrink: 0 }}>
                   <KnowledgeBar position={knowledgePosition} />
                 </div>
