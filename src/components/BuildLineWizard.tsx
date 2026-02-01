@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { LineConfig, AreaConfigInLine, BreakScope } from '../types';
+import type { LineConfig, AreaConfigInLine } from '../types';
 import { areaIdFromName } from '../lib/lineConfig';
 
 interface BuildLineWizardProps {
@@ -28,8 +28,6 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
   const [sections, setSections] = useState<SectionDraft[]>([]);
   const [leadCount, setLeadCount] = useState(0);
   const [leadNames, setLeadNames] = useState<string[]>([]);
-  const [breaksEnabled, setBreaksEnabled] = useState(true);
-  const [breaksScope, setBreaksScope] = useState<BreakScope>('station');
   const [breakRotations, setBreakRotations] = useState(3);
 
   const addSection = useCallback(() => {
@@ -75,12 +73,12 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
       leadAreaIds: [],
       leadSlotNames: leadCount > 0 ? leadSlotNames : undefined,
       combinedSections: [],
-      breaksEnabled,
-      breaksScope,
+      breaksEnabled: true,
+      breaksScope: 'station',
       breakRotations: Math.min(6, Math.max(1, breakRotations)),
     };
     onComplete(config);
-  }, [existingLineId, lineName, sections, leadCount, leadNames, breaksEnabled, breaksScope, breakRotations, onComplete]);
+  }, [existingLineId, lineName, sections, leadCount, leadNames, breakRotations, onComplete]);
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', padding: '24px 16px' }}>
@@ -246,50 +244,16 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
       {step === 'breaks' && (
         <>
           <p style={{ marginBottom: 12, color: '#555' }}>
-            Do you want break/lunch scheduling for this line?
+            How many break/lunch rotations? (default 3)
           </p>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={breaksEnabled}
-              onChange={(e) => setBreaksEnabled(e.target.checked)}
-            />
-            <span>Enable break & lunch rotations</span>
-          </label>
-          {breaksEnabled && (
-            <>
-              <p style={{ marginBottom: 8, color: '#555' }}>Line-wide (one set of rotations) or per station?</p>
-              <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                  <input
-                    type="radio"
-                    name="breaksScope"
-                    checked={breaksScope === 'line'}
-                    onChange={() => setBreaksScope('line')}
-                  />
-                  <span>Line-wide</span>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                  <input
-                    type="radio"
-                    name="breaksScope"
-                    checked={breaksScope === 'station'}
-                    onChange={() => setBreaksScope('station')}
-                  />
-                  <span>Station-specific</span>
-                </label>
-              </div>
-              <p style={{ marginBottom: 8, color: '#555' }}>Number of rotations (default 3):</p>
-              <input
-                type="number"
-                min={1}
-                max={6}
-                value={breakRotations}
-                onChange={(e) => setBreakRotations(Math.min(6, Math.max(1, parseInt(e.target.value, 10) || 3)))}
-                style={{ width: 72, padding: '8px 10px', marginBottom: 20 }}
-              />
-            </>
-          )}
+          <input
+            type="number"
+            min={1}
+            max={6}
+            value={breakRotations}
+            onChange={(e) => setBreakRotations(Math.min(6, Math.max(1, parseInt(e.target.value, 10) || 3)))}
+            style={{ width: 72, padding: '8px 10px', marginBottom: 20 }}
+          />
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" onClick={() => setStep('leads')} style={{ padding: '10px 20px' }}>
               Back
