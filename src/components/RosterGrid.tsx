@@ -366,14 +366,14 @@ function RosterGridInner({
                     </td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
                       <select
-                        value={person.breakPreference ?? 'prefer_middle'}
+                        value={person.breakPreference ?? 'no_preference'}
                         onChange={(e) => onBreakPreferenceChange(person.id, e.target.value as BreakPreference)}
                         style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 100 }}
                         title="Break schedule preference"
                         aria-label={`${person.name} break preference`}
                       >
-                        <option value="prefer_early">Prefer early</option>
                         <option value="no_preference">Prefer middle</option>
+                        <option value="prefer_early">Prefer early</option>
                         <option value="prefer_late">Prefer late</option>
                       </select>
                     </td>
@@ -528,15 +528,14 @@ function RosterGridInner({
                         </td>
                         <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
                           <select
-                            value={person.breakPreference ?? 'prefer_middle'}
+                            value={person.breakPreference ?? 'no_preference'}
                             onChange={(e) => onBreakPreferenceChange(person.id, e.target.value as BreakPreference)}
                             style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 100 }}
                             title="Break preference"
                           >
-                            <option value="prefer_early">Prefer early</option>
-                            <option value="prefer_middle">Prefer middle</option>
-                            <option value="prefer_late">Prefer late</option>
                             <option value="no_preference">Prefer middle</option>
+                            <option value="prefer_early">Prefer early</option>
+                            <option value="prefer_late">Prefer late</option>
                           </select>
                         </td>
                         {areaIds.map((areaId) => {
@@ -710,14 +709,14 @@ function RosterGridInner({
                     </td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
                       <select
-                        value={person.breakPreference ?? 'prefer_middle'}
+                        value={person.breakPreference ?? 'no_preference'}
                         onChange={(e) => onBreakPreferenceChange(person.id, e.target.value as BreakPreference)}
                         style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 100 }}
                         title="Break schedule preference"
                         aria-label={`${person.name} break preference`}
                       >
-                        <option value="prefer_early">Prefer early</option>
                         <option value="no_preference">Prefer middle</option>
+                        <option value="prefer_early">Prefer early</option>
                         <option value="prefer_late">Prefer late</option>
                       </select>
                     </td>

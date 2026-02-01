@@ -58,7 +58,7 @@ export function createEmptyPerson(name: string, areaIds?: string[]): RosterPerso
     ot: false,
     late: false,
     leavingEarly: false,
-    breakPreference: 'prefer_middle',
+    breakPreference: 'no_preference',
     skills,
     areasWantToLearn: [],
     flexedToLineId: null,
