@@ -66,7 +66,7 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
     }
   })();
   
-  const [step, setStep] = useState<'choose' | 'list' | 'create' | 'join' | 'configure'>(initialStep);
+  const [step, setStep] = useState<'choose' | 'list' | 'create' | 'join' | 'configure' | 'clone'>(initialStep);
   const [lines, setLines] = useState<CloudLineSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +80,12 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
   const [configureLineId, setConfigureLineId] = useState<string | null>(null);
   const [configurePassword, setConfigurePassword] = useState('');
   const [configureName, setConfigureName] = useState('');
+
+  /** Clone line state */
+  const [cloneSourceLineId, setCloneSourceLineId] = useState('');
+  const [cloneSourcePassword, setCloneSourcePassword] = useState('');
+  const [cloneNewName, setCloneNewName] = useState('');
+  const [cloneNewPassword, setCloneNewPassword] = useState('');
 
   useEffect(() => {
     if (step !== 'list' || !cloudAvailable) return;
@@ -175,6 +181,46 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
       .finally(() => setLoading(false));
   };
 
+  const handleClone = async () => {
+    if (!cloneSourceLineId || !cloneSourcePassword) {
+      setError('Select a source line and enter its password');
+      return;
+    }
+    if (!cloneNewName.trim() || !cloneNewPassword) {
+      setError('Enter a name and password for the new line');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      // 1. Fetch source line state to get its config
+      const sourceState = await getLineState(cloneSourceLineId, cloneSourcePassword);
+      const sourceConfig = sourceState.lines?.[0];
+      if (!sourceConfig) {
+        throw new Error('Could not read source line configuration');
+      }
+      // 2. Create new cloud line
+      const { lineId: newLineId } = await createCloudLine(cloneNewName.trim(), cloneNewPassword);
+      // 3. Create new config with new ID and name
+      const newConfig: LineConfig = { ...sourceConfig, id: newLineId, name: cloneNewName.trim() };
+      // 4. Create empty state with cloned config
+      const emptyState = getEmptyLineState(newConfig);
+      const newRootState: RootState = {
+        currentLineId: newLineId,
+        lines: [newConfig],
+        lineStates: { [newLineId]: emptyState },
+      };
+      // 5. Save and join new line
+      await setLineState(newLineId, cloneNewPassword, newRootState);
+      setCloudSession(newLineId, cloneNewPassword);
+      onJoinGroup(newRootState, newLineId, cloneNewPassword);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const cardStyle: React.CSSProperties = {
     background: '#fff',
     borderRadius: 12,
@@ -266,6 +312,9 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
             <button type="button" onClick={() => setStep('join')} style={btnStyle}>
               Join an existing line
             </button>
+            <button type="button" onClick={() => setStep('clone')} style={btnStyle}>
+              Clone an existing line
+            </button>
           </div>
         )}
         {lines.length > 0 && (
@@ -343,6 +392,71 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
           />
           <button type="button" onClick={handleCreate} disabled={loading} style={btnPrimary}>
             {loading ? 'Creating…' : 'Create line'}
+          </button>
+        </div>
+        <button type="button" onClick={() => setStep('list')} style={btnStyle}>
+          Back
+        </button>
+      </div>
+    );
+  }
+
+  if (step === 'clone') {
+    return (
+      <div style={{ padding: 24, maxWidth: 420, margin: '0 auto' }}>
+        <h1 style={{ fontSize: '1.5rem', marginBottom: 16 }}>Clone a line</h1>
+        <p style={{ color: '#666', marginBottom: 16 }}>
+          Copy all settings from an existing line but start with an empty roster.
+        </p>
+        {error && (
+          <div style={{ background: '#fee', padding: 12, borderRadius: 8, marginBottom: 16 }}>
+            {error}
+          </div>
+        )}
+        <div style={cardStyle}>
+          <label style={{ display: 'block', fontWeight: 600 }}>Source line</label>
+          <select
+            value={cloneSourceLineId}
+            onChange={(e) => setCloneSourceLineId(e.target.value)}
+            style={inputStyle}
+          >
+            <option value="">— Select a line to clone —</option>
+            {lines.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+          <label style={{ display: 'block', fontWeight: 600 }}>Source line password</label>
+          <input
+            type="password"
+            value={cloneSourcePassword}
+            onChange={(e) => setCloneSourcePassword(e.target.value)}
+            placeholder="Password of the line to clone"
+            style={inputStyle}
+            autoComplete="current-password"
+          />
+          <hr style={{ margin: '16px 0', border: 'none', borderTop: '1px solid #eee' }} />
+          <label style={{ display: 'block', fontWeight: 600 }}>New line name</label>
+          <input
+            type="text"
+            value={cloneNewName}
+            onChange={(e) => setCloneNewName(e.target.value)}
+            placeholder="e.g. NIC Line"
+            style={inputStyle}
+            autoComplete="off"
+          />
+          <label style={{ display: 'block', fontWeight: 600 }}>New line password</label>
+          <input
+            type="password"
+            value={cloneNewPassword}
+            onChange={(e) => setCloneNewPassword(e.target.value)}
+            placeholder="Password for the new line"
+            style={inputStyle}
+            autoComplete="new-password"
+          />
+          <button type="button" onClick={handleClone} disabled={loading} style={btnPrimary}>
+            {loading ? 'Cloning…' : 'Clone line'}
           </button>
         </div>
         <button type="button" onClick={() => setStep('list')} style={btnStyle}>
