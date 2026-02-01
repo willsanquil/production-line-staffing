@@ -53,7 +53,20 @@ interface EntryScreenProps {
 }
 
 export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentation, existingAreaIds = new Set() }: EntryScreenProps) {
-  const [step, setStep] = useState<'choose' | 'list' | 'create' | 'join' | 'configure'>('choose');
+  const cloudAvailable = isCloudConfigured();
+  
+  // Check for share link on mount and start at 'list' step if present
+  const initialStep = (() => {
+    if (!cloudAvailable) return 'choose';
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.has('cloudLine') ? 'list' : 'choose';
+    } catch {
+      return 'choose';
+    }
+  })();
+  
+  const [step, setStep] = useState<'choose' | 'list' | 'create' | 'join' | 'configure'>(initialStep);
   const [lines, setLines] = useState<CloudLineSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,8 +80,6 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
   const [configureLineId, setConfigureLineId] = useState<string | null>(null);
   const [configurePassword, setConfigurePassword] = useState('');
   const [configureName, setConfigureName] = useState('');
-
-  const cloudAvailable = isCloudConfigured();
 
   useEffect(() => {
     if (step !== 'list' || !cloudAvailable) return;
