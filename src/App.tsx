@@ -77,7 +77,7 @@ import { randomizeAssignments, spreadTalent, fillRemainingAssignments } from './
 import { generateBreakSchedules } from './lib/breakSchedules';
 import { saveRootState, loadSavedDays, addSavedDay, removeSavedDay, exportStateToJson, importStateFromJson } from './lib/persist';
 import { saveToFile, overwriteFile, openFromFile, isSaveToFileSupported } from './lib/fileStorage';
-import { getLineState, setLineState, createCloudLine, deleteCloudLine } from './lib/cloudLines';
+import { getLineState, setLineState, createCloudLine, deleteCloudLine, listCloudLines } from './lib/cloudLines';
 import { getCloudSession, setCloudSession, clearCloudSession, EntryScreen } from './components/EntryScreen';
 import { LineManager } from './components/LineManager';
 import { BuildLineWizard } from './components/BuildLineWizard';
@@ -153,6 +153,12 @@ export default function App() {
   const [directLinkPassword, setDirectLinkPassword] = useState('');
   const [directLinkError, setDirectLinkError] = useState<string | null>(null);
   const [directLinkLoading, setDirectLinkLoading] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importLineId, setImportLineId] = useState('');
+  const [importPassword, setImportPassword] = useState('');
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importLines, setImportLines] = useState<{ id: string; name: string }[]>([]);
 
   const cloudLineFromUrl = useMemo(() => {
     if (typeof window === 'undefined') return null;
@@ -1102,6 +1108,79 @@ export default function App() {
     });
   }, [cloudLineId]);
 
+  const handleOpenImportModal = useCallback(() => {
+    setImportLineId('');
+    setImportPassword('');
+    setImportError(null);
+    setShowImportModal(true);
+    listCloudLines()
+      .then((lines) => setImportLines(lines.filter((l) => l.id !== cloudLineId)))
+      .catch(() => setImportLines([]));
+  }, [cloudLineId]);
+
+  const handleImportFromCloudLine = useCallback(() => {
+    if (!importLineId || !importPassword.trim()) {
+      setImportError('Select a line and enter its password');
+      return;
+    }
+    setImportError(null);
+    setImportLoading(true);
+    getLineState(importLineId, importPassword.trim())
+      .then((importedRoot) => {
+        const importedLineState = importedRoot.lineStates[importedRoot.currentLineId];
+        const importedRoster = importedLineState?.roster ?? [];
+        const importedLineConfig = importedRoot.lines.find((l) => l.id === importedRoot.currentLineId);
+        const importedAreaIds = importedLineConfig?.areas.map((a) => a.id) ?? [];
+        
+        setRootState((prev) => {
+          const currentLineState = prev.lineStates[prev.currentLineId];
+          const currentRoster = currentLineState?.roster ?? [];
+          const currentNameMap = new Map(currentRoster.map((p) => [p.name.toLowerCase().trim(), p]));
+          
+          const updatedRoster = [...currentRoster];
+          for (const importedPerson of importedRoster) {
+            const nameKey = importedPerson.name.toLowerCase().trim();
+            const existing = currentNameMap.get(nameKey);
+            if (existing) {
+              // Merge skills - add skills from imported areas
+              const mergedSkills = { ...existing.skills };
+              for (const areaId of importedAreaIds) {
+                const importedSkill = importedPerson.skills[areaId];
+                if (importedSkill && importedSkill !== 'no_experience') {
+                  mergedSkills[areaId] = importedSkill;
+                }
+              }
+              const idx = updatedRoster.findIndex((p) => p.id === existing.id);
+              if (idx >= 0) {
+                updatedRoster[idx] = { ...updatedRoster[idx], skills: mergedSkills };
+              }
+            } else {
+              // Add new person with new ID
+              const newId = Math.random().toString(36).slice(2, 11);
+              updatedRoster.push({
+                ...importedPerson,
+                id: newId,
+                flexedToLineId: undefined,
+              });
+            }
+          }
+          
+          return {
+            ...prev,
+            lineStates: {
+              ...prev.lineStates,
+              [prev.currentLineId]: { ...currentLineState, roster: updatedRoster },
+            },
+          };
+        });
+        
+        setShowImportModal(false);
+        alert(`Imported ${importedRoster.length} people from the other line. People with matching names had their skills merged.`);
+      })
+      .catch((e) => setImportError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setImportLoading(false));
+  }, [importLineId, importPassword]);
+
   const handleDirectLinkView = useCallback(() => {
     if (!cloudLineFromUrl || !directLinkPassword.trim()) {
       setDirectLinkError('Enter the line password');
@@ -1448,6 +1527,8 @@ export default function App() {
         onOpenFromFile={handleOpenFromFile}
         onAddToRoster={handleAddToRoster}
         isSaveToFileSupported={isSaveToFileSupported}
+        onImportFromCloudLine={handleOpenImportModal}
+        isCloudMode={!!cloudLineId}
       />
 
       <div className="totals-and-leads-row" style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', marginBottom: 12 }}>
@@ -1747,6 +1828,68 @@ export default function App() {
         onSaveCurrentDay={handleSaveDay}
         onRemoveDay={handleRemoveDay}
       />
+
+      {showImportModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => !importLoading && setShowImportModal(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              padding: 24,
+              borderRadius: 12,
+              maxWidth: 400,
+              width: '90%',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginTop: 0, marginBottom: 16 }}>Import from another cloud line</h2>
+            <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: 16 }}>
+              Import people from another cloud line. People with matching names will have their skills merged.
+            </p>
+            {importError && (
+              <div style={{ background: '#fee', padding: 10, borderRadius: 8, marginBottom: 12 }}>{importError}</div>
+            )}
+            <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Cloud line</label>
+            <select
+              value={importLineId}
+              onChange={(e) => setImportLineId(e.target.value)}
+              style={{ width: '100%', padding: '10px 12px', marginBottom: 12, boxSizing: 'border-box' }}
+            >
+              <option value="">— Select a line —</option>
+              {importLines.map((l) => (
+                <option key={l.id} value={l.id}>{l.name}</option>
+              ))}
+            </select>
+            <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Password</label>
+            <input
+              type="password"
+              value={importPassword}
+              onChange={(e) => setImportPassword(e.target.value)}
+              placeholder="Enter that line's password"
+              style={{ width: '100%', padding: '10px 12px', marginBottom: 16, boxSizing: 'border-box' }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={handleImportFromCloudLine} disabled={importLoading || !importLineId} style={{ padding: '10px 18px', fontWeight: 600 }}>
+                {importLoading ? 'Importing…' : 'Import'}
+              </button>
+              <button type="button" onClick={() => setShowImportModal(false)} disabled={importLoading} style={{ padding: '10px 18px' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

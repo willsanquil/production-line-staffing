@@ -20,11 +20,9 @@ interface Bucket {
 function preferredRotations(pref: BreakPreference | undefined, rotationCount: number): number[] {
   if (pref === 'prefer_early') return [1];
   if (pref === 'prefer_late') return [rotationCount];
-  if (pref === 'prefer_middle') {
-    const mid = Math.ceil(rotationCount / 2);
-    return rotationCount % 2 === 1 ? [mid] : [mid, mid + 1];
-  }
-  return Array.from({ length: rotationCount }, (_, i) => i + 1);
+  // 'prefer_middle' and 'no_preference' (default) both prefer middle rotations
+  const mid = Math.ceil(rotationCount / 2);
+  return rotationCount % 2 === 1 ? [mid] : [mid, mid + 1];
 }
 
 /**
@@ -96,7 +94,7 @@ function runAssignmentForPeople(
     breakBuckets[r] = { skillSum: 0, personIds: [] };
   }
   const prefOrder = (pref: BreakPreference) =>
-    pref === 'prefer_early' ? 0 : pref === 'prefer_middle' ? 1 : pref === 'prefer_late' ? 2 : 1;
+    pref === 'prefer_early' ? 0 : pref === 'prefer_late' ? 2 : 1;
   people.sort((a, b) => {
     if (b.skillScore !== a.skillScore) return b.skillScore - a.skillScore;
     return prefOrder(a.preference) - prefOrder(b.preference);
@@ -160,7 +158,7 @@ function runAssignmentWithLinkedSlots(
   }
   const floatSet = new Set(floatSlotIndices);
   const prefOrder = (p: BreakPreference) =>
-    p === 'prefer_early' ? 0 : p === 'prefer_middle' ? 1 : p === 'prefer_late' ? 2 : 3;
+    p === 'prefer_early' ? 0 : p === 'prefer_late' ? 2 : 1;
   const assignedPersonIds = new Set<string>();
 
   for (const group of linkedGroups) {

@@ -35,6 +35,9 @@ interface RosterGridProps {
   onOpenFromFile?: () => void;
   onAddToRoster?: () => void;
   isSaveToFileSupported?: () => boolean;
+  /** Import roster from another cloud line (for merging lines). */
+  onImportFromCloudLine?: () => void;
+  isCloudMode?: boolean;
 }
 
 const SKILL_LEVELS: SkillLevel[] = ['no_experience', 'training', 'trained', 'expert'];
@@ -133,6 +136,8 @@ function RosterGridInner({
   onOpenFromFile,
   onAddToRoster,
   isSaveToFileSupported,
+  onImportFromCloudLine,
+  isCloudMode,
 }: RosterGridProps) {
   const areaIds = areaIdsProp ?? [...AREA_IDS];
   const otherLines = useMemo(() => lines.filter((l) => l.id !== currentLineId), [lines, currentLineId]);
@@ -228,6 +233,9 @@ function RosterGridInner({
           )}
           {onAddToRoster && (
             <button type="button" onClick={onAddToRoster}>Add to roster</button>
+          )}
+          {isCloudMode && onImportFromCloudLine && (
+            <button type="button" onClick={onImportFromCloudLine}>Import from cloud line</button>
           )}
         </div>
       </div>
@@ -365,7 +373,7 @@ function RosterGridInner({
                         aria-label={`${person.name} break preference`}
                       >
                         <option value="prefer_early">Prefer early</option>
-                        <option value="no_preference">No preference</option>
+                        <option value="no_preference">Prefer middle</option>
                         <option value="prefer_late">Prefer late</option>
                       </select>
                     </td>
@@ -528,7 +536,7 @@ function RosterGridInner({
                             <option value="prefer_early">Prefer early</option>
                             <option value="prefer_middle">Prefer middle</option>
                             <option value="prefer_late">Prefer late</option>
-                            <option value="no_preference">No preference</option>
+                            <option value="no_preference">Prefer middle</option>
                           </select>
                         </td>
                         {areaIds.map((areaId) => {
@@ -709,7 +717,7 @@ function RosterGridInner({
                         aria-label={`${person.name} break preference`}
                       >
                         <option value="prefer_early">Prefer early</option>
-                        <option value="no_preference">No preference</option>
+                        <option value="no_preference">Prefer middle</option>
                         <option value="prefer_late">Prefer late</option>
                       </select>
                     </td>
