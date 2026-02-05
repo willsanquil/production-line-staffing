@@ -307,8 +307,11 @@ function LineViewInner({
               {supportingFloats.map(({ float: f, personId, breakRot }) => {
                 const areaStaffBreakSlots = new Set<number>();
                 areaSlots.forEach((slot) => {
-                  const r = slot.personId && breakAssignments?.[slot.personId]?.breakRotation;
-                  if (r != null) areaStaffBreakSlots.add(r);
+                  const raw = slot.personId && breakAssignments?.[slot.personId]?.breakRotation;
+                  const r = typeof raw === 'number' ? raw : raw != null ? Number(raw) : null;
+                  if (r != null && !Number.isNaN(r)) {
+                    areaStaffBreakSlots.add(r);
+                  }
                 });
                 return (
                   <tr key={f.id} style={{ background: 'rgba(33, 150, 243, 0.08)', borderTop: '1px solid rgba(33, 150, 243, 0.3)' }}>
