@@ -1530,6 +1530,7 @@ export default function App() {
           breakSchedules={presentationBreakData?.breakSchedules}
           rotationCount={presentationBreakData?.rotationCount}
           breaksScope={presentationBreakData?.breaksScope}
+          floatSlots={currentConfig ? getFloatSlots(currentConfig) : []}
         />
         <div style={{ maxWidth: 520, margin: '0 auto', padding: '0 12px 24px' }}>
           <TrainingReport roster={roster} slots={slots} areaLabels={areaLabels} effectiveCapacity={effectiveCapacity} presentationMode areaIds={areaIds} />
@@ -1800,8 +1801,8 @@ export default function App() {
             <h3 style={{ margin: '0 0 16px 0', fontSize: '1.1rem' }}>Float support</h3>
             <p style={{ color: '#555', fontSize: '0.9rem', marginBottom: 16 }}>
               {floatSupportDraft.length === 0
-                ? 'Add float positions so people can cover breaks across multiple areas.'
-                : 'Choose which stations each float covers for breaks.'}
+                ? 'Add float positions so people can support multiple areas and cover breaks when needed.'
+                : 'Choose which areas each float supports. They work across these areas and can cover breaks when an area can\'t cover its own.'}
             </p>
             {floatSupportDraft.map((f, i) => (
               <div
@@ -2056,7 +2057,7 @@ export default function App() {
               });
               const floatSlot = floatSlots.find((f) => f.id === areaId);
               const title = floatSlot
-                ? `Break schedule — ${floatSlot.name} (covers: ${floatSlot.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ') || 'none'})`
+                ? `Break schedule — ${floatSlot.name} (supports: ${floatSlot.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ') || 'none'})`
                 : `Break schedule — ${areaLabels[areaId] ?? areaId}`;
               return (
                 <BreakTable
@@ -2090,7 +2091,7 @@ export default function App() {
                         people={people}
                         assignments={assignments!}
                         rotationCount={rotationCount}
-                        title={`${f.name} (covers: ${f.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ') || 'none'})`}
+                        title={`${f.name} (supports: ${f.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ') || 'none'})`}
                       />
                     );
                   }
@@ -2110,7 +2111,7 @@ export default function App() {
                       <strong>{f.name}</strong>
                       <span style={{ color: '#555' }}>
                         {' '}
-                        (covers: {f.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ') || 'none'})
+                        (supports: {f.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ') || 'none'})
                       </span>
                       <div style={{ marginTop: 6 }}>
                         {assignedName

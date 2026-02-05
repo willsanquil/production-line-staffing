@@ -1,5 +1,5 @@
 import { memo, useState, useEffect, type CSSProperties } from 'react';
-import type { AreaId, BreakSchedulesByArea, RosterPerson, SlotsByArea } from '../types';
+import type { AreaId, BreakSchedulesByArea, FloatSlotConfig, RosterPerson, SlotsByArea } from '../types';
 import type { SkillLevel } from '../types';
 import { LINE_SECTIONS, LEAD_SLOT_AREAS, areaRequiresTrainedOrExpert as defaultRequiresTrainedOrExpert } from '../types';
 import { BREAK_LINE_WIDE_KEY } from '../lib/lineConfig';
@@ -83,6 +83,8 @@ interface LineViewProps {
   rotationCount?: number;
   /** 'line' = one set for whole line; 'station' = per area. */
   breaksScope?: 'line' | 'station';
+  /** For presentation: float positions to show with assigned person and break rotation. */
+  floatSlots?: FloatSlotConfig[];
 }
 
 /** Compact, screenshot- and phone-friendly view: line health, areas, who is running each, and risks. */
@@ -105,6 +107,7 @@ function LineViewInner({
   breakSchedules,
   rotationCount = 3,
   breaksScope = 'station',
+  floatSlots = [],
 }: LineViewProps) {
   const isCompact = useCompactPresentation();
   const sections = lineSectionsProp ?? LINE_SECTIONS;
@@ -464,6 +467,70 @@ function LineViewInner({
                         <td style={presentationTdStyle}>{getLeadSlotLabel(key)}</td>
                         <td style={presentationTdStyle}>
                           <span className={`skill-name-${skill}`} style={{ fontSize: nameFontSize, fontWeight: 600 }}>{getName(personId)}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )
+      )}
+
+      {floatSlots.length > 0 && (
+        isCompact ? (
+          <section className="presentation-section-compact" style={{ ...sectionStyle, padding: 6, marginTop: 8, marginBottom: 8 }}>
+            <h2 style={{ ...sectionTitleStyle, fontSize: '0.8rem', marginBottom: 4 }}>Float positions</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {floatSlots.map((f) => {
+                const areaSlots = slots[f.id] ?? [];
+                const personId = areaSlots[0]?.personId ?? null;
+                const breakAssignments = breakSchedules?.[f.id];
+                const rot = personId && breakAssignments?.[personId]?.breakRotation;
+                const supportsLabel = f.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ') || '—';
+                return (
+                  <div key={f.id} style={{ padding: 6, background: '#f8f9fa', border: '1px solid #e9ecef', borderRadius: 6, fontSize: '0.85rem' }}>
+                    <strong>{f.name}</strong>
+                    <span style={{ color: '#555' }}> — supports: {supportsLabel}</span>
+                    <div style={{ marginTop: 4 }}>
+                      {personId ? getName(personId) : '—'}
+                      {rot != null && (
+                        <span style={{ marginLeft: 8, fontWeight: 700, color: '#1a1a1a' }}>Break: Rot {rot}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : (
+          <section style={{ ...sectionStyle, marginTop: 8 }}>
+            <h2 style={sectionTitleStyle}>Float positions</h2>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={presentationTableStyle}>
+                <thead>
+                  <tr>
+                    <th style={presentationThStyle}>Float</th>
+                    <th style={presentationThStyle}>Supports</th>
+                    <th style={presentationThStyle}>Assigned</th>
+                    <th style={{ ...presentationThStyle, fontWeight: 700 }}>Break</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {floatSlots.map((f) => {
+                    const areaSlots = slots[f.id] ?? [];
+                    const personId = areaSlots[0]?.personId ?? null;
+                    const breakAssignments = breakSchedules?.[f.id];
+                    const rot = personId && breakAssignments?.[personId]?.breakRotation;
+                    const supportsLabel = f.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ') || '—';
+                    return (
+                      <tr key={f.id}>
+                        <td style={presentationTdStyle}>{f.name}</td>
+                        <td style={presentationTdStyle}>{supportsLabel}</td>
+                        <td style={presentationTdStyle}>{personId ? getName(personId) : '—'}</td>
+                        <td style={{ ...presentationTdStyle, fontWeight: 700, fontSize: nameFontSize }}>
+                          {rot != null ? `Rot ${rot}` : '—'}
                         </td>
                       </tr>
                     );
