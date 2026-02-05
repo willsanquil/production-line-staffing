@@ -210,7 +210,16 @@ function LineViewInner({
           100
         : null;
     const breakAssignments = breakSchedules?.[areaId];
-    const showBreakCols = !!breakAssignments && Object.keys(breakAssignments).length > 0 && rotCount >= 1;
+    const supportingFloats = floatSlots
+      .filter((f) => f.supportedAreaIds.includes(areaId))
+      .map((f) => {
+        const personId = slots[f.id]?.[0]?.personId ?? null;
+        const breakRot = personId && breakSchedules?.[f.id]?.[personId]?.breakRotation;
+        return { float: f, personId, breakRot };
+      });
+    const showBreakCols =
+      (!!breakAssignments && Object.keys(breakAssignments).length > 0 && rotCount >= 1) ||
+      (rotCount >= 1 && supportingFloats.some((sf) => sf.breakRot != null));
     const understaffed = filled < min;
     const uncoveredRotations: number[] = [];
     if (understaffed && showBreakCols && breakAssignments) {
@@ -295,6 +304,23 @@ function LineViewInner({
                   </tr>
                 );
               })}
+              {supportingFloats.map(({ float: f, personId, breakRot }) => (
+                <tr key={f.id} style={{ background: 'rgba(33, 150, 243, 0.08)', borderTop: '1px solid rgba(33, 150, 243, 0.3)' }}>
+                  <td style={tdStyle} className={tdClassName}>
+                    <span style={{ fontWeight: 600, color: '#1976d2' }}>Float: {f.name}</span>
+                  </td>
+                  <td style={tdStyle} className={tdClassName}>
+                    <span style={compact ? undefined : { fontSize: nameFontSize, fontWeight: 600 }}>
+                      {personId ? getName(personId) : '—'}
+                    </span>
+                  </td>
+                  {showBreakCols && breakSlotLabels.map((_, i) => (
+                    <td key={i} style={tdCenterStyle} className={compact ? `${tdClassName} presentation-td-break` : 'presentation-td-break'}>
+                      {breakRot === i + 1 ? <span style={{ fontWeight: 700, fontSize: compact ? undefined : '1.1rem', color: '#1976d2' }}>X</span> : ''}
+                    </td>
+                  ))}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
