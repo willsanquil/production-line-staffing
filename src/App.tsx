@@ -716,6 +716,10 @@ export default function App() {
       linkedSlotsByArea[areaId] = getLinkedSlotGroupsForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
       floatSlotIndicesByArea[areaId] = getFloatSlotIndicesForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
     }
+    // Float positions: always treat their single slot as "assign break last" so they get a rotation and don't take preferred slots from station staff
+    for (const f of getFloatSlots(currentConfig)) {
+      floatSlotIndicesByArea[f.id] = [0];
+    }
     setBreakSchedules(
       generateBreakSchedules(roster, slots, areaIds, {
         rotationCount: getBreakRotations(currentConfig),
@@ -803,9 +807,14 @@ export default function App() {
     setSlots(nextSlots);
     if (currentConfig && getBreaksEnabled(currentConfig)) {
       const linkedSlotsByArea: Record<string, number[][]> = {};
+      const floatSlotIndicesByArea: Record<string, number[]> = {};
       for (const areaId of areaIds) {
         const areaSlots = nextSlots[areaId] ?? [];
         linkedSlotsByArea[areaId] = getLinkedSlotGroupsForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
+        floatSlotIndicesByArea[areaId] = getFloatSlotIndicesForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
+      }
+      for (const f of getFloatSlots(currentConfig)) {
+        floatSlotIndicesByArea[f.id] = [0];
       }
       setBreakSchedules(
         generateBreakSchedules(roster, nextSlots, areaIds, {
@@ -813,6 +822,7 @@ export default function App() {
           scope: getBreaksScope(currentConfig),
           leadSlots,
           linkedSlotsByArea,
+          floatSlotIndicesByArea,
         })
       );
     } else {
@@ -830,6 +840,9 @@ export default function App() {
         const areaSlots = nextSlots[areaId] ?? [];
         linkedSlotsByArea[areaId] = getLinkedSlotGroupsForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
         floatSlotIndicesByArea[areaId] = getFloatSlotIndicesForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
+      }
+      for (const f of getFloatSlots(currentConfig)) {
+        floatSlotIndicesByArea[f.id] = [0];
       }
       setBreakSchedules(
         generateBreakSchedules(roster, nextSlots, areaIds, {
@@ -855,6 +868,9 @@ export default function App() {
         const areaSlots = nextSlots[areaId] ?? [];
         linkedSlotsByArea[areaId] = getLinkedSlotGroupsForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
         floatSlotIndicesByArea[areaId] = getFloatSlotIndicesForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
+      }
+      for (const f of getFloatSlots(currentConfig)) {
+        floatSlotIndicesByArea[f.id] = [0];
       }
       setBreakSchedules(
         generateBreakSchedules(roster, nextSlots, areaIds, {
@@ -2000,6 +2016,8 @@ export default function App() {
                 onSectionTasksChange={() => {}}
                 onAssign={setSlotAssignment}
                 requiresTrainedOrExpert={false}
+                breakSchedules={getBreaksEnabled(currentConfig) ? breakSchedules : undefined}
+                rotationCount={getBreaksEnabled(currentConfig) ? getBreakRotations(currentConfig) : undefined}
               />
             );
           })}
@@ -2035,13 +2053,17 @@ export default function App() {
                 const p = roster.find((r) => r.id === id);
                 return { id, name: p?.name ?? id };
               });
+              const floatSlot = currentConfig ? getFloatSlots(currentConfig).find((f) => f.id === areaId) : null;
+              const title = floatSlot
+                ? `Break schedule — ${floatSlot.name} (covers: ${floatSlot.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ') || 'none'})`
+                : `Break schedule — ${areaLabels[areaId] ?? areaId}`;
               return (
                 <BreakTable
                   key={areaId}
                   people={people}
                   assignments={assignments}
                   rotationCount={rotationCount}
-                  title={`Break schedule — ${areaLabels[areaId] ?? areaId}`}
+                  title={title}
                 />
               );
             })}

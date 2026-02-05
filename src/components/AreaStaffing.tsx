@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import type { AreaId, RosterPerson, Slot, TaskItem } from '../types';
+import type { AreaId, BreakSchedulesByArea, RosterPerson, Slot, TaskItem } from '../types';
 import type { SkillLevel } from '../types';
 import { createEmptySlot } from '../data/initialState';
 import { getSlotLabel } from '../lib/areaConfig';
@@ -50,6 +50,9 @@ interface AreaStaffingProps {
   requiresTrainedOrExpert?: boolean;
   /** Called when user toggles "Needs experience" for this area. */
   onRequiresTrainedOrExpertChange?: (value: boolean) => void;
+  /** When provided (e.g. for float positions), show break rotation under the slot. */
+  breakSchedules?: BreakSchedulesByArea;
+  rotationCount?: number;
 }
 
 function AreaStaffingInner({
@@ -75,6 +78,8 @@ function AreaStaffingInner({
   onAssign,
   requiresTrainedOrExpert = false,
   onRequiresTrainedOrExpertChange,
+  breakSchedules,
+  rotationCount,
 }: AreaStaffingProps) {
   const enabledSlots = slots.filter((s) => !s.disabled);
   const filled = enabledSlots.filter((s) => s.personId).length;
@@ -289,15 +294,27 @@ function AreaStaffingInner({
               ) : isLocked ? (
                 <span style={{ fontSize: '0.9rem' }} title="Locked — unlock to change">{assignedName ?? '— Unassigned —'}</span>
               ) : (
-                <SlotDropdown
-                  slot={slot}
-                  areaId={areaId}
-                  roster={roster}
-                  assignedPersonIds={allAssignedPersonIds}
-                  leadAssignedPersonIds={leadAssignedPersonIds}
-                  onAssign={handleAssign}
-                  slotLabel={label}
-                />
+                <>
+                  <SlotDropdown
+                    slot={slot}
+                    areaId={areaId}
+                    roster={roster}
+                    assignedPersonIds={allAssignedPersonIds}
+                    leadAssignedPersonIds={leadAssignedPersonIds}
+                    onAssign={handleAssign}
+                    slotLabel={label}
+                  />
+                  {breakSchedules && rotationCount != null && slot.personId && (() => {
+                    const areaBreaks = breakSchedules[areaId];
+                    const rot = areaBreaks?.[slot.personId]?.breakRotation;
+                    if (rot == null) return null;
+                    return (
+                      <div style={{ fontSize: '0.8rem', color: '#555', marginTop: 4 }} title="When this person is on break">
+                        Break: Rot {rot}
+                      </div>
+                    );
+                  })()}
+                </>
               )}
             </div>
           );
