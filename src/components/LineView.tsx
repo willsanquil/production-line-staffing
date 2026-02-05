@@ -304,23 +304,35 @@ function LineViewInner({
                   </tr>
                 );
               })}
-              {supportingFloats.map(({ float: f, personId, breakRot }) => (
-                <tr key={f.id} style={{ background: 'rgba(33, 150, 243, 0.08)', borderTop: '1px solid rgba(33, 150, 243, 0.3)' }}>
-                  <td style={tdStyle} className={tdClassName}>
-                    <span style={{ fontWeight: 600, color: '#1976d2' }}>Float: {f.name}</span>
-                  </td>
-                  <td style={tdStyle} className={tdClassName}>
-                    <span style={compact ? undefined : { fontSize: nameFontSize, fontWeight: 600 }}>
-                      {personId ? getName(personId) : '—'}
-                    </span>
-                  </td>
-                  {showBreakCols && breakSlotLabels.map((_, i) => (
-                    <td key={i} style={tdCenterStyle} className={compact ? `${tdClassName} presentation-td-break` : 'presentation-td-break'}>
-                      {breakRot === i + 1 ? <span style={{ fontWeight: 700, fontSize: compact ? undefined : '1.1rem', color: '#1976d2' }}>X</span> : ''}
+              {supportingFloats.map(({ float: f, personId, breakRot }) => {
+                const areaStaffBreakSlots = new Set<number>();
+                areaSlots.forEach((slot) => {
+                  const r = slot.personId && breakAssignments?.[slot.personId]?.breakRotation;
+                  if (r != null) areaStaffBreakSlots.add(r);
+                });
+                return (
+                  <tr key={f.id} style={{ background: 'rgba(33, 150, 243, 0.08)', borderTop: '1px solid rgba(33, 150, 243, 0.3)' }}>
+                    <td style={tdStyle} className={tdClassName}>
+                      <span style={{ fontWeight: 600, color: '#1976d2' }}>Float: {f.name}</span>
                     </td>
-                  ))}
-                </tr>
-              ))}
+                    <td style={tdStyle} className={tdClassName}>
+                      <span style={compact ? undefined : { fontSize: nameFontSize, fontWeight: 600 }}>
+                        {personId ? getName(personId) : '—'}
+                      </span>
+                    </td>
+                    {showBreakCols && breakSlotLabels.map((_, i) => {
+                      const rot = i + 1;
+                      const areaSomeoneOffThisSlot = areaStaffBreakSlots.has(rot);
+                      const floatCoveringHere = areaSomeoneOffThisSlot && breakRot !== rot;
+                      return (
+                        <td key={i} style={tdCenterStyle} className={compact ? `${tdClassName} presentation-td-break` : 'presentation-td-break'} title={floatCoveringHere ? `Covers this area while someone is on break` : breakRot === rot ? `Float on break` : ''}>
+                          {floatCoveringHere ? <span style={{ fontWeight: 700, fontSize: compact ? undefined : '1.1rem', color: '#1976d2' }}>X</span> : ''}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
