@@ -637,7 +637,20 @@ export default function App() {
       if (line.id === 'ic') return prev;
       const lines = prev.lines.slice();
       lines[lineIndex] = { ...line, floatSlots: nextFloatSlots.length > 0 ? nextFloatSlots : undefined };
-      return { ...prev, lines };
+      const lineState = prev.lineStates[prev.currentLineId];
+      if (!lineState) return { ...prev, lines };
+      // Ensure each float has a slot in line state (for newly added floats)
+      let newSlots = { ...lineState.slots };
+      let changed = false;
+      for (const f of nextFloatSlots) {
+        if (!newSlots[f.id] || newSlots[f.id].length === 0) {
+          newSlots[f.id] = [createEmptySlot()];
+          changed = true;
+        }
+      }
+      if (!changed) return { ...prev, lines };
+      const lineStates = { ...prev.lineStates, [prev.currentLineId]: { ...lineState, slots: newSlots } };
+      return { ...prev, lines, lineStates };
     });
     setShowFloatSupportModal(false);
   }, []);
@@ -1650,20 +1663,18 @@ export default function App() {
               >
                 + Add station
               </button>
-              {(currentConfig.floatSlots?.length ?? 0) > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFloatSupportDraft(
-                      (currentConfig.floatSlots ?? []).map((f) => ({ ...f, supportedAreaIds: [...f.supportedAreaIds] }))
-                    );
-                    setShowFloatSupportModal(true);
-                  }}
-                  style={{ padding: '8px 14px', fontSize: '0.95rem' }}
-                >
-                  Edit float support
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setFloatSupportDraft(
+                    (currentConfig.floatSlots ?? []).map((f) => ({ ...f, supportedAreaIds: [...f.supportedAreaIds] }))
+                  );
+                  setShowFloatSupportModal(true);
+                }}
+                style={{ padding: '8px 14px', fontSize: '0.95rem' }}
+              >
+                Float support
+              </button>
             </>
           ) : (
             <div
@@ -1772,7 +1783,9 @@ export default function App() {
           >
             <h3 style={{ margin: '0 0 16px 0', fontSize: '1.1rem' }}>Float support</h3>
             <p style={{ color: '#555', fontSize: '0.9rem', marginBottom: 16 }}>
-              Choose which stations each float covers for breaks.
+              {floatSupportDraft.length === 0
+                ? 'Add float positions so people can cover breaks across multiple areas.'
+                : 'Choose which stations each float covers for breaks.'}
             </p>
             {floatSupportDraft.map((f, i) => (
               <div
@@ -1826,8 +1839,38 @@ export default function App() {
                     );
                   })}
                 </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFloatSupportDraft((prev) =>
+                      prev ? prev.filter((_, j) => j !== i) : null
+                    )
+                  }
+                  style={{ marginTop: 8, padding: '4px 8px', fontSize: '0.85rem' }}
+                >
+                  Remove
+                </button>
               </div>
             ))}
+            <button
+              type="button"
+              onClick={() => {
+                const existingIds = new Set((floatSupportDraft ?? []).map((x) => x.id));
+                let id = `float_${Math.random().toString(36).slice(2, 9)}`;
+                while (existingIds.has(id)) id = `float_${Math.random().toString(36).slice(2, 9)}`;
+                setFloatSupportDraft((prev) => [
+                  ...(prev ?? []),
+                  {
+                    id,
+                    name: `Float ${(prev?.length ?? 0) + 1}`,
+                    supportedAreaIds: currentConfig ? currentConfig.areas.map((a) => a.id) : [],
+                  },
+                ]);
+              }}
+              style={{ marginBottom: 16, padding: '8px 12px', fontSize: '0.9rem' }}
+            >
+              {floatSupportDraft.length === 0 ? '+ Add float' : '+ Add another float'}
+            </button>
             <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
               <button
                 type="button"
