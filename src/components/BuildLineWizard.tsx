@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { LineConfig, AreaConfigInLine } from '../types';
+import type { LineConfig, AreaConfigInLine, FloatSlotConfig } from '../types';
 import { areaIdFromName } from '../lib/lineConfig';
 
 interface BuildLineWizardProps {
@@ -13,7 +13,7 @@ interface BuildLineWizardProps {
   onCancel: () => void;
 }
 
-type Step = 'name' | 'sections' | 'leads' | 'breaks' | 'done';
+type Step = 'name' | 'sections' | 'floats' | 'leads' | 'breaks' | 'done';
 
 interface SectionDraft {
   id: string;
@@ -22,10 +22,17 @@ interface SectionDraft {
   maxSlots: number;
 }
 
+interface FloatDraft {
+  id: string;
+  name: string;
+  supportedAreaIds: string[];
+}
+
 export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineName, onComplete, onCancel }: BuildLineWizardProps) {
   const [step, setStep] = useState<Step>('name');
   const [lineName, setLineName] = useState(initialLineName ?? '');
   const [sections, setSections] = useState<SectionDraft[]>([]);
+  const [floatSlots, setFloatSlots] = useState<FloatDraft[]>([]);
   const [leadCount, setLeadCount] = useState(0);
   const [leadNames, setLeadNames] = useState<string[]>([]);
   const [breakRotations, setBreakRotations] = useState(3);
@@ -53,6 +60,41 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
     });
   }, []);
 
+  const existingIdsWithSections = useCallback(
+    () => new Set([...existingAreaIds, ...sections.map((s) => s.id), ...floatSlots.map((f) => f.id)]),
+    [existingAreaIds, sections, floatSlots]
+  );
+
+  const addFloat = useCallback(() => {
+    const existing = existingIdsWithSections();
+    const name = `Float ${floatSlots.length + 1}`;
+    const id = areaIdFromName(name, existing);
+    setFloatSlots((prev) => [...prev, { id, name, supportedAreaIds: [...sections.map((s) => s.id)] }]);
+  }, [floatSlots.length, sections, existingIdsWithSections]);
+
+  const updateFloat = useCallback((index: number, updates: Partial<FloatDraft>) => {
+    setFloatSlots((prev) => prev.map((f, i) => (i === index ? { ...f, ...updates } : f)));
+  }, []);
+
+  const setFloatSupportedAreas = useCallback((index: number, areaId: string, checked: boolean) => {
+    setFloatSlots((prev) =>
+      prev.map((f, i) =>
+        i !== index
+          ? f
+          : {
+              ...f,
+              supportedAreaIds: checked
+                ? [...f.supportedAreaIds, areaId]
+                : f.supportedAreaIds.filter((id) => id !== areaId),
+            }
+      )
+    );
+  }, []);
+
+  const removeFloat = useCallback((index: number) => {
+    setFloatSlots((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   const handleCreate = useCallback(() => {
     const lineId = existingLineId ?? 'line_' + Math.random().toString(36).slice(2, 10);
     const areas: AreaConfigInLine[] = sections.map((s) => ({
@@ -66,10 +108,16 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
       const name = leadNames[i]?.trim();
       return name || `Lead ${i + 1}`;
     });
+    const floats: FloatSlotConfig[] = floatSlots.map((f) => ({
+      id: f.id,
+      name: f.name.trim() || f.name,
+      supportedAreaIds: [...f.supportedAreaIds],
+    }));
     const config: LineConfig = {
       id: lineId,
       name: lineName.trim() || 'New Line',
       areas,
+      floatSlots: floats.length > 0 ? floats : undefined,
       leadAreaIds: [],
       leadSlotNames: leadCount > 0 ? leadSlotNames : undefined,
       combinedSections: [],
@@ -78,7 +126,7 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
       breakRotations: Math.min(6, Math.max(1, breakRotations)),
     };
     onComplete(config);
-  }, [existingLineId, lineName, sections, leadCount, leadNames, breakRotations, onComplete]);
+  }, [existingLineId, lineName, sections, floatSlots, leadCount, leadNames, breakRotations, onComplete]);
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', padding: '24px 16px' }}>
@@ -175,8 +223,78 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
             </button>
             <button
               type="button"
-              onClick={() => setStep('leads')}
+              onClick={() => setStep('floats')}
               disabled={sections.length === 0}
+              style={{ padding: '10px 20px', fontWeight: 600 }}
+            >
+              Next: Float support
+            </button>
+          </div>
+        </>
+      )}
+
+      {step === 'floats' && (
+        <>
+          <p style={{ marginBottom: 12, color: '#555' }}>
+            Float positions cover breaks across multiple areas. Add any number of floats and choose which stations each one supports.
+          </p>
+          {floatSlots.length === 0 && (
+            <button type="button" onClick={addFloat} style={{ marginBottom: 16, padding: '10px 16px' }}>
+              + Add first float
+            </button>
+          )}
+          {floatSlots.map((f, i) => (
+            <div
+              key={f.id}
+              style={{
+                border: '1px solid #e0e0e0',
+                borderRadius: 8,
+                padding: 12,
+                marginBottom: 12,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <input
+                  type="text"
+                  value={f.name}
+                  onChange={(e) => updateFloat(i, { name: e.target.value })}
+                  placeholder="Float name"
+                  style={{ flex: 1, padding: '8px 10px' }}
+                />
+                <button type="button" onClick={() => removeFloat(i)} style={{ padding: '8px' }}>
+                  Remove
+                </button>
+              </div>
+              <div style={{ fontSize: '0.9rem', color: '#555', marginBottom: 6 }}>Supports:</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {sections.map((s) => {
+                  const checked = f.supportedAreaIds.includes(s.id);
+                  return (
+                    <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => setFloatSupportedAreas(i, s.id, e.target.checked)}
+                      />
+                      <span>{s.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          {floatSlots.length > 0 && (
+            <button type="button" onClick={addFloat} style={{ marginBottom: 16, padding: '8px 12px' }}>
+              + Add another float
+            </button>
+          )}
+          <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+            <button type="button" onClick={() => setStep('sections')} style={{ padding: '10px 20px' }}>
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={() => setStep('leads')}
               style={{ padding: '10px 20px', fontWeight: 600 }}
             >
               Next: Lead roles
@@ -227,7 +345,7 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
             </ul>
           )}
           <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" onClick={() => setStep('sections')} style={{ padding: '10px 20px' }}>
+            <button type="button" onClick={() => setStep('floats')} style={{ padding: '10px 20px' }}>
               Back
             </button>
             <button

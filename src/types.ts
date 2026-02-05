@@ -95,6 +95,9 @@ export interface RosterPerson {
   areasWantToLearn?: AreaId[];
   /** When set, person is temporarily assigned to this line and appears on that line's roster (skills retained). */
   flexedToLineId?: string | null;
+  /** Person's default/home position on the line (area + slot index). */
+  defaultAreaId?: string | null;
+  defaultSlotIndex?: number | null;
 }
 
 export interface Slot {
@@ -206,11 +209,21 @@ export interface AreaConfigInLine {
 /** Break scope: line-wide (one set of rotations for the whole line) or per-station (per area). */
 export type BreakScope = 'line' | 'station';
 
+/** Float position: covers breaks across one or more areas. */
+export interface FloatSlotConfig {
+  id: string;
+  name: string;
+  /** Area IDs this float supports (for break coverage). */
+  supportedAreaIds: string[];
+}
+
 /** Full definition of a line: name, sections (areas), leads, optional combined sections, break options. */
 export interface LineConfig {
   id: string;
   name: string;
   areas: AreaConfigInLine[];
+  /** Float positions (each has 1 slot; supportedAreaIds = which areas they cover). */
+  floatSlots?: FloatSlotConfig[];
   /** Legacy: area IDs that have a lead slot. Used when leadSlotNames is absent (e.g. IC). */
   leadAreaIds?: string[];
   /** Named lead positions (e.g. "Floor Lead", "Quality"). Keys in leadSlots state are "0", "1", ... */

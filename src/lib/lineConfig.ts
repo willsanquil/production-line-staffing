@@ -1,4 +1,4 @@
-import type { LineConfig, AreaCapacityOverrides, AreaNameOverrides, SlotLabelsByArea } from '../types';
+import type { LineConfig, FloatSlotConfig, AreaCapacityOverrides, AreaNameOverrides, SlotLabelsByArea } from '../types';
 
 export const DEFAULT_IC_LINE_ID = 'ic';
 
@@ -24,9 +24,22 @@ export function getDefaultICLineConfig(): LineConfig {
   };
 }
 
-/** Area IDs in display order (combined pairs appear once, as the first id in the pair). */
+/** Area IDs in display order (station areas first, then float slot ids). */
 export function getAreaIds(config: LineConfig): string[] {
-  return config.areas.map((a) => a.id);
+  const areaIds = config.areas.map((a) => a.id);
+  const floatIds = (config.floatSlots ?? []).map((f) => f.id);
+  return [...areaIds, ...floatIds];
+}
+
+/** Float slot configs for this line. */
+export function getFloatSlots(config: LineConfig): FloatSlotConfig[] {
+  return config.floatSlots ?? [];
+}
+
+/** Area IDs that a float slot supports (for break coverage). */
+export function getFloatSupportedAreas(config: LineConfig, floatSlotId: string): string[] {
+  const f = (config.floatSlots ?? []).find((x) => x.id === floatSlotId);
+  return f?.supportedAreaIds ?? [];
 }
 
 /** Sections in display order: each element is either a single area id or a [id, id] pair. */
@@ -49,20 +62,26 @@ export function getLineSections(config: LineConfig): (string | readonly [string,
   return result;
 }
 
-/** Base capacity (min/max) per area from config. */
+/** Base capacity (min/max) per area from config. Float slots get min/max 1. */
 export function getBaseCapacity(config: LineConfig): Record<string, { min: number; max: number }> {
   const out: Record<string, { min: number; max: number }> = {};
   for (const a of config.areas) {
     out[a.id] = { min: a.minSlots, max: a.maxSlots };
   }
+  for (const f of config.floatSlots ?? []) {
+    out[f.id] = { min: 1, max: 1 };
+  }
   return out;
 }
 
-/** Base area labels from config. */
+/** Base area labels from config (includes float slot names). */
 export function getBaseAreaLabels(config: LineConfig): Record<string, string> {
   const out: Record<string, string> = {};
   for (const a of config.areas) {
     out[a.id] = a.name;
+  }
+  for (const f of config.floatSlots ?? []) {
+    out[f.id] = f.name;
   }
   return out;
 }
@@ -135,6 +154,7 @@ export function createEmptyLineConfig(name: string, lineId?: string): LineConfig
     id,
     name: name.trim() || 'New Line',
     areas: [],
+    floatSlots: [],
     leadAreaIds: [],
     combinedSections: [],
     breaksEnabled: true,

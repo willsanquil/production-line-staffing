@@ -29,6 +29,9 @@ interface RosterGridProps {
   onBreakPreferenceChange: (personId: string, preference: BreakPreference) => void;
   onSkillChange: (personId: string, areaId: AreaId, level: SkillLevel) => void;
   onAreasWantToLearnChange: (personId: string, areaId: AreaId, checked: boolean) => void;
+  /** Default position on the line (area + slot). When provided, show Default column. */
+  defaultPositionOptions?: { areaId: string; slotIndex: number; label: string }[];
+  onDefaultPositionChange?: (personId: string, areaId: string | null, slotIndex: number | null) => void;
   /** Roster file actions (optional; when provided, shown in header next to Hide roster) */
   saveMessage?: string | null;
   onSaveToFile?: () => void;
@@ -131,6 +134,8 @@ function RosterGridInner({
   onBreakPreferenceChange,
   onSkillChange,
   onAreasWantToLearnChange,
+  defaultPositionOptions = [],
+  onDefaultPositionChange,
   saveMessage,
   onSaveToFile,
   onOpenFromFile,
@@ -269,17 +274,20 @@ function RosterGridInner({
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 55 }}>Late</th>
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 90 }}>Leave early</th>
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 100 }}>Break</th>
+                  {defaultPositionOptions.length > 0 && onDefaultPositionChange && (
+                    <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', minWidth: 140 }}>Default position</th>
+                  )}
                   {areaIds.map((areaId) => (
                     <th key={areaId} style={{ padding: '6px 8px', textAlign: 'center', borderBottom: '2px solid #ddd', minWidth: 90 }}>
                       {areaLabels[areaId]}
-                    </th>
+                  </th>
                   ))}
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', fontSize: '0.8rem' }} colSpan={areaIds.length}>
                     Want to learn (profile)
                   </th>
                 </tr>
                 <tr>
-                  <th colSpan={7 + (showFlexedColumn ? 1 : 0)} style={{ padding: 0, border: 'none' }} />
+                  <th colSpan={7 + (showFlexedColumn ? 1 : 0) + (defaultPositionOptions.length > 0 && onDefaultPositionChange ? 1 : 0)} style={{ padding: 0, border: 'none' }} />
                   {areaIds.map((areaId) => (
                     <th key={areaId} style={{ padding: '2px 4px', textAlign: 'center', borderBottom: '2px solid #ddd', fontSize: '0.75rem' }}>
                       {areaLabels[areaId]}
@@ -377,6 +385,36 @@ function RosterGridInner({
                         <option value="prefer_late">Prefer late</option>
                       </select>
                     </td>
+                    {defaultPositionOptions.length > 0 && onDefaultPositionChange && (
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                        <select
+                          value={
+                            person.defaultAreaId != null && person.defaultSlotIndex != null
+                              ? `${person.defaultAreaId}:${person.defaultSlotIndex}`
+                              : ''
+                          }
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (!v) {
+                              onDefaultPositionChange(person.id, null, null);
+                              return;
+                            }
+                            const [areaId, slotIndexStr] = v.split(':');
+                            const slotIndex = parseInt(slotIndexStr, 10);
+                            if (!Number.isNaN(slotIndex)) onDefaultPositionChange(person.id, areaId, slotIndex);
+                          }}
+                          style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 130 }}
+                          title="Default position on the line"
+                        >
+                          <option value="">—</option>
+                          {defaultPositionOptions.map((o) => (
+                            <option key={`${o.areaId}:${o.slotIndex}`} value={`${o.areaId}:${o.slotIndex}`}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    )}
                     {areaIds.map((areaId) => {
                       const level = person.skills[areaId] ?? 'no_experience';
                       return (
@@ -479,6 +517,9 @@ function RosterGridInner({
                       )}
                       <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 70 }}>Absent</th>
                       <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 100 }}>Break</th>
+                      {defaultPositionOptions.length > 0 && onDefaultPositionChange && (
+                        <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', minWidth: 140 }}>Default position</th>
+                      )}
                       {areaIds.map((areaId) => (
                         <th key={areaId} style={{ padding: '6px 8px', textAlign: 'center', borderBottom: '2px solid #ddd', minWidth: 90 }}>
                           {areaLabels[areaId]}
@@ -538,6 +579,36 @@ function RosterGridInner({
                             <option value="prefer_late">Prefer late</option>
                           </select>
                         </td>
+                        {defaultPositionOptions.length > 0 && onDefaultPositionChange && (
+                          <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                            <select
+                              value={
+                                person.defaultAreaId != null && person.defaultSlotIndex != null
+                                  ? `${person.defaultAreaId}:${person.defaultSlotIndex}`
+                                  : ''
+                              }
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (!v) {
+                                  onDefaultPositionChange(person.id, null, null);
+                                  return;
+                                }
+                                const [areaId, slotIndexStr] = v.split(':');
+                                const slotIndex = parseInt(slotIndexStr, 10);
+                                if (!Number.isNaN(slotIndex)) onDefaultPositionChange(person.id, areaId, slotIndex);
+                              }}
+                              style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 130 }}
+                              title="Default position"
+                            >
+                              <option value="">—</option>
+                              {defaultPositionOptions.map((o) => (
+                                <option key={`${o.areaId}:${o.slotIndex}`} value={`${o.areaId}:${o.slotIndex}`}>
+                                  {o.label}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                        )}
                         {areaIds.map((areaId) => {
                           const level = person.skills[areaId] ?? 'no_experience';
                           return (
@@ -624,6 +695,9 @@ function RosterGridInner({
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 50 }}>OT</th>
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 90 }}>Here today</th>
                   <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 100 }}>Break</th>
+                  {defaultPositionOptions.length > 0 && onDefaultPositionChange && (
+                    <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', minWidth: 140 }}>Default position</th>
+                  )}
                   {areaIds.map((areaId) => (
                     <th key={areaId} style={{ padding: '6px 8px', textAlign: 'center', borderBottom: '2px solid #ddd', minWidth: 90 }}>
                       {areaLabels[areaId]}
@@ -634,7 +708,7 @@ function RosterGridInner({
                   </th>
                 </tr>
                 <tr>
-                  <th colSpan={5 + (showFlexedColumn ? 1 : 0)} style={{ padding: 0, border: 'none' }} />
+                  <th colSpan={5 + (showFlexedColumn ? 1 : 0) + (defaultPositionOptions.length > 0 && onDefaultPositionChange ? 1 : 0)} style={{ padding: 0, border: 'none' }} />
                   {areaIds.map((areaId) => (
                     <th key={areaId} style={{ padding: '2px 4px', textAlign: 'center', borderBottom: '2px solid #ddd', fontSize: '0.75rem' }}>
                       {areaLabels[areaId]}
@@ -720,6 +794,36 @@ function RosterGridInner({
                         <option value="prefer_late">Prefer late</option>
                       </select>
                     </td>
+                    {defaultPositionOptions.length > 0 && onDefaultPositionChange && (
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                        <select
+                          value={
+                            person.defaultAreaId != null && person.defaultSlotIndex != null
+                              ? `${person.defaultAreaId}:${person.defaultSlotIndex}`
+                              : ''
+                          }
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (!v) {
+                              onDefaultPositionChange(person.id, null, null);
+                              return;
+                            }
+                            const [areaId, slotIndexStr] = v.split(':');
+                            const slotIndex = parseInt(slotIndexStr, 10);
+                            if (!Number.isNaN(slotIndex)) onDefaultPositionChange(person.id, areaId, slotIndex);
+                          }}
+                          style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 130 }}
+                          title="Default position on the line"
+                        >
+                          <option value="">—</option>
+                          {defaultPositionOptions.map((o) => (
+                            <option key={`${o.areaId}:${o.slotIndex}`} value={`${o.areaId}:${o.slotIndex}`}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    )}
                     {areaIds.map((areaId) => {
                       const level = person.skills[areaId] ?? 'no_experience';
                       return (

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import type { AppState, AreaId, BreakPreference, RootState, RosterPerson, SavedDay, SlotsByArea, TaskItem } from './types';
+import type { AppState, AreaId, BreakPreference, FloatSlotConfig, RootState, RosterPerson, SavedDay, SlotsByArea, TaskItem } from './types';
 import type { SkillLevel } from './types';
 import { AREA_IDS, LINE_SECTIONS } from './types';
 
@@ -64,6 +64,7 @@ import {
   getLeadSlotLabel,
   getLinkedSlotGroupsForArea,
   getFloatSlotIndicesForArea,
+  getFloatSlots,
 } from './lib/lineConfig';
 import { createEmptyPerson, createEmptyOTPerson, createEmptySlot, getEmptyLineState, normalizeSlotsToCapacity, normalizeSlotsToLineCapacity } from './data/initialState';
 import { RosterGrid } from './components/RosterGrid';
@@ -167,6 +168,8 @@ export default function App() {
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [showAddStationForm, setShowAddStationForm] = useState(false);
+  const [showFloatSupportModal, setShowFloatSupportModal] = useState(false);
+  const [floatSupportDraft, setFloatSupportDraft] = useState<FloatSlotConfig[] | null>(null);
   const [addStationName, setAddStationName] = useState('');
   const [addStationMin, setAddStationMin] = useState(2);
   const [addStationMax, setAddStationMax] = useState(5);
@@ -531,6 +534,34 @@ export default function App() {
     );
   }, []);
 
+  const handleDefaultPositionChange = useCallback(
+    (personId: string, areaId: string | null, slotIndex: number | null) => {
+      setRootState((prev) =>
+        updatePersonInRoot(prev, personId, (p) => ({
+          ...p,
+          defaultAreaId: areaId ?? null,
+          defaultSlotIndex: slotIndex ?? null,
+        }))
+      );
+    },
+    []
+  );
+
+  const defaultPositionOptions = useMemo(() => {
+    const list: { areaId: string; slotIndex: number; label: string }[] = [];
+    for (const areaId of areaIds) {
+      const areaSlots = slots[areaId] ?? [];
+      for (let i = 0; i < areaSlots.length; i++) {
+        list.push({
+          areaId,
+          slotIndex: i,
+          label: `${areaLabels[areaId] ?? areaId} – ${getSlotLabel(areaId, i)}`,
+        });
+      }
+    }
+    return list;
+  }, [areaIds, slots, areaLabels, getSlotLabel]);
+
   const handleAreaRequiresTrainedOrExpertChange = useCallback((areaId: string, value: boolean) => {
     setRootState((prev) => {
       const lineIndex = prev.lines.findIndex((l) => l.id === prev.currentLineId);
@@ -597,6 +628,19 @@ export default function App() {
     },
     []
   );
+
+  const handleUpdateFloatSlots = useCallback((nextFloatSlots: FloatSlotConfig[]) => {
+    setRootState((prev) => {
+      const lineIndex = prev.lines.findIndex((l) => l.id === prev.currentLineId);
+      if (lineIndex === -1) return prev;
+      const line = prev.lines[lineIndex];
+      if (line.id === 'ic') return prev;
+      const lines = prev.lines.slice();
+      lines[lineIndex] = { ...line, floatSlots: nextFloatSlots.length > 0 ? nextFloatSlots : undefined };
+      return { ...prev, lines };
+    });
+    setShowFloatSupportModal(false);
+  }, []);
 
   const handleAreaCapacityChange = useCallback((areaId: AreaId, payload: { min?: number; max?: number }) => {
     const base = effectiveCapacity[areaId];
@@ -1525,6 +1569,8 @@ export default function App() {
         onSkillChange={handleSkillChange}
         onAreasWantToLearnChange={handleAreasWantToLearnChange}
         onFlexedToLineChange={handleFlexedToLineChange}
+        defaultPositionOptions={defaultPositionOptions}
+        onDefaultPositionChange={handleDefaultPositionChange}
         saveMessage={saveMessage}
         onSaveToFile={handleSaveToFile}
         onOpenFromFile={handleOpenFromFile}
@@ -1594,15 +1640,31 @@ export default function App() {
       </div>
 
       {currentConfig && currentConfig.id !== 'ic' && (
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
           {!showAddStationForm ? (
-            <button
-              type="button"
-              onClick={() => setShowAddStationForm(true)}
-              style={{ padding: '8px 14px', fontSize: '0.95rem' }}
-            >
-              + Add station
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setShowAddStationForm(true)}
+                style={{ padding: '8px 14px', fontSize: '0.95rem' }}
+              >
+                + Add station
+              </button>
+              {(currentConfig.floatSlots?.length ?? 0) > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFloatSupportDraft(
+                      (currentConfig.floatSlots ?? []).map((f) => ({ ...f, supportedAreaIds: [...f.supportedAreaIds] }))
+                    );
+                    setShowFloatSupportModal(true);
+                  }}
+                  style={{ padding: '8px 14px', fontSize: '0.95rem' }}
+                >
+                  Edit float support
+                </button>
+              )}
+            </>
           ) : (
             <div
               style={{
@@ -1680,6 +1742,118 @@ export default function App() {
         </div>
       )}
 
+      {showFloatSupportModal && floatSupportDraft !== null && currentConfig && currentConfig.id !== 'ic' && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => {
+            setShowFloatSupportModal(false);
+            setFloatSupportDraft(null);
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 12,
+              padding: 20,
+              maxWidth: 440,
+              maxHeight: '85vh',
+              overflow: 'auto',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '1.1rem' }}>Float support</h3>
+            <p style={{ color: '#555', fontSize: '0.9rem', marginBottom: 16 }}>
+              Choose which stations each float covers for breaks.
+            </p>
+            {floatSupportDraft.map((f, i) => (
+              <div
+                key={f.id}
+                style={{
+                  border: '1px solid #e0e0e0',
+                  borderRadius: 8,
+                  padding: 12,
+                  marginBottom: 12,
+                }}
+              >
+                <input
+                  type="text"
+                  value={f.name}
+                  onChange={(e) =>
+                    setFloatSupportDraft((prev) =>
+                      prev ? prev.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) : null
+                    )
+                  }
+                  placeholder="Float name"
+                  style={{ width: '100%', padding: '6px 10px', marginBottom: 8 }}
+                />
+                <div style={{ fontSize: '0.85rem', color: '#555', marginBottom: 6 }}>Supports:</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {currentConfig.areas.map((a) => {
+                    const checked = f.supportedAreaIds.includes(a.id);
+                    return (
+                      <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            setFloatSupportDraft((prev) =>
+                              prev
+                                ? prev.map((x, j) =>
+                                    j !== i
+                                      ? x
+                                      : {
+                                          ...x,
+                                          supportedAreaIds: e.target.checked
+                                            ? [...x.supportedAreaIds, a.id]
+                                            : x.supportedAreaIds.filter((id) => id !== a.id),
+                                        }
+                                  )
+                                : null
+                            );
+                          }}
+                        />
+                        <span>{a.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  handleUpdateFloatSlots(floatSupportDraft);
+                  setFloatSupportDraft(null);
+                }}
+                style={{ padding: '8px 16px', fontWeight: 600 }}
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowFloatSupportModal(false);
+                  setFloatSupportDraft(null);
+                }}
+                style={{ padding: '8px 16px' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="areas-grid">
         {lineSections.map((section) => {
           const isCombined = Array.isArray(section);
@@ -1753,6 +1927,39 @@ export default function App() {
             />
           );
         })}
+        {currentConfig &&
+          getFloatSlots(currentConfig).map((f) => {
+            const supportsLabel =
+              f.supportedAreaIds.length > 0
+                ? f.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ')
+                : 'none';
+            return (
+              <AreaStaffing
+                key={f.id}
+                areaId={f.id}
+                areaLabel={`${f.name} — supports: ${supportsLabel}`}
+                minSlots={1}
+                maxSlots={1}
+                slotLabels={[f.name]}
+                slots={slots[f.id] ?? []}
+                roster={roster}
+                allAssignedPersonIds={allAssignedPersonIds}
+                leadAssignedPersonIds={leadAssignedPersonIds}
+                juiced={false}
+                deJuiced={false}
+                onToggleJuice={() => {}}
+                onToggleDeJuice={() => {}}
+                onAreaNameChange={() => {}}
+                onCapacityChange={() => {}}
+                onSlotLabelChange={() => {}}
+                sectionTasks={[]}
+                onSlotsChange={setSlotsForArea}
+                onSectionTasksChange={() => {}}
+                onAssign={setSlotAssignment}
+                requiresTrainedOrExpert={false}
+              />
+            );
+          })}
       </div>
 
       <TrainingReport roster={roster} slots={slots} areaLabels={areaLabels} effectiveCapacity={effectiveCapacity} areaIds={areaIds} />

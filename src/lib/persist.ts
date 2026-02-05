@@ -42,6 +42,8 @@ function normalizeRosterPerson(p: RosterPerson): RosterPerson {
     leavingEarly: p.leavingEarly ?? false,
     breakPreference: p.breakPreference ?? 'no_preference',
     areasWantToLearn: p.areasWantToLearn ?? [],
+    defaultAreaId: p.defaultAreaId ?? null,
+    defaultSlotIndex: p.defaultSlotIndex ?? null,
   };
 }
 
