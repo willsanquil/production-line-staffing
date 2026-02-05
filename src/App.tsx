@@ -2044,6 +2044,7 @@ export default function App() {
             />
           );
         }
+        const floatSlots = getFloatSlots(currentConfig);
         return (
           <>
             {areaIds.map((areaId) => {
@@ -2053,7 +2054,7 @@ export default function App() {
                 const p = roster.find((r) => r.id === id);
                 return { id, name: p?.name ?? id };
               });
-              const floatSlot = currentConfig ? getFloatSlots(currentConfig).find((f) => f.id === areaId) : null;
+              const floatSlot = floatSlots.find((f) => f.id === areaId);
               const title = floatSlot
                 ? `Break schedule — ${floatSlot.name} (covers: ${floatSlot.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ') || 'none'})`
                 : `Break schedule — ${areaLabels[areaId] ?? areaId}`;
@@ -2067,6 +2068,60 @@ export default function App() {
                 />
               );
             })}
+            {floatSlots.length > 0 && (
+              <div className="section-card" style={{ marginTop: 16 }}>
+                <h3 style={{ margin: '0 0 8px 0', fontWeight: 700, fontSize: '1.05rem' }}>Float break schedule</h3>
+                <p style={{ color: '#555', fontSize: '0.9rem', marginBottom: 12 }}>
+                  Floats cover their areas when others are on break. Each float gets a break rotation; assign someone and click Regenerate breaks to update.
+                </p>
+                {floatSlots.map((f) => {
+                  const assignments = breakSchedules?.[f.id];
+                  const areaSlots = slots[f.id] ?? [];
+                  const assignedPersonId = areaSlots[0]?.personId;
+                  const hasAssignment = assignments && Object.keys(assignments).length > 0;
+                  if (hasAssignment) {
+                    const people = Object.keys(assignments!).map((id) => {
+                      const p = roster.find((r) => r.id === id);
+                      return { id, name: p?.name ?? id };
+                    });
+                    return (
+                      <BreakTable
+                        key={f.id}
+                        people={people}
+                        assignments={assignments!}
+                        rotationCount={rotationCount}
+                        title={`${f.name} (covers: ${f.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ') || 'none'})`}
+                      />
+                    );
+                  }
+                  const assignedName = assignedPersonId ? roster.find((r) => r.id === assignedPersonId)?.name : null;
+                  return (
+                    <div
+                      key={f.id}
+                      style={{
+                        padding: 12,
+                        marginBottom: 8,
+                        background: '#f8f9fa',
+                        border: '1px solid #e9ecef',
+                        borderRadius: 8,
+                        fontSize: '0.9rem',
+                      }}
+                    >
+                      <strong>{f.name}</strong>
+                      <span style={{ color: '#555' }}>
+                        {' '}
+                        (covers: {f.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ') || 'none'})
+                      </span>
+                      <div style={{ marginTop: 6 }}>
+                        {assignedName
+                          ? `Assigned: ${assignedName}. Click "Regenerate breaks" above to set their break rotation.`
+                          : `Assign someone to this float position above, then click "Regenerate breaks" to set their break rotation.`}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </>
         );
       })()}
