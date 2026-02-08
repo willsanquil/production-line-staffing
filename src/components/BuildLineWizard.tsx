@@ -49,7 +49,18 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
   }, []);
 
   const removeSection = useCallback((index: number) => {
-    setSections((prev) => prev.filter((_, i) => i !== index));
+    setSections((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      const validIds = new Set(next.map((s) => s.id));
+      // Remove the deleted section from every float's supportedAreaIds
+      setFloatSlots((floats) =>
+        floats.map((f) => ({
+          ...f,
+          supportedAreaIds: f.supportedAreaIds.filter((id) => validIds.has(id)),
+        }))
+      );
+      return next;
+    });
   }, []);
 
   const setLeadName = useCallback((index: number, value: string) => {
@@ -94,6 +105,22 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
   const removeFloat = useCallback((index: number) => {
     setFloatSlots((prev) => prev.filter((_, i) => i !== index));
   }, []);
+
+  /** When navigating to the floats step, ensure every existing float
+   *  includes any newly-added sections in its supportedAreaIds. */
+  const goToFloats = useCallback(() => {
+    const allSectionIds = sections.map((s) => s.id);
+    setFloatSlots((prev) =>
+      prev.map((f) => {
+        const existing = new Set(f.supportedAreaIds);
+        const missing = allSectionIds.filter((id) => !existing.has(id));
+        return missing.length > 0
+          ? { ...f, supportedAreaIds: [...f.supportedAreaIds, ...missing] }
+          : f;
+      })
+    );
+    setStep('floats');
+  }, [sections]);
 
   const handleCreate = useCallback(() => {
     const lineId = existingLineId ?? 'line_' + Math.random().toString(36).slice(2, 10);
@@ -223,7 +250,7 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
             </button>
             <button
               type="button"
-              onClick={() => setStep('floats')}
+              onClick={goToFloats}
               disabled={sections.length === 0}
               style={{ padding: '10px 20px', fontWeight: 600 }}
             >
