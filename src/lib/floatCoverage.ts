@@ -73,6 +73,12 @@ export function computeFloatCoverage(input: ComputeFloatCoverageInput): FloatCov
   }
 
   // ── Step 1: Build the float schedule ─────────────────────────────────
+  // Track which (areaId, rotation) pairs are already claimed by a float.
+  // Each subsequent float only covers areas that still need it.
+  const coveredByRotation: Record<number, Set<string>> = {};
+  for (let r = 1; r <= rotationCount; r++) {
+    coveredByRotation[r] = new Set<string>();
+  }
 
   const floatSchedule: FloatScheduleMap = {};
 
@@ -101,9 +107,11 @@ export function computeFloatCoverage(input: ComputeFloatCoverageInput): FloatCov
       }
 
       // Find first supported area (in section order) with someone on break this rotation
+      // that is NOT already covered by a previously-processed float
       let foundArea: string | null = null;
       for (const areaId of areaIdsInSectionOrder) {
         if (!float.supportedAreaIds.includes(areaId)) continue;
+        if (coveredByRotation[rot].has(areaId)) continue; // already covered
         const areaBreaks = breakSchedules[areaId];
         if (!areaBreaks) continue;
         const someoneOnBreak = Object.values(areaBreaks).some(
@@ -117,6 +125,7 @@ export function computeFloatCoverage(input: ComputeFloatCoverageInput): FloatCov
 
       if (foundArea) {
         schedule[rot] = { type: 'covering', areaId: foundArea };
+        coveredByRotation[rot].add(foundArea);
       } else {
         schedule[rot] = { type: 'idle' };
       }
