@@ -388,8 +388,10 @@ export function stretchAssignments(
   roster: RosterPerson[],
   slotsByArea: SlotsByArea,
   leadAssignedPersonIds: Set<string> = new Set(),
-  areaIds: string[] = [...AREA_IDS]
+  areaIds: string[] = [...AREA_IDS],
+  areaRequiresTrainedOrExpertFn?: (areaId: string) => boolean
 ): SlotsByArea {
+  const requiresFn = areaRequiresTrainedOrExpertFn ?? areaRequiresTrainedOrExpert;
   const available = shuffle(
     roster.filter(
       (p) =>
@@ -400,7 +402,7 @@ export function stretchAssignments(
   );
   const { out, assignedFromLocked } = copySlotsPreservingLocked(slotsByArea, areaIds);
   const assigned = new Set(assignedFromLocked);
-  fillAnchorSlots(out, available, assigned, areaIds);
+  fillAnchorSlots(out, available, assigned, areaIds, requiresFn);
   const slotOrder: { areaId: AreaId; slotIdx: number }[] = [];
   for (const areaId of areaIds) {
     const list = out[areaId] ?? [];
@@ -413,7 +415,7 @@ export function stretchAssignments(
     const slot = out[areaId]?.[slotIdx];
     if (slot.personId != null) continue;
     const candidates = [...available]
-      .filter((p) => !assigned.has(p.id) && eligibleForArea(p, areaId))
+      .filter((p) => !assigned.has(p.id) && eligibleForArea(p, areaId, requiresFn))
       .sort((a, b) => stretchScoreForArea(b, areaId) - stretchScoreForArea(a, areaId));
     if (candidates.length > 0) {
       slot.personId = candidates[0].id;
