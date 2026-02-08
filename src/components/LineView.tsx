@@ -87,6 +87,8 @@ interface LineViewProps {
   breaksScope?: 'line' | 'station';
   /** For presentation: float positions to show with assigned person and break rotation. */
   floatSlots?: FloatSlotConfig[];
+  /** Per area: groups of slot indices sharing a label (linked slots self-cover each other). */
+  linkedSlotsByArea?: Record<string, number[][]>;
 }
 
 /** Compact, screenshot- and phone-friendly view: line health, areas, who is running each, and risks. */
@@ -110,6 +112,7 @@ function LineViewInner({
   rotationCount = 3,
   breaksScope = 'station',
   floatSlots = [],
+  linkedSlotsByArea = {},
 }: LineViewProps) {
   const isCompact = useCompactPresentation();
   const sections = lineSectionsProp ?? LINE_SECTIONS;
@@ -184,6 +187,7 @@ function LineViewInner({
     rotationCount: rotCount,
     areaIdsInSectionOrder,
     areaLabels,
+    linkedSlotsByArea,
   });
 
   const { floatSchedule, areaCoverage, coverageSummary } = floatCoverage;
@@ -301,16 +305,20 @@ function LineViewInner({
               </tr>
             </thead>
             <tbody>
-              {allSlots.map((slot, idx) => {
+              {(() => {
+                let prevRole = '';
+                return allSlots.map((slot, idx) => {
                 if (slot.disabled) return null;
                 const slotLabel = getLabel(areaId, idx);
                 const roleDisplay = isGenericSlotLabel(slotLabel) ? ROLE_PA : slotLabel;
+                const showRole = roleDisplay !== prevRole;
+                prevRole = roleDisplay;
                 const name = getName(slot.personId);
                 const skill = getSkillInArea(areaId, slot.personId);
                 const breakRot = slot.personId && breakAssignments?.[slot.personId]?.breakRotation;
                 return (
                   <tr key={slot.id}>
-                    <td style={tdStyle} className={tdClassName}>{roleDisplay}</td>
+                    <td style={tdStyle} className={tdClassName}>{showRole ? roleDisplay : ''}</td>
                     <td style={tdStyle} className={tdClassName}>
                       <span className={`skill-name-${skill}`} style={compact ? undefined : { fontSize: nameFontSize, fontWeight: 600 }}>
                         {name}
@@ -328,9 +336,11 @@ function LineViewInner({
                             <>
                               <span style={{ fontWeight: 700, fontSize: compact ? undefined : '1.1rem' }}>X</span>
                               {!isSelfManaging && personCoverage && (
-                                personCoverage.coveredByPersonName
-                                  ? <div style={{ fontSize: '0.75rem', color: '#1976d2', marginTop: 2 }}>Float: {getName(personCoverage.coveredByPersonName)}</div>
-                                  : <div style={{ fontSize: '0.75rem', color: '#c0392b', marginTop: 2 }}>Uncovered</div>
+                                personCoverage.coveredByFloatId === '__self_coverage__'
+                                  ? <div style={{ fontSize: '0.75rem', color: '#4caf50', marginTop: 2 }}>{getName(personCoverage.coveredByPersonName)}</div>
+                                  : personCoverage.coveredByPersonName
+                                    ? <div style={{ fontSize: '0.75rem', color: '#1976d2', marginTop: 2 }}>Float: {getName(personCoverage.coveredByPersonName)}</div>
+                                    : <div style={{ fontSize: '0.75rem', color: '#c0392b', marginTop: 2 }}>Uncovered</div>
                               )}
                             </>
                           ) : ''}
@@ -339,7 +349,8 @@ function LineViewInner({
                     })}
                   </tr>
                 );
-              })}
+              });
+              })()}
               {supportingFloats.map((f) => {
                 const personId = slots[f.id]?.[0]?.personId ?? null;
                 const fSchedule = floatSchedule[f.id];

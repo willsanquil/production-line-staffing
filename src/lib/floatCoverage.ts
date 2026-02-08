@@ -44,6 +44,9 @@ export interface ComputeFloatCoverageInput {
   rotationCount: number;
   areaIdsInSectionOrder: string[];
   areaLabels: Record<string, string>;
+  /** Per area: groups of slot indices that share a label (e.g. Inside/Outside lanes).
+   * People in a linked group cover each other when only one is on break. */
+  linkedSlotsByArea?: Record<string, number[][]>;
 }
 
 export interface FloatCoverageResult {
@@ -66,6 +69,7 @@ export function computeFloatCoverage(input: ComputeFloatCoverageInput): FloatCov
     rotationCount,
     areaIdsInSectionOrder,
     areaLabels,
+    linkedSlotsByArea = {},
   } = input;
 
   if (floatSlots.length === 0) {
@@ -145,6 +149,17 @@ export function computeFloatCoverage(input: ComputeFloatCoverageInput): FloatCov
 
   // ── Step 3: Build areaCoverage ───────────────────────────────────────
 
+  // Build a map from personId → slot index for linked-group lookup
+  const personSlotIndex: Record<string, Record<string, number>> = {}; // areaId → personId → slotIndex
+  for (const areaId of areaIdsInSectionOrder) {
+    const areaSlots = slots[areaId] ?? [];
+    const map: Record<string, number> = {};
+    for (let i = 0; i < areaSlots.length; i++) {
+      if (areaSlots[i].personId) map[areaSlots[i].personId!] = i;
+    }
+    personSlotIndex[areaId] = map;
+  }
+
   const areaCoverage: AreaBreakCoverage = {};
 
   for (const areaId of areaIdsInSectionOrder) {
@@ -153,6 +168,7 @@ export function computeFloatCoverage(input: ComputeFloatCoverageInput): FloatCov
     const areaBreaks = breakSchedules[areaId];
     if (!areaBreaks) continue;
 
+    const linkedGroups = linkedSlotsByArea[areaId] ?? [];
     const personCoverages: PersonBreakCoverage[] = [];
 
     for (const [personId, entry] of Object.entries(areaBreaks)) {
@@ -172,6 +188,31 @@ export function computeFloatCoverage(input: ComputeFloatCoverageInput): FloatCov
           const floatSlotSlots = slots[float.id] ?? [];
           coveredByPersonName = floatSlotSlots[0]?.personId ?? null;
           break;
+        }
+      }
+
+      // If no float is covering, check linked-slot self-coverage:
+      // a partner in the same linked group who is NOT on break covers this person.
+      if (!coveredByFloatId && linkedGroups.length > 0) {
+        const mySlotIdx = personSlotIndex[areaId]?.[personId];
+        if (mySlotIdx !== undefined) {
+          const myGroup = linkedGroups.find((g) => g.includes(mySlotIdx));
+          if (myGroup) {
+            const areaSlots = slots[areaId] ?? [];
+            for (const partnerIdx of myGroup) {
+              if (partnerIdx === mySlotIdx) continue;
+              const partnerId = areaSlots[partnerIdx]?.personId;
+              if (!partnerId) continue;
+              const partnerBreak = areaBreaks[partnerId]?.breakRotation;
+              // Partner is NOT on break this rotation → they cover
+              if (partnerBreak !== breakRot) {
+                coveredByFloatId = '__self_coverage__';
+                coveredByFloatName = null;
+                coveredByPersonName = partnerId;
+                break;
+              }
+            }
+          }
         }
       }
 
@@ -221,7 +262,12 @@ export function computeFloatCoverage(input: ComputeFloatCoverageInput): FloatCov
         }
       }
 
-      const uncovered = peopleOnBreak > 0 && coveredByFloatId === null;
+      // Check if all people on break this rotation are covered (by float or linked partner)
+      const areaPersonCoverages = areaCoverage[areaId] ?? [];
+      const allBreaksCovered = areaPersonCoverages
+        .filter((pc) => pc.breakRotation === rot)
+        .every((pc) => pc.coveredByFloatId !== null);
+      const uncovered = peopleOnBreak > 0 && !allBreaksCovered;
 
       summarySlots.push({
         rotation: rot,

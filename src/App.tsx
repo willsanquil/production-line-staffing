@@ -431,6 +431,18 @@ export default function App() {
     return augmented;
   }, [currentConfig, slots, leadSlotKeys, leadBreakCoverage, leadSlots]);
 
+  /** Linked slot groups for presentation: per area, groups of slot indices sharing a label. */
+  const presentationLinkedSlots = useMemo(() => {
+    if (!currentConfig) return {};
+    const result: Record<string, number[][]> = {};
+    for (const area of currentConfig.areas) {
+      const areaSlots = slots[area.id] ?? [];
+      const groups = getLinkedSlotGroupsForArea(currentConfig, area.id, areaSlots.length, slotLabelsByArea);
+      if (groups.length > 0) result[area.id] = groups;
+    }
+    return result;
+  }, [currentConfig, slots, slotLabelsByArea]);
+
   const setSlotAssignment = useCallback((areaId: AreaId, slotId: string, personId: string | null) => {
     setSlots((prev) => ({
       ...prev,
@@ -1543,6 +1555,7 @@ export default function App() {
           rotationCount={presentationBreakData?.rotationCount}
           breaksScope={presentationBreakData?.breaksScope}
           floatSlots={presentationFloatSlots}
+          linkedSlotsByArea={presentationLinkedSlots}
         />
         <div style={{ maxWidth: 520, margin: '0 auto', padding: '0 12px 24px' }}>
           <TrainingReport roster={roster} slots={slots} areaLabels={areaLabels} effectiveCapacity={effectiveCapacity} presentationMode areaIds={areaIds} />
