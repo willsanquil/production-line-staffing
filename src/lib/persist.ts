@@ -1,5 +1,4 @@
 import type { AppState, LineState, RootState, RosterPerson, SavedConfig, SavedDay, SlotsByArea } from '../types';
-import { AREA_IDS } from '../types';
 import { getDefaultICLineConfig } from './lineConfig';
 import { normalizeSlotsToCapacity } from '../data/initialState';
 
@@ -235,7 +234,7 @@ export function importConfigJson(
   if (!data || typeof data.slots !== 'object') throw new Error('Invalid format');
   const imported = data.slots as Record<string, Array<{ id: string; personId: string | null }>>;
   const result = JSON.parse(JSON.stringify(currentSlots)) as SlotsByArea;
-  for (const areaId of AREA_IDS) {
+  for (const areaId of Object.keys(imported)) {
     const curr = result[areaId];
     const impr = imported[areaId];
     if (!curr || !Array.isArray(impr)) continue;
