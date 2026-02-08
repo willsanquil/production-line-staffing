@@ -766,40 +766,30 @@ export default function App() {
       linkedSlotsByArea[areaId] = getLinkedSlotGroupsForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
       floatSlotIndicesByArea[areaId] = getFloatSlotIndicesForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
     }
-    const realFloatSlots = getFloatSlots(currentConfig);
-    for (const f of realFloatSlots) {
+    const floatSlots = getFloatSlots(currentConfig);
+    for (const f of floatSlots) {
       floatSlotIndicesByArea[f.id] = [0];
     }
 
-    // Build synthetic lead float entries for leads with break coverage enabled
+    // Collect all area IDs that have float coverage (real floats + lead coverage).
+    // In these areas, break preferences are overridden for maximum coverage.
     const scope = getBreaksScope(currentConfig);
-    const syntheticLeadFloats: FloatSlotConfig[] = [];
-    const augmentedSlots: SlotsByArea = { ...nextSlots };
-    const augmentedAreaIds = [...areaIds];
-    const stationAreaIds = currentConfig.areas.map((a) => a.id);
+    const floatSupportedAreaIds = new Set<string>();
+    for (const f of floatSlots) {
+      for (const areaId of f.supportedAreaIds) floatSupportedAreaIds.add(areaId);
+    }
     if (scope === 'station') {
+      const stationAreaIds = currentConfig.areas.map((a) => a.id);
       for (const key of leadSlotKeys) {
-        if (!leadBreakCoverage[key]) continue;
-        const personId = leadSlots[key];
-        if (!personId) continue;
-        const syntheticId = `${LEAD_COVERAGE_PREFIX}${key}`;
-        const label = getLeadSlotLabel(currentConfig, key, areaLabels);
-        syntheticLeadFloats.push({ id: syntheticId, name: `Lead: ${label}`, supportedAreaIds: stationAreaIds });
-        augmentedSlots[syntheticId] = [{ id: `${syntheticId}_s0`, personId }];
-        augmentedAreaIds.push(syntheticId);
-        floatSlotIndicesByArea[syntheticId] = [0];
+        if (leadBreakCoverage[key] && leadSlots[key]) {
+          for (const areaId of stationAreaIds) floatSupportedAreaIds.add(areaId);
+          break; // all station areas added, no need to continue
+        }
       }
     }
 
-    const allFloatSlots = [...realFloatSlots, ...syntheticLeadFloats];
-    // Collect all area IDs that have at least one float (real or lead) covering them.
-    // In these areas, break preferences are overridden for maximum coverage.
-    const floatSupportedAreaIds = new Set<string>();
-    for (const f of allFloatSlots) {
-      for (const areaId of f.supportedAreaIds) floatSupportedAreaIds.add(areaId);
-    }
     const rotationCount = getBreakRotations(currentConfig);
-    const rawSchedules = generateBreakSchedules(roster, augmentedSlots, augmentedAreaIds, {
+    const rawSchedules = generateBreakSchedules(roster, nextSlots, areaIds, {
       rotationCount,
       scope,
       leadSlots,
@@ -808,7 +798,7 @@ export default function App() {
       floatSupportedAreaIds,
     });
     setBreakSchedules(
-      optimizeFloatBreakRotations(rawSchedules, allFloatSlots, augmentedSlots, rotationCount)
+      optimizeFloatBreakRotations(rawSchedules, floatSlots, nextSlots, rotationCount)
     );
   }, [currentConfig, areaIds, roster, leadSlots, leadBreakCoverage, slotLabelsByArea, areaLabels, leadSlotKeys]);
 
@@ -2148,53 +2138,33 @@ export default function App() {
                 })}
               </div>
             )}
-            {/* Lead break coverage schedules */}
+            {/* Lead break coverage info */}
             {leadSlotKeys.some((key) => leadBreakCoverage[key] && leadSlots[key]) && (
               <div className="section-card" style={{ marginTop: 16 }}>
                 <h3 style={{ margin: '0 0 8px 0', fontWeight: 700, fontSize: '1.05rem' }}>Lead break coverage</h3>
                 <p style={{ color: '#555', fontSize: '0.9rem', marginBottom: 12 }}>
-                  Leads with "Cover breaks" enabled are included in the break rotation and cover all stations.
+                  These leads cover stations during all break rotations and manage their own breaks outside the normal schedule. Regenerate breaks to see their coverage in the presentation view.
                 </p>
                 {leadSlotKeys.map((key) => {
                   if (!leadBreakCoverage[key] || !leadSlots[key]) return null;
-                  const syntheticId = `${LEAD_COVERAGE_PREFIX}${key}`;
-                  const assignments = breakSchedules?.[syntheticId];
-                  if (!assignments || Object.keys(assignments).length === 0) {
-                    const leadPerson = roster.find((r) => r.id === leadSlots[key]);
-                    const label = currentConfig ? getLeadSlotLabel(currentConfig, key, areaLabels) : key;
-                    return (
-                      <div
-                        key={syntheticId}
-                        style={{
-                          padding: 12,
-                          marginBottom: 8,
-                          background: '#f8f9fa',
-                          border: '1px solid #e9ecef',
-                          borderRadius: 8,
-                          fontSize: '0.9rem',
-                        }}
-                      >
-                        <strong>Lead: {label}</strong>
-                        {leadPerson && <span style={{ color: '#555' }}> — {leadPerson.name}</span>}
-                        <div style={{ marginTop: 6 }}>
-                          Click "Regenerate breaks" to assign this lead a break rotation.
-                        </div>
-                      </div>
-                    );
-                  }
-                  const people = Object.keys(assignments).map((id) => {
-                    const p = roster.find((r) => r.id === id);
-                    return { id, name: p?.name ?? id };
-                  });
+                  const leadPerson = roster.find((r) => r.id === leadSlots[key]);
                   const label = currentConfig ? getLeadSlotLabel(currentConfig, key, areaLabels) : key;
                   return (
-                    <BreakTable
-                      key={syntheticId}
-                      people={people}
-                      assignments={assignments}
-                      rotationCount={rotationCount}
-                      title={`Lead: ${label} (covers all stations)`}
-                    />
+                    <div
+                      key={key}
+                      style={{
+                        padding: 12,
+                        marginBottom: 8,
+                        background: '#e8f5e9',
+                        border: '1px solid #c8e6c9',
+                        borderRadius: 8,
+                        fontSize: '0.9rem',
+                      }}
+                    >
+                      <strong>Lead: {label}</strong>
+                      {leadPerson && <span style={{ color: '#555' }}> — {leadPerson.name}</span>}
+                      <span style={{ color: '#2e7d32', marginLeft: 8 }}>Available all rotations</span>
+                    </div>
                   );
                 })}
               </div>
