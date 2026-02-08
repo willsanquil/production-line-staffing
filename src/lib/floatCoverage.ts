@@ -1,0 +1,234 @@
+import type { FloatSlotConfig, SlotsByArea, BreakSchedulesByArea } from '../types';
+
+// ── Types ──────────────────────────────────────────────────────────────
+
+export type FloatSlotActivity =
+  | { type: 'covering'; areaId: string }
+  | { type: 'on_break' }
+  | { type: 'idle' };
+
+/** Per-float schedule: floatSlotId → rotation → activity. */
+export type FloatScheduleMap = Record<string, Record<number, FloatSlotActivity>>;
+
+export interface PersonBreakCoverage {
+  personId: string;
+  breakRotation: number;
+  coveredByFloatId: string | null;
+  coveredByFloatName: string | null;
+  /** Stores the float's assigned person ID (the UI component resolves this to a display name). */
+  coveredByPersonName: string | null;
+}
+
+/** Per-area break coverage: areaId → list of person coverage entries. */
+export type AreaBreakCoverage = Record<string, PersonBreakCoverage[]>;
+
+export interface CoverageSummarySlot {
+  rotation: number;
+  peopleOnBreak: number;
+  coveredByFloatId: string | null;
+  coveredByFloatName: string | null;
+  /** True if peopleOnBreak > 0 and no float is covering this area during this rotation. */
+  uncovered: boolean;
+}
+
+export interface CoverageSummaryRow {
+  areaId: string;
+  areaLabel: string;
+  slots: CoverageSummarySlot[];
+}
+
+export interface ComputeFloatCoverageInput {
+  floatSlots: FloatSlotConfig[];
+  slots: SlotsByArea;
+  breakSchedules: BreakSchedulesByArea;
+  rotationCount: number;
+  areaIdsInSectionOrder: string[];
+  areaLabels: Record<string, string>;
+}
+
+export interface FloatCoverageResult {
+  floatSchedule: FloatScheduleMap;
+  areaCoverage: AreaBreakCoverage;
+  coverageSummary: CoverageSummaryRow[];
+}
+
+// ── Implementation ─────────────────────────────────────────────────────
+
+/**
+ * Compute float coverage: what each float does per rotation, which persons
+ * are covered/uncovered, and a gap-analysis summary for float-supported areas.
+ */
+export function computeFloatCoverage(input: ComputeFloatCoverageInput): FloatCoverageResult {
+  const {
+    floatSlots,
+    slots,
+    breakSchedules,
+    rotationCount,
+    areaIdsInSectionOrder,
+    areaLabels,
+  } = input;
+
+  if (floatSlots.length === 0) {
+    return { floatSchedule: {}, areaCoverage: {}, coverageSummary: [] };
+  }
+
+  // ── Step 1: Build the float schedule ─────────────────────────────────
+
+  const floatSchedule: FloatScheduleMap = {};
+
+  for (const float of floatSlots) {
+    const schedule: Record<number, FloatSlotActivity> = {};
+    const floatSlotSlots = slots[float.id] ?? [];
+    const floatPersonId = floatSlotSlots[0]?.personId ?? null;
+
+    // Get the float person's own break rotation
+    const floatBreakEntry = floatPersonId
+      ? breakSchedules[float.id]?.[floatPersonId]
+      : undefined;
+    const floatBreakRotation = floatBreakEntry?.breakRotation ?? null;
+
+    for (let rot = 1; rot <= rotationCount; rot++) {
+      // If no person assigned to this float → idle
+      if (!floatPersonId) {
+        schedule[rot] = { type: 'idle' };
+        continue;
+      }
+
+      // If it's the float's own break rotation → on_break
+      if (floatBreakRotation !== null && rot === floatBreakRotation) {
+        schedule[rot] = { type: 'on_break' };
+        continue;
+      }
+
+      // Find first supported area (in section order) with someone on break this rotation
+      let foundArea: string | null = null;
+      for (const areaId of areaIdsInSectionOrder) {
+        if (!float.supportedAreaIds.includes(areaId)) continue;
+        const areaBreaks = breakSchedules[areaId];
+        if (!areaBreaks) continue;
+        const someoneOnBreak = Object.values(areaBreaks).some(
+          (entry) => entry.breakRotation === rot
+        );
+        if (someoneOnBreak) {
+          foundArea = areaId;
+          break;
+        }
+      }
+
+      if (foundArea) {
+        schedule[rot] = { type: 'covering', areaId: foundArea };
+      } else {
+        schedule[rot] = { type: 'idle' };
+      }
+    }
+
+    floatSchedule[float.id] = schedule;
+  }
+
+  // ── Step 2: Build set of all float-supported area IDs ────────────────
+
+  const floatSupportedAreaIds = new Set<string>();
+  for (const float of floatSlots) {
+    for (const areaId of float.supportedAreaIds) {
+      floatSupportedAreaIds.add(areaId);
+    }
+  }
+
+  // ── Step 3: Build areaCoverage ───────────────────────────────────────
+
+  const areaCoverage: AreaBreakCoverage = {};
+
+  for (const areaId of areaIdsInSectionOrder) {
+    if (!floatSupportedAreaIds.has(areaId)) continue;
+
+    const areaBreaks = breakSchedules[areaId];
+    if (!areaBreaks) continue;
+
+    const personCoverages: PersonBreakCoverage[] = [];
+
+    for (const [personId, entry] of Object.entries(areaBreaks)) {
+      const breakRot = entry.breakRotation;
+
+      // Check if any float's schedule shows 'covering' this area during this person's break rotation
+      let coveredByFloatId: string | null = null;
+      let coveredByFloatName: string | null = null;
+      let coveredByPersonName: string | null = null;
+
+      for (const float of floatSlots) {
+        const activity = floatSchedule[float.id]?.[breakRot];
+        if (activity && activity.type === 'covering' && activity.areaId === areaId) {
+          coveredByFloatId = float.id;
+          coveredByFloatName = float.name;
+          // Get the person assigned to this float
+          const floatSlotSlots = slots[float.id] ?? [];
+          coveredByPersonName = floatSlotSlots[0]?.personId ?? null;
+          break;
+        }
+      }
+
+      personCoverages.push({
+        personId,
+        breakRotation: breakRot,
+        coveredByFloatId,
+        coveredByFloatName,
+        coveredByPersonName,
+      });
+    }
+
+    areaCoverage[areaId] = personCoverages;
+  }
+
+  // ── Step 4: Build coverageSummary ────────────────────────────────────
+
+  const coverageSummary: CoverageSummaryRow[] = [];
+
+  for (const areaId of areaIdsInSectionOrder) {
+    if (!floatSupportedAreaIds.has(areaId)) continue;
+
+    const summarySlots: CoverageSummarySlot[] = [];
+    const areaBreaks = breakSchedules[areaId];
+
+    for (let rot = 1; rot <= rotationCount; rot++) {
+      // Count people on break in this area this rotation
+      let peopleOnBreak = 0;
+      if (areaBreaks) {
+        for (const entry of Object.values(areaBreaks)) {
+          if (entry.breakRotation === rot) {
+            peopleOnBreak++;
+          }
+        }
+      }
+
+      // Check if any float is covering this area this rotation
+      let coveredByFloatId: string | null = null;
+      let coveredByFloatName: string | null = null;
+
+      for (const float of floatSlots) {
+        const activity = floatSchedule[float.id]?.[rot];
+        if (activity && activity.type === 'covering' && activity.areaId === areaId) {
+          coveredByFloatId = float.id;
+          coveredByFloatName = float.name;
+          break;
+        }
+      }
+
+      const uncovered = peopleOnBreak > 0 && coveredByFloatId === null;
+
+      summarySlots.push({
+        rotation: rot,
+        peopleOnBreak,
+        coveredByFloatId,
+        coveredByFloatName,
+        uncovered,
+      });
+    }
+
+    coverageSummary.push({
+      areaId,
+      areaLabel: areaLabels[areaId] ?? areaId,
+      slots: summarySlots,
+    });
+  }
+
+  return { floatSchedule, areaCoverage, coverageSummary };
+}
