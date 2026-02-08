@@ -7,6 +7,8 @@ import { BreakTable } from './BreakTable';
 import { getSlotLabel as getSlotLabelDefault, isGenericSlotLabel } from '../lib/areaConfig';
 import type { SlotLabelsByArea } from '../types';
 import { getAreaRisks } from '../lib/lineViewRisks';
+import { computeFloatCoverage } from '../lib/floatCoverage';
+import type { FloatCoverageResult } from '../lib/floatCoverage';
 
 const BAR_HEIGHT = 18;
 const BAR_HEIGHT_COMPACT = 10;
@@ -175,40 +177,16 @@ function LineViewInner({
     return out;
   })();
 
-  /**
-   * For each float, for each slot 1..rotCount: either 'break' or exactly one areaId they're covering.
-   * Ensures the float is never shown in two places at once.
-   */
-  const floatSchedule = (() => {
-    const schedule: Record<string, Record<number, 'break' | string>> = {};
-    for (const f of floatSlots) {
-      const personId = slots[f.id]?.[0]?.personId ?? null;
-      const rawBreak = personId && breakSchedules?.[f.id]?.[personId]?.breakRotation;
-      const floatBreakRot = typeof rawBreak === 'number' ? rawBreak : rawBreak != null ? Number(rawBreak) : null;
-      schedule[f.id] = {};
-      for (let slot = 1; slot <= rotCount; slot++) {
-        if (floatBreakRot != null && slot === floatBreakRot) {
-          schedule[f.id][slot] = 'break';
-          continue;
-        }
-        const areasNeedingCoverageThisSlot = areaIdsInSectionOrder.filter((areaId) => {
-          if (!f.supportedAreaIds.includes(areaId)) return false;
-          const areaBreakAssignments = breakSchedules?.[areaId];
-          if (!areaBreakAssignments) return false;
-          const areaSlotsList = slots[areaId] ?? [];
-          return areaSlotsList.some((s) => {
-            const pid = s.personId;
-            if (!pid) return false;
-            const r = areaBreakAssignments[pid]?.breakRotation;
-            const rot = typeof r === 'number' ? r : r != null ? Number(r) : null;
-            return rot != null && !Number.isNaN(rot) && rot === slot;
-          });
-        });
-        schedule[f.id][slot] = areasNeedingCoverageThisSlot[0] ?? ('' as 'break' | string);
-      }
-    }
-    return schedule;
-  })();
+  const floatCoverage: FloatCoverageResult = computeFloatCoverage({
+    floatSlots,
+    slots,
+    breakSchedules: breakSchedules ?? {},
+    rotationCount: rotCount,
+    areaIdsInSectionOrder,
+    areaLabels,
+  });
+
+  const { floatSchedule, areaCoverage, coverageSummary } = floatCoverage;
 
   /**
    * One combined table per area: Role (custom or "PA") | Name (skill-colored) | First Slot | Second Slot | ... with X for break assignment.
@@ -259,7 +237,7 @@ function LineViewInner({
     const supportingFloats = floatSlots.filter((f) => {
       if (!f.supportedAreaIds.includes(areaId)) return false;
       const fSchedule = floatSchedule[f.id];
-      return fSchedule && Object.values(fSchedule).some((v) => v === areaId);
+      return fSchedule && Object.values(fSchedule).some((v) => v.type === 'covering' && v.areaId === areaId);
     });
     const showBreakCols = !!breakAssignments && Object.keys(breakAssignments).length > 0 && rotCount >= 1;
     const understaffed = filled < min;
@@ -338,11 +316,27 @@ function LineViewInner({
                         {name}
                       </span>
                     </td>
-                    {showBreakCols && breakSlotLabels.map((_, i) => (
-                      <td key={i} style={tdCenterStyle} className={compact ? `${tdClassName} presentation-td-break` : 'presentation-td-break'}>
-                        {breakRot === i + 1 ? <span style={{ fontWeight: 700, fontSize: compact ? undefined : '1.1rem' }}>X</span> : ''}
-                      </td>
-                    ))}
+                    {showBreakCols && breakSlotLabels.map((_, i) => {
+                      const isOnBreak = breakRot === i + 1;
+                      const personCoverage = isOnBreak && slot.personId && areaCoverage[areaId]
+                        ? areaCoverage[areaId].find((pc) => pc.personId === slot.personId && pc.breakRotation === i + 1)
+                        : null;
+                      const isSelfManaging = !areaCoverage[areaId];
+                      return (
+                        <td key={i} style={tdCenterStyle} className={compact ? `${tdClassName} presentation-td-break` : 'presentation-td-break'}>
+                          {isOnBreak ? (
+                            <>
+                              <span style={{ fontWeight: 700, fontSize: compact ? undefined : '1.1rem' }}>X</span>
+                              {!isSelfManaging && personCoverage && (
+                                personCoverage.coveredByPersonName
+                                  ? <div style={{ fontSize: '0.75rem', color: '#1976d2', marginTop: 2 }}>Float: {getName(personCoverage.coveredByPersonName)}</div>
+                                  : <div style={{ fontSize: '0.75rem', color: '#c0392b', marginTop: 2 }}>Uncovered</div>
+                              )}
+                            </>
+                          ) : ''}
+                        </td>
+                      );
+                    })}
                   </tr>
                 );
               })}
@@ -361,10 +355,19 @@ function LineViewInner({
                     </td>
                     {showBreakCols && breakSlotLabels.map((_, i) => {
                       const rot = i + 1;
-                      const assignedHere = fSchedule && fSchedule[rot] === areaId;
+                      const activity = fSchedule?.[rot];
+                      const coveringHere = activity?.type === 'covering' && activity.areaId === areaId;
+                      const onBreak = activity?.type === 'on_break';
+                      const coveringElsewhere = activity?.type === 'covering' && activity.areaId !== areaId;
                       return (
-                        <td key={i} style={tdCenterStyle} className={compact ? `${tdClassName} presentation-td-break` : 'presentation-td-break'} title={assignedHere ? `Float covering this area` : fSchedule?.[rot] === 'break' ? `Float on break` : ''}>
-                          {assignedHere ? <span style={{ fontWeight: 700, fontSize: compact ? undefined : '1.1rem', color: '#1976d2' }}>X</span> : ''}
+                        <td key={i} style={tdCenterStyle} className={compact ? `${tdClassName} presentation-td-break` : 'presentation-td-break'}>
+                          {coveringHere
+                            ? <span style={{ fontWeight: 700, fontSize: compact ? undefined : '0.85rem', color: '#1976d2' }}>Covering</span>
+                            : onBreak
+                              ? <span style={{ color: '#888', fontSize: compact ? undefined : '0.85rem' }}>On break</span>
+                              : coveringElsewhere
+                                ? <span style={{ color: '#bbb', fontSize: compact ? undefined : '0.85rem' }}>At {areaLabels[activity.areaId] ?? activity.areaId}</span>
+                                : <span style={{ color: '#ccc' }}>&mdash;</span>}
                         </td>
                       );
                     })}
@@ -572,9 +575,9 @@ function LineViewInner({
                     <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                       {breakSlotLabels.map((label, i) => {
                         const rot = i + 1;
-                        const val = fSchedule[rot];
-                        const isBreak = val === 'break';
-                        const covering = typeof val === 'string' && val !== '' && !isBreak ? areaLabels[val] ?? val : null;
+                        const activity = fSchedule[rot];
+                        const isBreak = activity?.type === 'on_break';
+                        const covering = activity?.type === 'covering' ? (areaLabels[activity.areaId] ?? activity.areaId) : null;
                         return (
                           <span key={i} style={{ fontWeight: isBreak ? 700 : undefined }}>
                             {label}: {isBreak ? 'On break' : covering ?? '—'}
@@ -597,7 +600,6 @@ function LineViewInner({
                   <tr>
                     <th style={presentationThStyle}>Float</th>
                     <th style={presentationThStyle}>Assigned</th>
-                    <th style={{ ...presentationThStyle, fontWeight: 700 }}>Break</th>
                     {breakSlotLabels.map((label, i) => (
                       <th key={i} style={presentationThStyle}>{label}</th>
                     ))}
@@ -606,28 +608,121 @@ function LineViewInner({
                 <tbody>
                   {floatSlots.map((f) => {
                     const personId = slots[f.id]?.[0]?.personId ?? null;
-                    const rawBreak = personId && breakSchedules?.[f.id]?.[personId]?.breakRotation;
-                    const breakRot = typeof rawBreak === 'number' ? rawBreak : rawBreak != null ? Number(rawBreak) : null;
                     const fSchedule = floatSchedule[f.id] ?? {};
                     return (
                       <tr key={f.id} style={{ background: 'rgba(33, 150, 243, 0.06)' }}>
                         <td style={{ ...presentationTdStyle, fontWeight: 600, color: '#1976d2' }}>{f.name}</td>
                         <td style={presentationTdStyle}>{personId ? getName(personId) : '—'}</td>
-                        <td style={{ ...presentationTdStyle, fontWeight: 700 }}>{breakRot != null ? `Rot ${breakRot}` : '—'}</td>
                         {breakSlotLabels.map((_, i) => {
                           const rot = i + 1;
-                          const val = fSchedule[rot];
-                          const isBreak = val === 'break';
-                          const covering = typeof val === 'string' && val !== '' && !isBreak ? areaLabels[val] ?? val : null;
+                          const activity = fSchedule[rot];
                           return (
                             <td key={i} style={presentationTdStyle}>
-                              {isBreak ? <span style={{ fontWeight: 700, color: '#1976d2' }}>On break</span> : (covering ?? '—')}
+                              {activity?.type === 'on_break'
+                                ? <span style={{ fontWeight: 700, color: '#1976d2' }}>On break</span>
+                                : activity?.type === 'covering'
+                                  ? <span style={{ fontWeight: 700 }}>{areaLabels[activity.areaId] ?? activity.areaId}</span>
+                                  : '—'}
                             </td>
                           );
                         })}
                       </tr>
                     );
                   })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )
+      )}
+
+      {coverageSummary.length > 0 && coverageSummary.some((row) => row.slots.some((s) => s.peopleOnBreak > 0)) && (
+        isCompact ? (
+          <section className="presentation-section-compact" style={{ ...sectionStyle, padding: 6, marginTop: 8, marginBottom: 8 }}>
+            <h2 style={{ ...sectionTitleStyle, fontSize: '0.8rem', marginBottom: 4 }}>Break coverage</h2>
+            <p style={{ fontSize: '0.75rem', color: '#555', margin: '0 0 6px 0' }}>Float-supported areas only. Areas at full staff without a float manage breaks internally.</p>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="presentation-table-compact">
+                <thead>
+                  <tr>
+                    <th className="presentation-th-compact">Area</th>
+                    {breakSlotLabels.map((label, i) => (
+                      <th key={i} className="presentation-th-compact" style={{ textAlign: 'center' }}>{label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {coverageSummary.map((row) => (
+                    <tr key={row.areaId}>
+                      <td className="presentation-td-compact" style={{ fontWeight: 600 }}>{row.areaLabel}</td>
+                      {row.slots.map((s, i) => {
+                        if (s.peopleOnBreak === 0) {
+                          return <td key={i} className="presentation-td-compact" style={{ textAlign: 'center', color: '#bbb' }}>&mdash;</td>;
+                        }
+                        const floatPersonId = s.coveredByFloatId ? (slots[s.coveredByFloatId]?.[0]?.personId ?? null) : null;
+                        return (
+                          <td
+                            key={i}
+                            className="presentation-td-compact"
+                            style={{
+                              textAlign: 'center',
+                              background: s.uncovered ? 'rgba(192, 57, 43, 0.10)' : 'rgba(39, 174, 96, 0.10)',
+                              color: s.uncovered ? '#c0392b' : '#27ae60',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {s.uncovered ? 'Uncovered' : getName(floatPersonId)}
+                            {s.peopleOnBreak > 1 && <div style={{ fontSize: '0.7em', opacity: 0.7 }}>{s.peopleOnBreak} on break</div>}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : (
+          <section style={{ ...sectionStyle, marginTop: 8 }}>
+            <h2 style={sectionTitleStyle}>Break coverage</h2>
+            <p style={{ fontSize: '0.9rem', color: '#555', margin: '0 0 12px 0' }}>Float-supported areas only. Areas at full staff without a float manage breaks internally.</p>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={presentationTableStyle}>
+                <thead>
+                  <tr>
+                    <th style={presentationThStyle}>Area</th>
+                    {breakSlotLabels.map((label, i) => (
+                      <th key={i} style={{ ...presentationThStyle, textAlign: 'center' }}>{label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {coverageSummary.map((row) => (
+                    <tr key={row.areaId}>
+                      <td style={{ ...presentationTdStyle, fontWeight: 600 }}>{row.areaLabel}</td>
+                      {row.slots.map((s, i) => {
+                        if (s.peopleOnBreak === 0) {
+                          return <td key={i} style={{ ...presentationTdStyle, textAlign: 'center', color: '#bbb' }}>&mdash;</td>;
+                        }
+                        const floatPersonId = s.coveredByFloatId ? (slots[s.coveredByFloatId]?.[0]?.personId ?? null) : null;
+                        return (
+                          <td
+                            key={i}
+                            style={{
+                              ...presentationTdStyle,
+                              textAlign: 'center',
+                              background: s.uncovered ? 'rgba(192, 57, 43, 0.10)' : 'rgba(39, 174, 96, 0.10)',
+                              color: s.uncovered ? '#c0392b' : '#27ae60',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {s.uncovered ? 'Uncovered' : getName(floatPersonId)}
+                            {s.peopleOnBreak > 1 && <div style={{ fontSize: '0.8em', opacity: 0.7 }}>{s.peopleOnBreak} on break</div>}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
