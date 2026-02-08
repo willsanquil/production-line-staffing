@@ -205,6 +205,9 @@ export interface GenerateBreakSchedulesOptions {
   linkedSlotsByArea?: Record<string, number[][]>;
   /** Per area: slot indices whose role contains "float"; they are assigned breaks last so others get preferred slots. */
   floatSlotIndicesByArea?: Record<string, number[]>;
+  /** Area IDs that have float coverage. In these areas, individual break preferences are
+   * ignored in favor of maximum coverage (even distribution across rotations). */
+  floatSupportedAreaIds?: Set<string>;
 }
 
 /**
@@ -217,7 +220,7 @@ export function generateBreakSchedules(
   areaIds: string[] = [...AREA_IDS],
   options: GenerateBreakSchedulesOptions = {}
 ): BreakSchedulesByArea {
-  const { rotationCount = 3, scope = 'station', leadSlots = {}, linkedSlotsByArea = {}, floatSlotIndicesByArea = {} } = options;
+  const { rotationCount = 3, scope = 'station', leadSlots = {}, linkedSlotsByArea = {}, floatSlotIndicesByArea = {}, floatSupportedAreaIds } = options;
   const n = Math.min(6, Math.max(1, rotationCount));
   const result: BreakSchedulesByArea = {};
 
@@ -262,13 +265,16 @@ export function generateBreakSchedules(
 
   for (const areaId of areaIds) {
     const slots = slotsByArea[areaId] ?? [];
+    // In float-supported areas, override break preferences to maximize coverage:
+    // even distribution across rotations takes priority over individual preferences.
+    const isCoverageFirst = floatSupportedAreaIds?.has(areaId) ?? false;
     const peopleWithSlot: { personId: string; skillScore: number; preference: BreakPreference; slotIndex: number }[] = [];
     for (let i = 0; i < slots.length; i++) {
       const personId = slots[i].personId;
       if (!personId) continue;
       const p = roster.find((r) => r.id === personId);
       const skillScore = p ? SKILL_SCORE[p.skills[areaId as keyof typeof p.skills] ?? 'no_experience'] : 0;
-      const preference = p?.breakPreference ?? 'no_preference';
+      const preference = isCoverageFirst ? 'no_preference' : (p?.breakPreference ?? 'no_preference');
       peopleWithSlot.push({ personId, skillScore, preference, slotIndex: i });
     }
     if (peopleWithSlot.length === 0) continue;

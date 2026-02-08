@@ -247,6 +247,10 @@ export default function App() {
   rootStateRef.current = rootState;
   const lastLocalChangeRef = useRef(0);
   const cloudSaveInProgressRef = useRef(false);
+  /** Counter incremented when the entire line state should be reloaded from rootState
+   * (e.g. cloud poll received new data, or initial cloud load). Prevents roster-only
+   * updates (like break preference) from clobbering local slot/lead state. */
+  const [lineStateReloadKey, setLineStateReloadKey] = useState(0);
 
   useEffect(() => {
     if (appMode !== 'loading-cloud') return;
@@ -260,6 +264,7 @@ export default function App() {
         setRootState(root);
         setCloudLineId(session.lineId);
         cloudPasswordRef.current = session.password;
+        setLineStateReloadKey((k) => k + 1);
         setAppMode('app');
       })
       .catch(() => {
@@ -284,7 +289,8 @@ export default function App() {
     setAreaCapacityOverrides(lineState.areaCapacityOverrides ?? {});
     setAreaNameOverrides(lineState.areaNameOverrides ?? {});
     setSlotLabelsByArea(lineState.slotLabelsByArea ?? {});
-  }, [rootState.currentLineId, rootState.lineStates]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rootState.currentLineId, lineStateReloadKey]);
 
   const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -354,6 +360,7 @@ export default function App() {
         .then((root) => {
           if (cloudSaveInProgressRef.current) return;
           setRootState(root);
+          setLineStateReloadKey((k) => k + 1);
         })
         .catch(() => { /* ignore poll errors (e.g. network) */ });
     }, CLOUD_POLL_MS);
@@ -785,6 +792,12 @@ export default function App() {
     }
 
     const allFloatSlots = [...realFloatSlots, ...syntheticLeadFloats];
+    // Collect all area IDs that have at least one float (real or lead) covering them.
+    // In these areas, break preferences are overridden for maximum coverage.
+    const floatSupportedAreaIds = new Set<string>();
+    for (const f of allFloatSlots) {
+      for (const areaId of f.supportedAreaIds) floatSupportedAreaIds.add(areaId);
+    }
     const rotationCount = getBreakRotations(currentConfig);
     const rawSchedules = generateBreakSchedules(roster, augmentedSlots, augmentedAreaIds, {
       rotationCount,
@@ -792,6 +805,7 @@ export default function App() {
       leadSlots,
       linkedSlotsByArea,
       floatSlotIndicesByArea,
+      floatSupportedAreaIds,
     });
     setBreakSchedules(
       optimizeFloatBreakRotations(rawSchedules, allFloatSlots, augmentedSlots, rotationCount)
