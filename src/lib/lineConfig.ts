@@ -178,6 +178,9 @@ export function getBreakRotations(config: LineConfig): number {
 /** Key used in breakSchedules for line-wide assignments. */
 export const BREAK_LINE_WIDE_KEY = '__line__';
 
+/** Prefix for synthetic float slot IDs created from leads with break coverage enabled. */
+export const LEAD_COVERAGE_PREFIX = '__lead_coverage_';
+
 /** Lead slot keys for this line: either "0","1",... when using leadSlotNames, or area IDs from leadAreaIds. */
 export function getLeadSlotKeys(config: LineConfig): string[] {
   const names = config.leadSlotNames;

@@ -11,6 +11,12 @@ interface LeadSlotsSectionProps {
   /** When lead slot is a named position (key "0","1",...), use first area for skill color. */
   areaIds?: string[];
   onLeadSlotChange: (key: string, personId: string | null) => void;
+  /** Which lead slot keys have break coverage enabled. */
+  leadBreakCoverage?: Record<string, boolean>;
+  /** Toggle break coverage for a lead slot. */
+  onToggleLeadBreakCoverage?: (key: string, enabled: boolean) => void;
+  /** Whether to show the break coverage toggle (only when breaks are enabled). */
+  showBreakCoverageToggle?: boolean;
 }
 
 /** One dropdown: only leads not assigned to any other lead slot (or current for this slot). Colored by skill. */
@@ -182,20 +188,46 @@ function LeadSlotsSectionInner({
   getLeadSlotLabel,
   areaIds = [],
   onLeadSlotChange,
+  leadBreakCoverage = {},
+  onToggleLeadBreakCoverage,
+  showBreakCoverageToggle = false,
 }: LeadSlotsSectionProps) {
   return (
     <div className="lead-slots-section" style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
       {leadSlotKeys.map((key) => (
-        <LeadSlotDropdown
-          key={key}
-          slotKey={key}
-          slotLabel={getLeadSlotLabel(key)}
-          skillAreaId={/^\d+$/.test(key) ? (areaIds[0] ?? '') : key}
-          leadSlotKeys={leadSlotKeys}
-          roster={roster}
-          leadSlots={leadSlots}
-          onLeadSlotChange={onLeadSlotChange}
-        />
+        <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <LeadSlotDropdown
+            slotKey={key}
+            slotLabel={getLeadSlotLabel(key)}
+            skillAreaId={/^\d+$/.test(key) ? (areaIds[0] ?? '') : key}
+            leadSlotKeys={leadSlotKeys}
+            roster={roster}
+            leadSlots={leadSlots}
+            onLeadSlotChange={onLeadSlotChange}
+          />
+          {showBreakCoverageToggle && leadSlots[key] && onToggleLeadBreakCoverage && (
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                fontSize: '0.8rem',
+                color: '#555',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+              title="Include this lead in the break rotation to cover stations"
+            >
+              <input
+                type="checkbox"
+                checked={!!leadBreakCoverage[key]}
+                onChange={(e) => onToggleLeadBreakCoverage(key, e.target.checked)}
+                style={{ margin: 0 }}
+              />
+              Cover breaks
+            </label>
+          )}
+        </div>
       ))}
     </div>
   );

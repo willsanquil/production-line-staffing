@@ -65,6 +65,7 @@ import {
   getLinkedSlotGroupsForArea,
   getFloatSlotIndicesForArea,
   getFloatSlots,
+  LEAD_COVERAGE_PREFIX,
 } from './lib/lineConfig';
 import { createEmptyPerson, createEmptyOTPerson, createEmptySlot, getEmptyLineState, normalizeSlotsToCapacity, normalizeSlotsToLineCapacity } from './data/initialState';
 import { RosterGrid } from './components/RosterGrid';
@@ -75,7 +76,7 @@ import { LineView } from './components/LineView';
 import { DayBank } from './components/DayBank';
 import { TrainingReport } from './components/TrainingReport';
 import { randomizeAssignments, spreadTalent, fillRemainingAssignments } from './lib/automation';
-import { generateBreakSchedules } from './lib/breakSchedules';
+import { generateBreakSchedules, optimizeFloatBreakRotations } from './lib/breakSchedules';
 import { saveRootState, loadSavedDays, addSavedDay, removeSavedDay, exportStateToJson, importStateFromJson } from './lib/persist';
 import { saveToFile, overwriteFile, openFromFile, isSaveToFileSupported } from './lib/fileStorage';
 import { getLineState, setLineState, createCloudLine, deleteCloudLine, listCloudLines } from './lib/cloudLines';
@@ -143,6 +144,7 @@ export default function App() {
   const [dayNotes, setDayNotes] = useState(firstLineState.dayNotes ?? '');
   const [documents, setDocuments] = useState<string[]>(firstLineState.documents ?? []);
   const [breakSchedules, setBreakSchedules] = useState(firstLineState.breakSchedules ?? {});
+  const [leadBreakCoverage, setLeadBreakCoverage] = useState<Record<string, boolean>>(firstLineState.leadBreakCoverage ?? {});
   const [savedDays, setSavedDays] = useState(() => loadSavedDays());
   const [rosterVisible, setRosterVisible] = useState(true);
   const [adminVisible, setAdminVisible] = useState(true);
@@ -239,8 +241,8 @@ export default function App() {
     [rootState.currentLineId, rootState.lineStates]
   );
 
-  const stateRef = useRef({ slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea });
-  stateRef.current = { slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea };
+  const stateRef = useRef({ slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, leadBreakCoverage, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea });
+  stateRef.current = { slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, leadBreakCoverage, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea };
   const rootStateRef = useRef(rootState);
   rootStateRef.current = rootState;
   const lastLocalChangeRef = useRef(0);
@@ -278,6 +280,7 @@ export default function App() {
     setDayNotes(lineState.dayNotes ?? '');
     setDocuments(lineState.documents ?? []);
     setBreakSchedules(lineState.breakSchedules ?? {});
+    setLeadBreakCoverage(lineState.leadBreakCoverage ?? {});
     setAreaCapacityOverrides(lineState.areaCapacityOverrides ?? {});
     setAreaNameOverrides(lineState.areaNameOverrides ?? {});
     setSlotLabelsByArea(lineState.slotLabelsByArea ?? {});
@@ -389,6 +392,38 @@ export default function App() {
     return { breakSchedules, rotationCount, breaksScope: scope };
   }, [currentConfig, breakSchedules]);
 
+  /** Float slots for presentation: real floats + synthetic lead floats (if coverage enabled). */
+  const presentationFloatSlots = useMemo(() => {
+    if (!currentConfig) return [];
+    const real = getFloatSlots(currentConfig);
+    const scope = getBreaksScope(currentConfig);
+    if (scope !== 'station') return real;
+    const synthetic: FloatSlotConfig[] = [];
+    const stationAreaIds = currentConfig.areas.map((a) => a.id);
+    for (const key of leadSlotKeys) {
+      if (!leadBreakCoverage[key] || !leadSlots[key]) continue;
+      const label = getLeadSlotLabel(currentConfig, key, areaLabels);
+      synthetic.push({ id: `${LEAD_COVERAGE_PREFIX}${key}`, name: `Lead: ${label}`, supportedAreaIds: stationAreaIds });
+    }
+    return [...real, ...synthetic];
+  }, [currentConfig, leadSlotKeys, leadBreakCoverage, leadSlots, areaLabels]);
+
+  /** Slots for presentation: real slots + synthetic lead float slots. */
+  const presentationSlots = useMemo(() => {
+    if (!currentConfig) return slots;
+    const scope = getBreaksScope(currentConfig);
+    if (scope !== 'station') return slots;
+    const augmented: SlotsByArea = { ...slots };
+    for (const key of leadSlotKeys) {
+      if (!leadBreakCoverage[key]) continue;
+      const personId = leadSlots[key];
+      if (!personId) continue;
+      const syntheticId = `${LEAD_COVERAGE_PREFIX}${key}`;
+      augmented[syntheticId] = [{ id: `${syntheticId}_s0`, personId }];
+    }
+    return augmented;
+  }, [currentConfig, slots, leadSlotKeys, leadBreakCoverage, leadSlots]);
+
   const setSlotAssignment = useCallback((areaId: AreaId, slotId: string, personId: string | null) => {
     setSlots((prev) => ({
       ...prev,
@@ -421,6 +456,11 @@ export default function App() {
       });
     }
   }, [areaIds]);
+
+  const handleToggleLeadBreakCoverage = useCallback((key: string, enabled: boolean) => {
+    lastLocalChangeRef.current = Date.now();
+    setLeadBreakCoverage((prev) => ({ ...prev, [key]: enabled }));
+  }, []);
 
   const handleNameChange = useCallback((personId: string, name: string) => {
     setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, name: name.trim() || p.name })));
@@ -719,19 +759,44 @@ export default function App() {
       linkedSlotsByArea[areaId] = getLinkedSlotGroupsForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
       floatSlotIndicesByArea[areaId] = getFloatSlotIndicesForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
     }
-    for (const f of getFloatSlots(currentConfig)) {
+    const realFloatSlots = getFloatSlots(currentConfig);
+    for (const f of realFloatSlots) {
       floatSlotIndicesByArea[f.id] = [0];
     }
+
+    // Build synthetic lead float entries for leads with break coverage enabled
+    const scope = getBreaksScope(currentConfig);
+    const syntheticLeadFloats: FloatSlotConfig[] = [];
+    const augmentedSlots: SlotsByArea = { ...nextSlots };
+    const augmentedAreaIds = [...areaIds];
+    const stationAreaIds = currentConfig.areas.map((a) => a.id);
+    if (scope === 'station') {
+      for (const key of leadSlotKeys) {
+        if (!leadBreakCoverage[key]) continue;
+        const personId = leadSlots[key];
+        if (!personId) continue;
+        const syntheticId = `${LEAD_COVERAGE_PREFIX}${key}`;
+        const label = getLeadSlotLabel(currentConfig, key, areaLabels);
+        syntheticLeadFloats.push({ id: syntheticId, name: `Lead: ${label}`, supportedAreaIds: stationAreaIds });
+        augmentedSlots[syntheticId] = [{ id: `${syntheticId}_s0`, personId }];
+        augmentedAreaIds.push(syntheticId);
+        floatSlotIndicesByArea[syntheticId] = [0];
+      }
+    }
+
+    const allFloatSlots = [...realFloatSlots, ...syntheticLeadFloats];
+    const rotationCount = getBreakRotations(currentConfig);
+    const rawSchedules = generateBreakSchedules(roster, augmentedSlots, augmentedAreaIds, {
+      rotationCount,
+      scope,
+      leadSlots,
+      linkedSlotsByArea,
+      floatSlotIndicesByArea,
+    });
     setBreakSchedules(
-      generateBreakSchedules(roster, nextSlots, areaIds, {
-        rotationCount: getBreakRotations(currentConfig),
-        scope: getBreaksScope(currentConfig),
-        leadSlots,
-        linkedSlotsByArea,
-        floatSlotIndicesByArea,
-      })
+      optimizeFloatBreakRotations(rawSchedules, allFloatSlots, augmentedSlots, rotationCount)
     );
-  }, [currentConfig, areaIds, roster, leadSlots, slotLabelsByArea]);
+  }, [currentConfig, areaIds, roster, leadSlots, leadBreakCoverage, slotLabelsByArea, areaLabels, leadSlotKeys]);
 
   const handleRegenerateBreaks = useCallback(() => {
     regenerateBreaksForSlots(slots);
@@ -741,7 +806,7 @@ export default function App() {
     const state = stateRef.current;
     addSavedDay(
       date,
-      { roster, slots: state.slots, leadSlots: state.leadSlots, juicedAreas: state.juicedAreas, deJuicedAreas: state.deJuicedAreas, sectionTasks: state.sectionTasks, schedule: state.schedule, dayNotes: state.dayNotes, documents: state.documents, breakSchedules: state.breakSchedules },
+      { roster, slots: state.slots, leadSlots: state.leadSlots, juicedAreas: state.juicedAreas, deJuicedAreas: state.deJuicedAreas, sectionTasks: state.sectionTasks, schedule: state.schedule, dayNotes: state.dayNotes, documents: state.documents, breakSchedules: state.breakSchedules, leadBreakCoverage: state.leadBreakCoverage },
       name,
       rootState.currentLineId
     );
@@ -768,6 +833,7 @@ export default function App() {
       dayNotes: day.dayNotes ?? '',
       documents: day.documents ?? [],
       breakSchedules: day.breakSchedules ?? {},
+      leadBreakCoverage: day.leadBreakCoverage ?? {},
       areaCapacityOverrides: areaCapacityOverrides ?? {},
       areaNameOverrides: areaNameOverrides ?? {},
       slotLabelsByArea: slotLabelsByArea ?? {},
@@ -806,6 +872,7 @@ export default function App() {
     setDayNotes(lineStateForDay.dayNotes);
     setDocuments(lineStateForDay.documents);
     setBreakSchedules(lineStateForDay.breakSchedules ?? {});
+    setLeadBreakCoverage(lineStateForDay.leadBreakCoverage ?? {});
   }, [areaCapacityOverrides, areaNameOverrides, leadSlotKeys, rootState.currentLineId, rootState.lineStates, slotLabelsByArea]);
 
   const handleRandomize = useCallback(() => {
@@ -925,6 +992,7 @@ export default function App() {
     setDayNotes(imported.dayNotes ?? '');
     setDocuments(imported.documents ?? []);
     setBreakSchedules(imported.breakSchedules ?? {});
+    setLeadBreakCoverage(imported.leadBreakCoverage ?? {});
     setAreaCapacityOverrides(imported.areaCapacityOverrides ?? {});
     setAreaNameOverrides(imported.areaNameOverrides ?? {});
     setSlotLabelsByArea(imported.slotLabelsByArea ?? {});
@@ -1452,7 +1520,7 @@ export default function App() {
           </div>
         </header>
         <LineView
-          slots={slots}
+          slots={presentationSlots}
           roster={roster}
           leadSlots={leadSlots}
           areaLabels={areaLabels}
@@ -1470,7 +1538,7 @@ export default function App() {
           breakSchedules={presentationBreakData?.breakSchedules}
           rotationCount={presentationBreakData?.rotationCount}
           breaksScope={presentationBreakData?.breaksScope}
-          floatSlots={currentConfig ? getFloatSlots(currentConfig) : []}
+          floatSlots={presentationFloatSlots}
         />
         <div style={{ maxWidth: 520, margin: '0 auto', padding: '0 12px 24px' }}>
           <TrainingReport roster={roster} slots={slots} areaLabels={areaLabels} effectiveCapacity={effectiveCapacity} presentationMode areaIds={areaIds} />
@@ -1591,6 +1659,9 @@ export default function App() {
           getLeadSlotLabel={(key) => getLeadSlotLabel(currentConfig!, key, areaLabels)}
           areaIds={areaIds}
           onLeadSlotChange={setLeadSlot}
+          leadBreakCoverage={leadBreakCoverage}
+          onToggleLeadBreakCoverage={handleToggleLeadBreakCoverage}
+          showBreakCoverageToggle={!!currentConfig && getBreaksEnabled(currentConfig)}
         />
       </div>
 
@@ -2059,6 +2130,57 @@ export default function App() {
                           : `Assign someone to this float position above, then click "Regenerate breaks" to set their break rotation.`}
                       </div>
                     </div>
+                  );
+                })}
+              </div>
+            )}
+            {/* Lead break coverage schedules */}
+            {leadSlotKeys.some((key) => leadBreakCoverage[key] && leadSlots[key]) && (
+              <div className="section-card" style={{ marginTop: 16 }}>
+                <h3 style={{ margin: '0 0 8px 0', fontWeight: 700, fontSize: '1.05rem' }}>Lead break coverage</h3>
+                <p style={{ color: '#555', fontSize: '0.9rem', marginBottom: 12 }}>
+                  Leads with "Cover breaks" enabled are included in the break rotation and cover all stations.
+                </p>
+                {leadSlotKeys.map((key) => {
+                  if (!leadBreakCoverage[key] || !leadSlots[key]) return null;
+                  const syntheticId = `${LEAD_COVERAGE_PREFIX}${key}`;
+                  const assignments = breakSchedules?.[syntheticId];
+                  if (!assignments || Object.keys(assignments).length === 0) {
+                    const leadPerson = roster.find((r) => r.id === leadSlots[key]);
+                    const label = currentConfig ? getLeadSlotLabel(currentConfig, key, areaLabels) : key;
+                    return (
+                      <div
+                        key={syntheticId}
+                        style={{
+                          padding: 12,
+                          marginBottom: 8,
+                          background: '#f8f9fa',
+                          border: '1px solid #e9ecef',
+                          borderRadius: 8,
+                          fontSize: '0.9rem',
+                        }}
+                      >
+                        <strong>Lead: {label}</strong>
+                        {leadPerson && <span style={{ color: '#555' }}> — {leadPerson.name}</span>}
+                        <div style={{ marginTop: 6 }}>
+                          Click "Regenerate breaks" to assign this lead a break rotation.
+                        </div>
+                      </div>
+                    );
+                  }
+                  const people = Object.keys(assignments).map((id) => {
+                    const p = roster.find((r) => r.id === id);
+                    return { id, name: p?.name ?? id };
+                  });
+                  const label = currentConfig ? getLeadSlotLabel(currentConfig, key, areaLabels) : key;
+                  return (
+                    <BreakTable
+                      key={syntheticId}
+                      people={people}
+                      assignments={assignments}
+                      rotationCount={rotationCount}
+                      title={`Lead: ${label} (covers all stations)`}
+                    />
                   );
                 })}
               </div>
