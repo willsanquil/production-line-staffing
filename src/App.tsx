@@ -707,21 +707,23 @@ export default function App() {
     setBreakSchedules({});
   }, [areaIds]);
 
-  const handleRegenerateBreaks = useCallback(() => {
-    if (!currentConfig || !getBreaksEnabled(currentConfig)) return;
+  const regenerateBreaksForSlots = useCallback((nextSlots: SlotsByArea) => {
+    if (!currentConfig || !getBreaksEnabled(currentConfig)) {
+      setBreakSchedules({});
+      return;
+    }
     const linkedSlotsByArea: Record<string, number[][]> = {};
     const floatSlotIndicesByArea: Record<string, number[]> = {};
     for (const areaId of areaIds) {
-      const areaSlots = slots[areaId] ?? [];
+      const areaSlots = nextSlots[areaId] ?? [];
       linkedSlotsByArea[areaId] = getLinkedSlotGroupsForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
       floatSlotIndicesByArea[areaId] = getFloatSlotIndicesForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
     }
-    // Float positions: always treat their single slot as "assign break last" so they get a rotation and don't take preferred slots from station staff
     for (const f of getFloatSlots(currentConfig)) {
       floatSlotIndicesByArea[f.id] = [0];
     }
     setBreakSchedules(
-      generateBreakSchedules(roster, slots, areaIds, {
+      generateBreakSchedules(roster, nextSlots, areaIds, {
         rotationCount: getBreakRotations(currentConfig),
         scope: getBreaksScope(currentConfig),
         leadSlots,
@@ -729,7 +731,11 @@ export default function App() {
         floatSlotIndicesByArea,
       })
     );
-  }, [currentConfig, areaIds, slots, roster, leadSlots, slotLabelsByArea]);
+  }, [currentConfig, areaIds, roster, leadSlots, slotLabelsByArea]);
+
+  const handleRegenerateBreaks = useCallback(() => {
+    regenerateBreaksForSlots(slots);
+  }, [regenerateBreaksForSlots, slots]);
 
   const handleSaveDay = useCallback((date: string, name?: string) => {
     const state = stateRef.current;
@@ -805,86 +811,20 @@ export default function App() {
   const handleRandomize = useCallback(() => {
     const nextSlots = randomizeAssignments(roster, slots, leadAssignedPersonIds, areaIds, areaRequiresTrainedOrExpert);
     setSlots(nextSlots);
-    if (currentConfig && getBreaksEnabled(currentConfig)) {
-      const linkedSlotsByArea: Record<string, number[][]> = {};
-      const floatSlotIndicesByArea: Record<string, number[]> = {};
-      for (const areaId of areaIds) {
-        const areaSlots = nextSlots[areaId] ?? [];
-        linkedSlotsByArea[areaId] = getLinkedSlotGroupsForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
-        floatSlotIndicesByArea[areaId] = getFloatSlotIndicesForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
-      }
-      for (const f of getFloatSlots(currentConfig)) {
-        floatSlotIndicesByArea[f.id] = [0];
-      }
-      setBreakSchedules(
-        generateBreakSchedules(roster, nextSlots, areaIds, {
-          rotationCount: getBreakRotations(currentConfig),
-          scope: getBreaksScope(currentConfig),
-          leadSlots,
-          linkedSlotsByArea,
-          floatSlotIndicesByArea,
-        })
-      );
-    } else {
-      setBreakSchedules({});
-    }
-  }, [roster, slots, leadAssignedPersonIds, areaIds, currentConfig, leadSlots, areaRequiresTrainedOrExpert, slotLabelsByArea]);
+    regenerateBreaksForSlots(nextSlots);
+  }, [roster, slots, leadAssignedPersonIds, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
 
   const handleSpreadTalent = useCallback(() => {
     const nextSlots = spreadTalent(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
     setSlots(nextSlots);
-    if (currentConfig && getBreaksEnabled(currentConfig)) {
-      const linkedSlotsByArea: Record<string, number[][]> = {};
-      const floatSlotIndicesByArea: Record<string, number[]> = {};
-      for (const areaId of areaIds) {
-        const areaSlots = nextSlots[areaId] ?? [];
-        linkedSlotsByArea[areaId] = getLinkedSlotGroupsForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
-        floatSlotIndicesByArea[areaId] = getFloatSlotIndicesForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
-      }
-      for (const f of getFloatSlots(currentConfig)) {
-        floatSlotIndicesByArea[f.id] = [0];
-      }
-      setBreakSchedules(
-        generateBreakSchedules(roster, nextSlots, areaIds, {
-          rotationCount: getBreakRotations(currentConfig),
-          scope: getBreaksScope(currentConfig),
-          leadSlots,
-          linkedSlotsByArea,
-          floatSlotIndicesByArea,
-        })
-      );
-    } else {
-      setBreakSchedules({});
-    }
-  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, currentConfig, leadSlots, slotLabelsByArea]);
+    regenerateBreaksForSlots(nextSlots);
+  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
 
   const handleFillRemaining = useCallback(() => {
     const nextSlots = fillRemainingAssignments(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
     setSlots(nextSlots);
-    if (currentConfig && getBreaksEnabled(currentConfig)) {
-      const linkedSlotsByArea: Record<string, number[][]> = {};
-      const floatSlotIndicesByArea: Record<string, number[]> = {};
-      for (const areaId of areaIds) {
-        const areaSlots = nextSlots[areaId] ?? [];
-        linkedSlotsByArea[areaId] = getLinkedSlotGroupsForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
-        floatSlotIndicesByArea[areaId] = getFloatSlotIndicesForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
-      }
-      for (const f of getFloatSlots(currentConfig)) {
-        floatSlotIndicesByArea[f.id] = [0];
-      }
-      setBreakSchedules(
-        generateBreakSchedules(roster, nextSlots, areaIds, {
-          rotationCount: getBreakRotations(currentConfig),
-          scope: getBreaksScope(currentConfig),
-          leadSlots,
-          linkedSlotsByArea,
-          floatSlotIndicesByArea,
-        })
-      );
-    } else {
-      setBreakSchedules({});
-    }
-  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, currentConfig, leadSlots, slotLabelsByArea]);
+    regenerateBreaksForSlots(nextSlots);
+  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
 
   const handleRemoveDay = useCallback((id: string) => {
     removeSavedDay(id);
