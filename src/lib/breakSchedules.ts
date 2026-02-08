@@ -1,4 +1,4 @@
-import type { BreakPreference, BreakRotation, LunchRotation, RosterPerson, SlotsByArea } from '../types';
+import type { BreakPreference, BreakRotation, FloatSlotConfig, LunchRotation, RosterPerson, SlotsByArea } from '../types';
 import type { SkillLevel } from '../types';
 import { AREA_IDS } from '../types';
 import type { BreakSchedulesByArea } from '../types';
@@ -281,6 +281,117 @@ export function generateBreakSchedules(
       result[areaId] = runAssignmentWithLinkedSlots(peopleWithSlot, n, linkedGroups, floatIndices);
     } else {
       result[areaId] = runAssignmentForPeople(people, n);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Post-processing step: reassign each float's break rotation to the slot where
+ * they are least needed for coverage. This prevents a float from going on break
+ * during a slot where their supported area needs them.
+ */
+export function optimizeFloatBreakRotations(
+  schedules: BreakSchedulesByArea,
+  floatSlots: FloatSlotConfig[],
+  slots: SlotsByArea,
+  rotationCount: number,
+): BreakSchedulesByArea {
+  if (floatSlots.length === 0) return schedules;
+
+  // Shallow clone the top-level object
+  const result: BreakSchedulesByArea = { ...schedules };
+
+  // Track which areas are already covered by a previously-processed float per rotation
+  const coveredAreas: Record<number, Set<string>> = {};
+  for (let r = 1; r <= rotationCount; r++) {
+    coveredAreas[r] = new Set<string>();
+  }
+
+  for (const float of floatSlots) {
+    // Get personId from the first slot in this float area
+    const personId = slots[float.id]?.[0]?.personId;
+    if (!personId) continue;
+
+    // Get current schedule entry for this float person
+    const currentEntry = result[float.id]?.[personId];
+    if (!currentEntry) continue;
+
+    const currentRotation = currentEntry.breakRotation;
+
+    // For each rotation, compute a "need score": how many supported areas
+    // have at least one person on break in that rotation AND are NOT already
+    // covered by a previously-processed float.
+    const needScores: number[] = [];
+    for (let r = 1; r <= rotationCount; r++) {
+      let needScore = 0;
+      for (const areaId of float.supportedAreaIds) {
+        if (coveredAreas[r].has(areaId)) continue;
+        // Check if any person in this area is on break in rotation r
+        const areaSlots = slots[areaId];
+        if (!areaSlots) continue;
+        const areaSchedules = result[areaId];
+        if (!areaSchedules) continue;
+        let hasBreakInRotation = false;
+        for (const slot of areaSlots) {
+          if (slot.personId && areaSchedules[slot.personId]?.breakRotation === r) {
+            hasBreakInRotation = true;
+            break;
+          }
+        }
+        if (hasBreakInRotation) needScore++;
+      }
+      needScores.push(needScore);
+    }
+
+    // Pick rotation with lowest need score; on ties prefer current rotation (stability)
+    let bestRotation: number = currentRotation;
+    let bestScore = needScores[currentRotation - 1];
+    for (let r = 1; r <= rotationCount; r++) {
+      if (needScores[r - 1] < bestScore) {
+        bestScore = needScores[r - 1];
+        bestRotation = r;
+      }
+    }
+
+    // If best rotation differs, update the schedule entry
+    if (bestRotation !== currentRotation) {
+      result[float.id] = {
+        ...result[float.id],
+        [personId]: {
+          ...currentEntry,
+          breakRotation: bestRotation as BreakRotation,
+          lunchRotation: bestRotation as LunchRotation,
+        },
+      };
+    }
+
+    // After assigning this float, update coveredAreas:
+    // For each rotation where this float is NOT on break, find the first supported area
+    // that has someone on break and hasn't been covered yet.
+    const assignedRotation = bestRotation;
+    for (let r = 1; r <= rotationCount; r++) {
+      if (r === assignedRotation) continue; // float is on break in this rotation, can't cover
+      for (const areaId of float.supportedAreaIds) {
+        if (coveredAreas[r].has(areaId)) continue;
+        // Check if this area has someone on break in rotation r
+        const areaSlots = slots[areaId];
+        if (!areaSlots) continue;
+        const areaSchedules = result[areaId];
+        if (!areaSchedules) continue;
+        let hasBreakInRotation = false;
+        for (const slot of areaSlots) {
+          if (slot.personId && areaSchedules[slot.personId]?.breakRotation === r) {
+            hasBreakInRotation = true;
+            break;
+          }
+        }
+        if (hasBreakInRotation) {
+          coveredAreas[r].add(areaId);
+          break; // only cover first uncovered area per rotation
+        }
+      }
     }
   }
 
