@@ -1,10 +1,9 @@
 import { memo } from 'react';
-import type { AreaId, BreakSchedulesByArea, RosterPerson, Slot, TaskItem } from '../types';
+import type { AreaId, BreakSchedulesByArea, RosterPerson, Slot } from '../types';
 import type { SkillLevel } from '../types';
 import { createEmptySlot } from '../data/initialState';
 import { getSlotLabel } from '../lib/areaConfig';
 import { SlotDropdown } from './SlotDropdown';
-import { TaskList } from './TaskList';
 
 const SKILL_SCORE: Record<SkillLevel, number> = {
   no_experience: 0,
@@ -42,9 +41,9 @@ interface AreaStaffingProps {
   onAreaNameChange: (areaId: AreaId, name: string) => void;
   onCapacityChange: (areaId: AreaId, payload: { min?: number; max?: number }) => void;
   onSlotLabelChange: (areaId: AreaId, slotIndex: number, value: string) => void;
-  sectionTasks: TaskItem[];
+  sectionTasks?: unknown[];
   onSlotsChange: (areaId: AreaId, slots: Slot[]) => void;
-  onSectionTasksChange: (areaId: AreaId, tasks: TaskItem[]) => void;
+  onSectionTasksChange?: (areaId: AreaId, tasks: unknown[]) => void;
   onAssign: (areaId: AreaId, slotId: string, personId: string | null) => void;
   /** When true, area needs at least one Trained or Expert to run. */
   requiresTrainedOrExpert?: boolean;
@@ -53,6 +52,12 @@ interface AreaStaffingProps {
   /** When provided (e.g. for float positions), show break rotation under the slot. */
   breakSchedules?: BreakSchedulesByArea;
   rotationCount?: number;
+  /** Whether break coverage is enabled for this area. */
+  breakCoverageEnabled?: boolean;
+  /** Called when user toggles break coverage for this area. */
+  onToggleBreakCoverage?: (areaId: AreaId, enabled: boolean) => void;
+  /** Whether to show the break coverage toggle (only when breaks are enabled for the line). */
+  showBreakCoverageToggle?: boolean;
 }
 
 function AreaStaffingInner({
@@ -65,21 +70,18 @@ function AreaStaffingInner({
   roster,
   allAssignedPersonIds,
   leadAssignedPersonIds,
-  juiced,
-  deJuiced,
-  onToggleJuice,
-  onToggleDeJuice,
   onAreaNameChange,
   onCapacityChange,
   onSlotLabelChange,
-  sectionTasks,
   onSlotsChange,
-  onSectionTasksChange,
   onAssign,
   requiresTrainedOrExpert = false,
   onRequiresTrainedOrExpertChange,
   breakSchedules,
   rotationCount,
+  breakCoverageEnabled = false,
+  onToggleBreakCoverage,
+  showBreakCoverageToggle = false,
 }: AreaStaffingProps) {
   const enabledSlots = slots.filter((s) => !s.disabled);
   const filled = enabledSlots.filter((s) => s.personId).length;
@@ -140,24 +142,6 @@ function AreaStaffingInner({
           aria-label="Area name"
         />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.9rem', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={juiced}
-              onChange={(e) => onToggleJuice(areaId, e.target.checked)}
-              aria-label={`Prioritize ${areaLabel} in Spread talent`}
-            />
-            Prioritize
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.9rem', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={deJuiced}
-              onChange={(e) => onToggleDeJuice(areaId, e.target.checked)}
-              aria-label={`De-prioritize ${areaLabel} (fill last in Spread talent)`}
-            />
-            De-Prioritize
-          </label>
           {onRequiresTrainedOrExpertChange != null && (
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.9rem', cursor: 'pointer' }}>
               <input
@@ -167,6 +151,17 @@ function AreaStaffingInner({
                 aria-label={`${areaLabel} needs experience (at least one Trained or Expert)`}
               />
               Needs experience
+            </label>
+          )}
+          {showBreakCoverageToggle && onToggleBreakCoverage && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.9rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={breakCoverageEnabled}
+                onChange={(e) => onToggleBreakCoverage(areaId, e.target.checked)}
+                aria-label={`${areaLabel} needs break coverage`}
+              />
+              Needs break coverage
             </label>
           )}
         </div>
@@ -323,14 +318,6 @@ function AreaStaffingInner({
         {slots.length > min && (
           <button type="button" onClick={removeSlot}>− Slot</button>
         )}
-      </div>
-      <div style={{ marginTop: '0.75rem' }}>
-        <strong>Tasks</strong>
-        <TaskList
-          tasks={sectionTasks}
-          onChange={(tasks) => onSectionTasksChange(areaId, tasks)}
-          placeholder="Task..."
-        />
       </div>
     </section>
   );

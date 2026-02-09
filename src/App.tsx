@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import type { AppState, AreaId, BreakPreference, FloatSlotConfig, RootState, RosterPerson, SavedDay, SlotsByArea, TaskItem } from './types';
+import type { AppState, AreaId, BreakPreference, FloatSlotConfig, RootState, RosterPerson, SavedDay, SlotsByArea } from './types';
 import type { SkillLevel } from './types';
 import { AREA_IDS, LINE_SECTIONS } from './types';
 
@@ -74,7 +74,6 @@ import { AreaStaffing } from './components/AreaStaffing';
 import { CombinedAreaStaffing } from './components/CombinedAreaStaffing';
 import { LineView } from './components/LineView';
 import { DayBank } from './components/DayBank';
-import { TrainingReport } from './components/TrainingReport';
 import { randomizeAssignments, spreadTalent, fillRemainingAssignments } from './lib/automation';
 import { generateBreakSchedules, optimizeFloatBreakRotations } from './lib/breakSchedules';
 import { saveRootState, loadSavedDays, addSavedDay, removeSavedDay, exportStateToJson, importStateFromJson } from './lib/persist';
@@ -145,6 +144,7 @@ export default function App() {
   const [documents, setDocuments] = useState<string[]>(firstLineState.documents ?? []);
   const [breakSchedules, setBreakSchedules] = useState(firstLineState.breakSchedules ?? {});
   const [leadBreakCoverage, setLeadBreakCoverage] = useState<Record<string, boolean>>(firstLineState.leadBreakCoverage ?? {});
+  const [areaBreakCoverageEnabled, setAreaBreakCoverageEnabled] = useState<Record<string, boolean>>(firstLineState.areaBreakCoverageEnabled ?? {});
   const [savedDays, setSavedDays] = useState(() => loadSavedDays());
   const [rosterVisible, setRosterVisible] = useState(true);
   const [adminVisible, setAdminVisible] = useState(true);
@@ -205,11 +205,13 @@ export default function App() {
         : ({} as Record<string, { min: number; max: number }>),
     [currentConfig, areaCapacityOverrides]
   );
-  // Full staff = leads + sum of all areas' min capacity
-  const fullStaff = useMemo(() => {
+  // Full staff = user override, or leads + sum of all areas' min capacity
+  const [fullStaffOverride, setFullStaffOverride] = useState<number | null>(null);
+  const computedFullStaff = useMemo(() => {
     const minSlots = Object.values(effectiveCapacity).reduce((sum, cap) => sum + cap.min, 0);
     return leadSlotKeys.length + minSlots;
   }, [effectiveCapacity, leadSlotKeys]);
+  const fullStaff = fullStaffOverride ?? computedFullStaff;
   const areaLabels = useMemo(
     () =>
       currentConfig
@@ -241,8 +243,8 @@ export default function App() {
     [rootState.currentLineId, rootState.lineStates]
   );
 
-  const stateRef = useRef({ slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, leadBreakCoverage, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea });
-  stateRef.current = { slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, leadBreakCoverage, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea };
+  const stateRef = useRef({ slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, leadBreakCoverage, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea });
+  stateRef.current = { slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, leadBreakCoverage, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea };
   const rootStateRef = useRef(rootState);
   rootStateRef.current = rootState;
   const lastLocalChangeRef = useRef(0);
@@ -286,6 +288,7 @@ export default function App() {
     setDocuments(lineState.documents ?? []);
     setBreakSchedules(lineState.breakSchedules ?? {});
     setLeadBreakCoverage(lineState.leadBreakCoverage ?? {});
+    setAreaBreakCoverageEnabled(lineState.areaBreakCoverageEnabled ?? {});
     setAreaCapacityOverrides(lineState.areaCapacityOverrides ?? {});
     setAreaNameOverrides(lineState.areaNameOverrides ?? {});
     setSlotLabelsByArea(lineState.slotLabelsByArea ?? {});
@@ -342,7 +345,7 @@ export default function App() {
         saveRootState(payload);
       }
     };
-  }, [appMode, cloudLineId, rootState, slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea]);
+  }, [appMode, cloudLineId, rootState, slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea]);
 
   // When in cloud mode, poll for updates so other users' changes show up (live-ish updates).
   // Skip applying poll for a while after any local slot/lead change so we don't overwrite the user's
@@ -457,10 +460,6 @@ export default function App() {
     setSlots((prev) => ({ ...prev, [areaId]: newSlots }));
   }, []);
 
-  const setSectionTasksForArea = useCallback((areaId: AreaId, tasks: TaskItem[]) => {
-    setSectionTasks((prev) => ({ ...prev, [areaId]: tasks }));
-  }, []);
-
   const setLeadSlot = useCallback((areaId: string, personId: string | null) => {
     lastLocalChangeRef.current = Date.now();
     setLeadSlots((prev) => ({ ...prev, [areaId]: personId }));
@@ -479,6 +478,11 @@ export default function App() {
   const handleToggleLeadBreakCoverage = useCallback((key: string, enabled: boolean) => {
     lastLocalChangeRef.current = Date.now();
     setLeadBreakCoverage((prev) => ({ ...prev, [key]: enabled }));
+  }, []);
+
+  const handleToggleAreaBreakCoverage = useCallback((areaId: string, enabled: boolean) => {
+    lastLocalChangeRef.current = Date.now();
+    setAreaBreakCoverageEnabled((prev) => ({ ...prev, [areaId]: enabled }));
   }, []);
 
   const handleNameChange = useCallback((personId: string, name: string) => {
@@ -577,6 +581,22 @@ export default function App() {
     setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, breakPreference })));
   }, []);
 
+  const handleMakeEveryoneTrained = useCallback(() => {
+    if (!window.confirm('Set all roster members to "Trained" for every area? This will overwrite their current skill levels.')) return;
+    setRootState((prev) => {
+      const lineState = prev.lineStates[prev.currentLineId];
+      if (!lineState) return prev;
+      const roster = (lineState.roster ?? []).map((p) => {
+        const skills = { ...p.skills };
+        for (const aid of areaIds) {
+          skills[aid] = 'trained';
+        }
+        return { ...p, skills };
+      });
+      return { ...prev, lineStates: { ...prev.lineStates, [prev.currentLineId]: { ...lineState, roster } } };
+    });
+  }, [areaIds]);
+
   const handleSkillChange = useCallback((personId: string, areaId: AreaId, level: SkillLevel) => {
     setRootState((prev) =>
       updatePersonInRoot(prev, personId, (p) => ({ ...p, skills: { ...p.skills, [areaId]: level } }))
@@ -609,17 +629,14 @@ export default function App() {
   const defaultPositionOptions = useMemo(() => {
     const list: { areaId: string; slotIndex: number; label: string }[] = [];
     for (const areaId of areaIds) {
-      const areaSlots = slots[areaId] ?? [];
-      for (let i = 0; i < areaSlots.length; i++) {
-        list.push({
-          areaId,
-          slotIndex: i,
-          label: `${areaLabels[areaId] ?? areaId} – ${getSlotLabel(areaId, i)}`,
-        });
-      }
+      list.push({
+        areaId,
+        slotIndex: 0,
+        label: areaLabels[areaId] ?? areaId,
+      });
     }
     return list;
-  }, [areaIds, slots, areaLabels, getSlotLabel]);
+  }, [areaIds, areaLabels]);
 
   const handleAreaRequiresTrainedOrExpertChange = useCallback((areaId: string, value: boolean) => {
     setRootState((prev) => {
@@ -759,7 +776,7 @@ export default function App() {
       const next = {} as SlotsByArea;
       for (const areaId of areaIds) {
         const list = prev[areaId];
-        if (list) next[areaId] = list.map((s) => ({ ...s, personId: null }));
+        if (list) next[areaId] = list.map((s) => s.locked ? s : { ...s, personId: null });
       }
       return { ...prev, ...next };
     });
@@ -771,6 +788,9 @@ export default function App() {
       setBreakSchedules({});
       return;
     }
+
+    // Always generate break schedules for ALL areas — everyone needs break rotations.
+    // The areaBreakCoverageEnabled toggle only controls which areas get float/lead COVERAGE.
     const linkedSlotsByArea: Record<string, number[][]> = {};
     const floatSlotIndicesByArea: Record<string, number[]> = {};
     for (const areaId of areaIds) {
@@ -783,25 +803,30 @@ export default function App() {
       floatSlotIndicesByArea[f.id] = [0];
     }
 
-    // Collect all area IDs that have float coverage (real floats + lead coverage).
-    // In these areas, break preferences are overridden for maximum coverage.
+    // Collect area IDs that have break coverage enabled — float/lead coverage applies only to these.
+    // In these areas, break preferences are overridden for maximum coverage spread.
     const scope = getBreaksScope(currentConfig);
+    const coverageEnabledAreaIds = areaIds.filter((id) => areaBreakCoverageEnabled[id]);
     const floatSupportedAreaIds = new Set<string>();
     for (const f of floatSlots) {
-      for (const areaId of f.supportedAreaIds) floatSupportedAreaIds.add(areaId);
+      for (const areaId of f.supportedAreaIds) {
+        if (areaBreakCoverageEnabled[areaId]) floatSupportedAreaIds.add(areaId);
+      }
     }
     if (scope === 'station') {
-      const stationAreaIds = currentConfig.areas.map((a) => a.id);
       for (const key of leadSlotKeys) {
         if (leadBreakCoverage[key] && leadSlots[key]) {
-          for (const areaId of stationAreaIds) floatSupportedAreaIds.add(areaId);
-          break; // all station areas added, no need to continue
+          for (const areaId of coverageEnabledAreaIds) floatSupportedAreaIds.add(areaId);
+          break; // all coverage-enabled areas added, no need to continue
         }
       }
     }
 
+    // Include float slot IDs so floats themselves get break rotations assigned
+    const areaIdsWithFloats = [...areaIds, ...floatSlots.map((f) => f.id)];
+
     const rotationCount = getBreakRotations(currentConfig);
-    const rawSchedules = generateBreakSchedules(roster, nextSlots, areaIds, {
+    const rawSchedules = generateBreakSchedules(roster, nextSlots, areaIdsWithFloats, {
       rotationCount,
       scope,
       leadSlots,
@@ -812,7 +837,7 @@ export default function App() {
     setBreakSchedules(
       optimizeFloatBreakRotations(rawSchedules, floatSlots, nextSlots, rotationCount)
     );
-  }, [currentConfig, areaIds, roster, leadSlots, leadBreakCoverage, slotLabelsByArea, areaLabels, leadSlotKeys]);
+  }, [currentConfig, areaIds, roster, leadSlots, leadBreakCoverage, areaBreakCoverageEnabled, slotLabelsByArea, areaLabels, leadSlotKeys]);
 
   const handleRegenerateBreaks = useCallback(() => {
     regenerateBreaksForSlots(slots);
@@ -822,7 +847,7 @@ export default function App() {
     const state = stateRef.current;
     addSavedDay(
       date,
-      { roster, slots: state.slots, leadSlots: state.leadSlots, juicedAreas: state.juicedAreas, deJuicedAreas: state.deJuicedAreas, sectionTasks: state.sectionTasks, schedule: state.schedule, dayNotes: state.dayNotes, documents: state.documents, breakSchedules: state.breakSchedules, leadBreakCoverage: state.leadBreakCoverage },
+      { roster, slots: state.slots, leadSlots: state.leadSlots, juicedAreas: state.juicedAreas, deJuicedAreas: state.deJuicedAreas, sectionTasks: state.sectionTasks, schedule: state.schedule, dayNotes: state.dayNotes, documents: state.documents, breakSchedules: state.breakSchedules, leadBreakCoverage: state.leadBreakCoverage, areaBreakCoverageEnabled: state.areaBreakCoverageEnabled },
       name,
       rootState.currentLineId
     );
@@ -850,6 +875,7 @@ export default function App() {
       documents: day.documents ?? [],
       breakSchedules: day.breakSchedules ?? {},
       leadBreakCoverage: day.leadBreakCoverage ?? {},
+      areaBreakCoverageEnabled: day.areaBreakCoverageEnabled ?? {},
       areaCapacityOverrides: areaCapacityOverrides ?? {},
       areaNameOverrides: areaNameOverrides ?? {},
       slotLabelsByArea: slotLabelsByArea ?? {},
@@ -866,7 +892,9 @@ export default function App() {
           leavingEarly: p.leavingEarly ?? false,
           breakPreference: p.breakPreference ?? 'no_preference',
           areasWantToLearn: p.areasWantToLearn ?? [],
-          flexedToLineId: targetLineId,
+          // Preserve original flexedToLineId: null means "home" on this line,
+          // a different lineId means flexed in from that line.
+          flexedToLineId: p.flexedToLineId ?? null,
         };
         const homeLineId = findPersonHomeLine(next.lineStates, p.id);
         if (homeLineId != null) {
@@ -889,6 +917,9 @@ export default function App() {
     setDocuments(lineStateForDay.documents);
     setBreakSchedules(lineStateForDay.breakSchedules ?? {});
     setLeadBreakCoverage(lineStateForDay.leadBreakCoverage ?? {});
+    setAreaBreakCoverageEnabled(lineStateForDay.areaBreakCoverageEnabled ?? {});
+    // Force a reload so the useEffect at line 276 re-syncs all local state from rootState
+    setLineStateReloadKey((k) => k + 1);
   }, [areaCapacityOverrides, areaNameOverrides, leadSlotKeys, rootState.currentLineId, rootState.lineStates, slotLabelsByArea]);
 
   const handleRandomize = useCallback(() => {
@@ -1009,6 +1040,7 @@ export default function App() {
     setDocuments(imported.documents ?? []);
     setBreakSchedules(imported.breakSchedules ?? {});
     setLeadBreakCoverage(imported.leadBreakCoverage ?? {});
+    setAreaBreakCoverageEnabled(imported.areaBreakCoverageEnabled ?? {});
     setAreaCapacityOverrides(imported.areaCapacityOverrides ?? {});
     setAreaNameOverrides(imported.areaNameOverrides ?? {});
     setSlotLabelsByArea(imported.slotLabelsByArea ?? {});
@@ -1557,9 +1589,6 @@ export default function App() {
           floatSlots={presentationFloatSlots}
           linkedSlotsByArea={presentationLinkedSlots}
         />
-        <div style={{ maxWidth: 520, margin: '0 auto', padding: '0 12px 24px' }}>
-          <TrainingReport roster={roster} slots={slots} areaLabels={areaLabels} effectiveCapacity={effectiveCapacity} presentationMode areaIds={areaIds} />
-        </div>
       </>
     );
   }
@@ -1633,11 +1662,28 @@ export default function App() {
         isSaveToFileSupported={isSaveToFileSupported}
         onImportFromCloudLine={handleOpenImportModal}
         isCloudMode={!!cloudLineId}
+        onMakeEveryoneTrained={handleMakeEveryoneTrained}
       />
 
       <div className="totals-and-leads-row" style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', marginBottom: 12 }}>
-        <div className="grand-total" style={{ marginBottom: 0 }}>
-          Total people on line: {grandTotal} ({grandTotalPct}%) — Full staff: {fullStaff}
+        <div className="grand-total" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span>Total people on line: {grandTotal} ({grandTotalPct}%) — Full staff:</span>
+          <input
+            type="number"
+            min={1}
+            value={fullStaff}
+            onChange={(e) => {
+              const v = e.target.valueAsNumber;
+              if (!Number.isNaN(v) && v >= 1) {
+                setFullStaffOverride(v);
+              } else {
+                setFullStaffOverride(null);
+              }
+            }}
+            style={{ width: 52, padding: '2px 6px', fontSize: 'inherit', fontWeight: 700 }}
+            title={`Computed: ${computedFullStaff}. Edit to override.`}
+            aria-label="Full staff count"
+          />
         </div>
         <div className="seniority-spectrum-wrap" style={{ marginBottom: 0, minWidth: 160 }}>
           <div className="seniority-spectrum-label" style={{ fontSize: '0.75rem', marginBottom: 4 }}>
@@ -1977,12 +2023,15 @@ export default function App() {
                 onCapacityChange={handleAreaCapacityChange}
                 onSlotLabelChange={handleSlotLabelChange}
                 onSlotsChange={setSlotsForArea}
-                onSectionTasksChange={setSectionTasksForArea}
                 onAssign={setSlotAssignment}
                 requiresTrainedOrExpertA={areaRequiresTrainedOrExpert(idA)}
                 requiresTrainedOrExpertB={areaRequiresTrainedOrExpert(idB)}
                 onRequiresTrainedOrExpertChangeA={(value) => handleAreaRequiresTrainedOrExpertChange(idA, value)}
                 onRequiresTrainedOrExpertChangeB={(value) => handleAreaRequiresTrainedOrExpertChange(idB, value)}
+                breakCoverageEnabledA={!!areaBreakCoverageEnabled[idA]}
+                breakCoverageEnabledB={!!areaBreakCoverageEnabled[idB]}
+                onToggleBreakCoverage={handleToggleAreaBreakCoverage}
+                showBreakCoverageToggle={!!currentConfig && getBreaksEnabled(currentConfig)}
               />
             );
           }
@@ -2008,10 +2057,12 @@ export default function App() {
               onSlotLabelChange={handleSlotLabelChange}
               sectionTasks={sectionTasks[areaId] ?? []}
               onSlotsChange={setSlotsForArea}
-              onSectionTasksChange={setSectionTasksForArea}
               onAssign={setSlotAssignment}
               requiresTrainedOrExpert={areaRequiresTrainedOrExpert(areaId)}
               onRequiresTrainedOrExpertChange={(value) => handleAreaRequiresTrainedOrExpertChange(areaId, value)}
+              breakCoverageEnabled={!!areaBreakCoverageEnabled[areaId]}
+              onToggleBreakCoverage={handleToggleAreaBreakCoverage}
+              showBreakCoverageToggle={!!currentConfig && getBreaksEnabled(currentConfig)}
             />
           );
         })}
@@ -2052,7 +2103,6 @@ export default function App() {
           })}
       </div>
 
-      <TrainingReport roster={roster} slots={slots} areaLabels={areaLabels} effectiveCapacity={effectiveCapacity} areaIds={areaIds} />
 
       {currentConfig && getBreaksEnabled(currentConfig) && (() => {
         const rotationCount = getBreakRotations(currentConfig);

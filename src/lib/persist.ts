@@ -211,6 +211,8 @@ export function addSavedDay(
     dayNotes: state.dayNotes,
     documents: [...state.documents],
     breakSchedules: state.breakSchedules ? JSON.parse(JSON.stringify(state.breakSchedules)) : {},
+    leadBreakCoverage: state.leadBreakCoverage ? JSON.parse(JSON.stringify(state.leadBreakCoverage)) : {},
+    areaBreakCoverageEnabled: state.areaBreakCoverageEnabled ? JSON.parse(JSON.stringify(state.areaBreakCoverageEnabled)) : {},
   };
   days.push(newOne);
   saveDaysList(days);

@@ -178,6 +178,8 @@ export interface SavedDay {
   breakSchedules?: BreakSchedulesByArea;
   /** Which lead slot keys have break coverage enabled (lead acts as float for all areas). */
   leadBreakCoverage?: Record<string, boolean>;
+  /** Per-area flag: when true, break coverage is needed for this area. Default false. */
+  areaBreakCoverageEnabled?: Record<string, boolean>;
 }
 
 export interface AppState {
@@ -193,6 +195,8 @@ export interface AppState {
   breakSchedules?: BreakSchedulesByArea;
   /** Which lead slot keys have break coverage enabled (lead acts as float for all areas). */
   leadBreakCoverage?: Record<string, boolean>;
+  /** Per-area flag: when true, break coverage is needed for this area. Default false. */
+  areaBreakCoverageEnabled?: Record<string, boolean>;
   areaCapacityOverrides?: AreaCapacityOverrides;
   areaNameOverrides?: AreaNameOverrides;
   slotLabelsByArea?: SlotLabelsByArea;

@@ -41,6 +41,8 @@ interface RosterGridProps {
   /** Import roster from another cloud line (for merging lines). */
   onImportFromCloudLine?: () => void;
   isCloudMode?: boolean;
+  /** Set all roster members to "trained" in every area. */
+  onMakeEveryoneTrained?: () => void;
 }
 
 const SKILL_LEVELS: SkillLevel[] = ['no_experience', 'training', 'trained', 'expert'];
@@ -143,6 +145,7 @@ function RosterGridInner({
   isSaveToFileSupported,
   onImportFromCloudLine,
   isCloudMode,
+  onMakeEveryoneTrained,
 }: RosterGridProps) {
   const areaIds = areaIdsProp ?? [...AREA_IDS];
   const otherLines = useMemo(() => lines.filter((l) => l.id !== currentLineId), [lines, currentLineId]);
@@ -229,6 +232,11 @@ function RosterGridInner({
           <button type="button" onClick={onToggleVisible}>
             {visible ? 'Hide roster' : 'Show roster'}
           </button>
+          {onMakeEveryoneTrained && (
+            <button type="button" onClick={onMakeEveryoneTrained}>
+              Make everyone trained
+            </button>
+          )}
           {onSaveToFile && onOpenFromFile && (isSaveToFileSupported?.() ?? true) && (
             <>
               <button type="button" onClick={onSaveToFile}>Save to file</button>

@@ -339,7 +339,7 @@ function LineViewInner({
                                 personCoverage.coveredByFloatId === '__self_coverage__'
                                   ? <div style={{ fontSize: '0.75rem', color: '#4caf50', marginTop: 2 }}>{getName(personCoverage.coveredByPersonName)}</div>
                                   : personCoverage.coveredByPersonName
-                                    ? <div style={{ fontSize: '0.75rem', color: '#1976d2', marginTop: 2 }}>Float: {getName(personCoverage.coveredByPersonName)}</div>
+                                    ? <div style={{ fontSize: '0.75rem', color: '#1976d2', marginTop: 2 }}>{getName(personCoverage.coveredByPersonName)}</div>
                                     : <div style={{ fontSize: '0.75rem', color: '#c0392b', marginTop: 2 }}>Uncovered</div>
                               )}
                             </>
@@ -357,7 +357,7 @@ function LineViewInner({
                 return (
                   <tr key={f.id} style={{ background: 'rgba(33, 150, 243, 0.08)', borderTop: '1px solid rgba(33, 150, 243, 0.3)' }}>
                     <td style={tdStyle} className={tdClassName}>
-                      <span style={{ fontWeight: 600, color: '#1976d2' }}>Float: {f.name}</span>
+                      <span style={{ fontWeight: 600, color: '#1976d2' }}>Break Coverage</span>
                     </td>
                     <td style={tdStyle} className={tdClassName}>
                       <span style={compact ? undefined : { fontSize: nameFontSize, fontWeight: 600 }}>

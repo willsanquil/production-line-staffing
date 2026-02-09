@@ -1,10 +1,9 @@
 import { memo } from 'react';
-import type { AreaId, RosterPerson, Slot, TaskItem } from '../types';
+import type { AreaId, RosterPerson, Slot } from '../types';
 import type { SkillLevel } from '../types';
 import { createEmptySlot } from '../data/initialState';
 import { getSlotLabel } from '../lib/areaConfig';
 import { SlotDropdown } from './SlotDropdown';
-import { TaskList } from './TaskList';
 
 const SKILL_SCORE: Record<SkillLevel, number> = {
   no_experience: 0,
@@ -41,8 +40,8 @@ interface CombinedAreaStaffingProps {
   maxB: number;
   slotLabelsA?: string[];
   slotLabelsB?: string[];
-  sectionTasksA: TaskItem[];
-  sectionTasksB: TaskItem[];
+  sectionTasksA?: unknown[];
+  sectionTasksB?: unknown[];
   roster: RosterPerson[];
   allAssignedPersonIds: Set<string>;
   leadAssignedPersonIds: Set<string>;
@@ -55,12 +54,16 @@ interface CombinedAreaStaffingProps {
   onCapacityChange: (areaId: AreaId, payload: { min?: number; max?: number }) => void;
   onSlotLabelChange: (areaId: AreaId, slotIndex: number, value: string) => void;
   onSlotsChange: (areaId: AreaId, slots: Slot[]) => void;
-  onSectionTasksChange: (areaId: AreaId, tasks: TaskItem[]) => void;
+  onSectionTasksChange?: (areaId: AreaId, tasks: unknown[]) => void;
   onAssign: (areaId: AreaId, slotId: string, personId: string | null) => void;
   requiresTrainedOrExpertA?: boolean;
   requiresTrainedOrExpertB?: boolean;
   onRequiresTrainedOrExpertChangeA?: (value: boolean) => void;
   onRequiresTrainedOrExpertChangeB?: (value: boolean) => void;
+  breakCoverageEnabledA?: boolean;
+  breakCoverageEnabledB?: boolean;
+  onToggleBreakCoverage?: (areaId: AreaId, enabled: boolean) => void;
+  showBreakCoverageToggle?: boolean;
 }
 
 function CombinedAreaStaffingInner({
@@ -77,38 +80,22 @@ function CombinedAreaStaffingInner({
   maxB,
   slotLabelsA = [],
   slotLabelsB = [],
-  sectionTasksA,
-  sectionTasksB,
   roster,
   allAssignedPersonIds,
   leadAssignedPersonIds,
-  juicedA,
-  juicedB,
-  deJuicedA,
-  deJuicedB,
-  onToggleJuice,
-  onToggleDeJuice,
   onCapacityChange,
   onSlotLabelChange,
   onSlotsChange,
-  onSectionTasksChange,
   onAssign,
   requiresTrainedOrExpertA = false,
   requiresTrainedOrExpertB = false,
   onRequiresTrainedOrExpertChangeA,
   onRequiresTrainedOrExpertChangeB,
+  breakCoverageEnabledA = false,
+  breakCoverageEnabledB = false,
+  onToggleBreakCoverage,
+  showBreakCoverageToggle = false,
 }: CombinedAreaStaffingProps) {
-  const juiced = juicedA || juicedB;
-  const deJuiced = deJuicedA || deJuicedB;
-  const setJuiced = (v: boolean) => {
-    onToggleJuice(areaIdA, v);
-    onToggleJuice(areaIdB, v);
-  };
-  const setDeJuiced = (v: boolean) => {
-    onToggleDeJuice(areaIdA, v);
-    onToggleDeJuice(areaIdB, v);
-  };
-
   function renderSubArea(
     areaId: AreaId,
     areaLabel: string,
@@ -116,9 +103,9 @@ function CombinedAreaStaffingInner({
     min: number,
     max: number,
     slotLabels: string[],
-    sectionTasks: TaskItem[],
     requiresTrainedOrExpert: boolean,
-    onRequiresTrainedOrExpertChange?: (value: boolean) => void
+    onRequiresTrainedOrExpertChange?: (value: boolean) => void,
+    breakCoverageEnabled = false,
   ) {
     const enabledSlots = slots.filter((s) => !s.disabled);
     const filled = enabledSlots.filter((s) => s.personId).length;
@@ -150,17 +137,30 @@ function CombinedAreaStaffingInner({
       <div key={areaId} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid #eee' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
           <div style={{ fontSize: '1rem', fontWeight: 600 }}>{areaLabel}</div>
-          {onRequiresTrainedOrExpertChange != null && (
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={requiresTrainedOrExpert}
-                onChange={(e) => onRequiresTrainedOrExpertChange(e.target.checked)}
-                aria-label={`${areaLabel} needs experience`}
-              />
-              Needs experience
-            </label>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            {onRequiresTrainedOrExpertChange != null && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={requiresTrainedOrExpert}
+                  onChange={(e) => onRequiresTrainedOrExpertChange(e.target.checked)}
+                  aria-label={`${areaLabel} needs experience`}
+                />
+                Needs experience
+              </label>
+            )}
+            {showBreakCoverageToggle && onToggleBreakCoverage && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={breakCoverageEnabled}
+                  onChange={(e) => onToggleBreakCoverage(areaId, e.target.checked)}
+                  aria-label={`${areaLabel} needs break coverage`}
+                />
+                Needs break coverage
+              </label>
+            )}
+          </div>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginBottom: 8 }}>
           <span style={{ fontSize: '0.95rem' }}>
@@ -311,14 +311,6 @@ function CombinedAreaStaffingInner({
             </button>
           )}
         </div>
-        <div style={{ marginTop: '0.5rem' }}>
-          <strong>Tasks</strong>
-          <TaskList
-            tasks={sectionTasks}
-            onChange={(tasks) => onSectionTasksChange(areaId, tasks)}
-            placeholder="Task..."
-          />
-        </div>
       </div>
     );
   }
@@ -327,30 +319,10 @@ function CombinedAreaStaffingInner({
     <section className="section-card area-card">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
         <span style={{ fontSize: '1.25rem', fontWeight: 700 }}>{combinedLabel}</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.9rem', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={juiced}
-              onChange={(e) => setJuiced(e.target.checked)}
-              aria-label={`Juice ${combinedLabel}`}
-            />
-            Prioritize
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.9rem', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={deJuiced}
-              onChange={(e) => setDeJuiced(e.target.checked)}
-              aria-label={`De-prioritize ${combinedLabel}`}
-            />
-            De-Prioritize
-          </label>
-        </div>
       </div>
 
-      {renderSubArea(areaIdA, areaLabelA, slotsA, minA, maxA, slotLabelsA, sectionTasksA, requiresTrainedOrExpertA, onRequiresTrainedOrExpertChangeA)}
-      {renderSubArea(areaIdB, areaLabelB, slotsB, minB, maxB, slotLabelsB, sectionTasksB, requiresTrainedOrExpertB, onRequiresTrainedOrExpertChangeB)}
+      {renderSubArea(areaIdA, areaLabelA, slotsA, minA, maxA, slotLabelsA, requiresTrainedOrExpertA, onRequiresTrainedOrExpertChangeA, breakCoverageEnabledA)}
+      {renderSubArea(areaIdB, areaLabelB, slotsB, minB, maxB, slotLabelsB, requiresTrainedOrExpertB, onRequiresTrainedOrExpertChangeB, breakCoverageEnabledB)}
     </section>
   );
 }
