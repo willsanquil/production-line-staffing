@@ -21,23 +21,8 @@ interface BreakTableProps {
   presentationMode?: boolean;
 }
 
-const tableStyle: React.CSSProperties = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  fontSize: '0.95rem',
-};
-const thStyle: React.CSSProperties = {
-  border: '1px solid #ccc',
-  padding: '10px 12px',
-  textAlign: 'center',
-  background: '#f8f8f8',
-  fontWeight: 600,
-};
-const tdStyle: React.CSSProperties = {
-  border: '1px solid #ccc',
-  padding: '10px 12px',
-};
-const tdCenter: React.CSSProperties = { ...tdStyle, textAlign: 'center' as const };
+const thCenterStyle: React.CSSProperties = { textAlign: 'center' };
+const tdCenterStyle: React.CSSProperties = { textAlign: 'center' };
 const xStyle: React.CSSProperties = { fontWeight: 700, fontSize: '1.1rem' };
 const xStylePresentation: React.CSSProperties = { fontWeight: 700, fontSize: '1.35rem' };
 
@@ -47,7 +32,6 @@ function BreakTableInner({ people, assignments, rotationCount, title, presentati
   const n = Math.min(6, Math.max(1, rotationCount));
   const rotations = Array.from({ length: n }, (_, i) => i + 1);
   const fontSize = presentationMode ? '1.1rem' : undefined;
-  const cellPad = presentationMode ? '12px 14px' : '10px 12px';
 
   return (
     <div className="section-card" style={{ marginTop: title ? 12 : 0 }}>
@@ -63,12 +47,12 @@ function BreakTableInner({ people, assignments, rotationCount, title, presentati
         </h3>
       )}
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ ...tableStyle, fontSize }}>
+        <table className="data-table" style={fontSize ? { fontSize } : undefined}>
           <thead>
             <tr>
-              <th style={{ ...thStyle, textAlign: 'left', minWidth: 120, padding: cellPad }}>Name</th>
+              <th style={{ textAlign: 'left', minWidth: 120 }}>Name</th>
               {rotations.map((r) => (
-                <th key={r} style={{ ...thStyle, padding: cellPad }}>
+                <th key={r} style={thCenterStyle}>
                   {SLOT_LABELS[r - 1] ?? `Slot ${r}`}
                 </th>
               ))}
@@ -81,9 +65,9 @@ function BreakTableInner({ people, assignments, rotationCount, title, presentati
               const rot = a.breakRotation;
               return (
                 <tr key={p.id}>
-                  <td style={{ ...tdStyle, padding: cellPad }}>{p.name}</td>
+                  <td>{p.name}</td>
                   {rotations.map((r) => (
-                    <td key={r} style={{ ...tdCenter, padding: cellPad }}>
+                    <td key={r} style={tdCenterStyle}>
                       {rot === r ? <span style={presentationMode ? xStylePresentation : xStyle}>X</span> : ''}
                     </td>
                   ))}

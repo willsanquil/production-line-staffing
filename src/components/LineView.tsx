@@ -1,4 +1,4 @@
-import { memo, useState, useEffect, type CSSProperties } from 'react';
+import { memo, useState, useEffect } from 'react';
 import type { AreaId, BreakSchedulesByArea, FloatSlotConfig, RosterPerson, SlotsByArea } from '../types';
 import type { SkillLevel } from '../types';
 import { LINE_SECTIONS, LEAD_SLOT_AREAS, areaRequiresTrainedOrExpert as defaultRequiresTrainedOrExpert } from '../types';
@@ -131,41 +131,7 @@ function LineViewInner({
   const assignedLeadKeys = leadSlotKeys.filter((k: string) => leadSlots[k] != null && leadSlots[k] !== '');
   const firstAreaId = typeof sections[0] === 'string' ? sections[0] : sections[0]?.[0];
 
-  const sectionStyle: CSSProperties = {
-    background: '#fff',
-    borderRadius: 8,
-    border: '1px solid #e5e5e5',
-    padding: '14px 16px',
-    marginBottom: 12,
-  };
-  const sectionTitleStyle: CSSProperties = {
-    margin: 0,
-    fontSize: '1.1rem',
-    fontWeight: 700,
-    color: '#1a1a1a',
-    marginBottom: 10,
-  };
   const nameFontSize = 'clamp(1.1rem, 3vw, 1.28rem)';
-
-  const presentationTableStyle: CSSProperties = {
-    width: '100%',
-    borderCollapse: 'collapse',
-    fontSize: '1.05rem',
-    border: '1px solid #ccc',
-    borderRadius: 4,
-    overflow: 'hidden',
-  };
-  const presentationThStyle: CSSProperties = {
-    border: '1px solid #ccc',
-    padding: '10px 12px',
-    textAlign: 'left',
-    background: '#f8f8f8',
-    fontWeight: 600,
-  };
-  const presentationTdStyle: CSSProperties = {
-    border: '1px solid #ccc',
-    padding: '10px 12px',
-  };
   const COLUMNS_GRID = '1.5fr 0.5fr';
   const rotCount = Math.min(6, Math.max(1, rotationCount));
   const breakSlotLabels = Array.from({ length: rotCount }, (_, i) => BREAK_SLOT_LABELS[i] ?? `Slot ${i + 1}`);
@@ -253,14 +219,9 @@ function LineViewInner({
       }
     }
 
-    const tableClassName = compact ? 'presentation-table-compact' : undefined;
+    const tableClassName = compact ? 'presentation-table-compact' : 'presentation-table';
     const thClassName = compact ? 'presentation-th-compact' : undefined;
     const tdClassName = compact ? 'presentation-td-compact' : undefined;
-    const thStyle = compact ? undefined : presentationThStyle;
-    const tdStyle = compact ? undefined : presentationTdStyle;
-    const tableStyle = compact ? undefined : presentationTableStyle;
-    const thCenterStyle = compact ? undefined : { ...presentationThStyle, textAlign: 'center' as const };
-    const tdCenterStyle = compact ? undefined : { ...presentationTdStyle, textAlign: 'center' as const };
 
     return (
       <div
@@ -279,11 +240,11 @@ function LineViewInner({
           </div>
         )}
         <div style={{ overflowX: 'auto' }}>
-          <table style={tableStyle} className={tableClassName}>
+          <table className={tableClassName}>
             <thead>
               <tr>
-                <th style={thStyle} className={thClassName}>Role</th>
-                <th style={thStyle} className={thClassName}>Name</th>
+                <th className={thClassName}>Role</th>
+                <th className={thClassName}>Name</th>
                 {showBreakCols && breakSlotLabels.map((label, i) => {
                   const rot = i + 1;
                   const isUncovered = uncoveredRotations.includes(rot);
@@ -291,7 +252,7 @@ function LineViewInner({
                     <th
                       key={i}
                       style={{
-                        ...thCenterStyle,
+                        textAlign: 'center',
                         ...(isUncovered ? { color: '#c0392b', fontWeight: 700, background: 'rgba(192, 57, 43, 0.08)' } : {}),
                       }}
                       className={thClassName}
@@ -318,8 +279,8 @@ function LineViewInner({
                 const breakRot = slot.personId && breakAssignments?.[slot.personId]?.breakRotation;
                 return (
                   <tr key={slot.id}>
-                    <td style={tdStyle} className={tdClassName}>{showRole ? roleDisplay : ''}</td>
-                    <td style={tdStyle} className={tdClassName}>
+                    <td className={tdClassName}>{showRole ? roleDisplay : ''}</td>
+                    <td className={tdClassName}>
                       <span className={`skill-name-${skill}`} style={compact ? undefined : { fontSize: nameFontSize, fontWeight: 600 }}>
                         {name}
                       </span>
@@ -331,7 +292,7 @@ function LineViewInner({
                         : null;
                       const isSelfManaging = !areaCoverage[areaId];
                       return (
-                        <td key={i} style={tdCenterStyle} className={compact ? `${tdClassName} presentation-td-break` : 'presentation-td-break'}>
+                        <td key={i} style={{ textAlign: 'center' }} className={compact ? `${tdClassName} presentation-td-break` : 'presentation-td-break'}>
                           {isOnBreak ? (
                             <>
                               <span style={{ fontWeight: 700, fontSize: compact ? undefined : '1.1rem' }}>X</span>
@@ -356,10 +317,10 @@ function LineViewInner({
                 const fSchedule = floatSchedule[f.id];
                 return (
                   <tr key={f.id} style={{ background: 'rgba(33, 150, 243, 0.08)', borderTop: '1px solid rgba(33, 150, 243, 0.3)' }}>
-                    <td style={tdStyle} className={tdClassName}>
+                    <td className={tdClassName}>
                       <span style={{ fontWeight: 600, color: '#1976d2' }}>Break Coverage</span>
                     </td>
-                    <td style={tdStyle} className={tdClassName}>
+                    <td className={tdClassName}>
                       <span style={compact ? undefined : { fontSize: nameFontSize, fontWeight: 600 }}>
                         {personId ? getName(personId) : '—'}
                       </span>
@@ -371,7 +332,7 @@ function LineViewInner({
                       const onBreak = activity?.type === 'on_break';
                       const coveringElsewhere = activity?.type === 'covering' && activity.areaId !== areaId;
                       return (
-                        <td key={i} style={tdCenterStyle} className={compact ? `${tdClassName} presentation-td-break` : 'presentation-td-break'}>
+                        <td key={i} style={{ textAlign: 'center' }} className={compact ? `${tdClassName} presentation-td-break` : 'presentation-td-break'}>
                           {coveringHere
                             ? <span style={{ fontWeight: 700, fontSize: compact ? undefined : '0.85rem', color: '#1976d2' }}>Covering</span>
                             : onBreak
@@ -483,14 +444,13 @@ function LineViewInner({
       {sections.map((section) => {
         const isCombined = Array.isArray(section);
         const rowKey = isCombined ? `row-${(section as [string, string]).join('-')}` : `row-${section as string}`;
-        const sectionStyleWithCompact = isCompact ? { ...sectionStyle, padding: 6, marginBottom: 8 } : sectionStyle;
         if (isCombined) {
           const [idA, idB] = section as [string, string];
           const slotsA = slots[idA] ?? [];
           const slotsB = slots[idB] ?? [];
           return (
-            <section key={rowKey} style={sectionStyleWithCompact} className={isCompact ? 'presentation-section-compact' : ''}>
-              <h2 style={{ ...sectionTitleStyle, ...(isCompact ? { fontSize: '0.8rem', marginBottom: 4 } : {}) }}>{areaLabels[idA] ?? idA} & {areaLabels[idB] ?? idB}</h2>
+            <section key={rowKey} className={isCompact ? 'presentation-section-compact' : 'section-card'} style={isCompact ? { padding: 6, marginBottom: 8 } : undefined}>
+              <h2 style={isCompact ? { fontSize: '0.8rem', marginBottom: 4 } : undefined}>{areaLabels[idA] ?? idA} & {areaLabels[idB] ?? idB}</h2>
               {renderCombinedAreaTable(idA, slotsA, { subLabel: areaLabels[idA] ?? idA, compact: isCompact })}
               {renderCombinedAreaTable(idB, slotsB, { subLabel: areaLabels[idB] ?? idB, compact: isCompact })}
             </section>
@@ -500,7 +460,7 @@ function LineViewInner({
         const allAreaSlots = slots[areaId] ?? [];
         const areaLabel = areaLabels[areaId] ?? areaId;
         return (
-          <section key={rowKey} style={sectionStyleWithCompact} className={isCompact ? 'presentation-section-compact' : ''}>
+          <section key={rowKey} className={isCompact ? 'presentation-section-compact' : 'section-card'} style={isCompact ? { padding: 6, marginBottom: 8 } : undefined}>
             {renderCombinedAreaTable(areaId, allAreaSlots, { subLabel: areaLabel, compact: isCompact })}
           </section>
         );
@@ -508,8 +468,8 @@ function LineViewInner({
 
       {assignedLeadKeys.length > 0 && (
         isCompact ? (
-          <section className="presentation-section-compact" style={{ ...sectionStyle, padding: 6, marginBottom: 8 }}>
-            <h2 style={{ ...sectionTitleStyle, fontSize: '0.8rem', marginBottom: 4 }}>Leads</h2>
+          <section className="presentation-section-compact" style={{ padding: 6, marginBottom: 8 }}>
+            <h2 style={{ fontSize: '0.8rem', marginBottom: 4 }}>Leads</h2>
             <div style={{ overflowX: 'auto' }}>
               <table className="presentation-table-compact">
                 <thead>
@@ -537,14 +497,14 @@ function LineViewInner({
             </div>
           </section>
         ) : (
-          <section style={{ ...sectionStyle, marginTop: 8 }}>
-            <h2 style={sectionTitleStyle}>Leads</h2>
+          <section className="section-card" style={{ marginTop: 8 }}>
+            <h2>Leads</h2>
             <div style={{ overflowX: 'auto' }}>
-              <table style={presentationTableStyle}>
+              <table className="presentation-table">
                 <thead>
                   <tr>
-                    <th style={presentationThStyle}>Position</th>
-                    <th style={presentationThStyle}>Name</th>
+                    <th>Position</th>
+                    <th>Name</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -554,8 +514,8 @@ function LineViewInner({
                     const skill = getSkillInArea(skillAreaId as AreaId, personId);
                     return (
                       <tr key={key}>
-                        <td style={presentationTdStyle}>{getLeadSlotLabel(key)}</td>
-                        <td style={presentationTdStyle}>
+                        <td>{getLeadSlotLabel(key)}</td>
+                        <td>
                           <span className={`skill-name-${skill}`} style={{ fontSize: nameFontSize, fontWeight: 600 }}>{getName(personId)}</span>
                         </td>
                       </tr>
@@ -570,8 +530,8 @@ function LineViewInner({
 
       {floatSlots.length > 0 && (
         isCompact ? (
-          <section className="presentation-section-compact" style={{ ...sectionStyle, padding: 6, marginTop: 8, marginBottom: 8 }}>
-            <h2 style={{ ...sectionTitleStyle, fontSize: '0.8rem', marginBottom: 4 }}>Float schedule</h2>
+          <section className="presentation-section-compact" style={{ padding: 6, marginTop: 8, marginBottom: 8 }}>
+            <h2 style={{ fontSize: '0.8rem', marginBottom: 4 }}>Float schedule</h2>
             <p style={{ fontSize: '0.8rem', color: '#555', margin: '0 0 8px 0' }}>One place per slot — float covers one area or is on break.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {floatSlots.map((f) => {
@@ -602,17 +562,17 @@ function LineViewInner({
             </div>
           </section>
         ) : (
-          <section style={{ ...sectionStyle, marginTop: 8 }}>
-            <h2 style={sectionTitleStyle}>Float schedule</h2>
+          <section className="section-card" style={{ marginTop: 8 }}>
+            <h2>Float schedule</h2>
             <p style={{ fontSize: '0.9rem', color: '#555', margin: '0 0 12px 0' }}>Each float is in one place per slot — covering one area or on break.</p>
             <div style={{ overflowX: 'auto' }}>
-              <table style={presentationTableStyle}>
+              <table className="presentation-table">
                 <thead>
                   <tr>
-                    <th style={presentationThStyle}>Float</th>
-                    <th style={presentationThStyle}>Assigned</th>
+                    <th>Float</th>
+                    <th>Assigned</th>
                     {breakSlotLabels.map((label, i) => (
-                      <th key={i} style={presentationThStyle}>{label}</th>
+                      <th key={i}>{label}</th>
                     ))}
                   </tr>
                 </thead>
@@ -622,13 +582,13 @@ function LineViewInner({
                     const fSchedule = floatSchedule[f.id] ?? {};
                     return (
                       <tr key={f.id} style={{ background: 'rgba(33, 150, 243, 0.06)' }}>
-                        <td style={{ ...presentationTdStyle, fontWeight: 600, color: '#1976d2' }}>{f.name}</td>
-                        <td style={presentationTdStyle}>{personId ? getName(personId) : '—'}</td>
+                        <td style={{ fontWeight: 600, color: '#1976d2' }}>{f.name}</td>
+                        <td>{personId ? getName(personId) : '—'}</td>
                         {breakSlotLabels.map((_, i) => {
                           const rot = i + 1;
                           const activity = fSchedule[rot];
                           return (
-                            <td key={i} style={presentationTdStyle}>
+                            <td key={i}>
                               {activity?.type === 'on_break'
                                 ? <span style={{ fontWeight: 700, color: '#1976d2' }}>On break</span>
                                 : activity?.type === 'covering'
@@ -649,8 +609,8 @@ function LineViewInner({
 
       {coverageSummary.length > 0 && coverageSummary.some((row) => row.slots.some((s) => s.peopleOnBreak > 0)) && (
         isCompact ? (
-          <section className="presentation-section-compact" style={{ ...sectionStyle, padding: 6, marginTop: 8, marginBottom: 8 }}>
-            <h2 style={{ ...sectionTitleStyle, fontSize: '0.8rem', marginBottom: 4 }}>Break coverage</h2>
+          <section className="presentation-section-compact" style={{ padding: 6, marginTop: 8, marginBottom: 8 }}>
+            <h2 style={{ fontSize: '0.8rem', marginBottom: 4 }}>Break coverage</h2>
             <p style={{ fontSize: '0.75rem', color: '#555', margin: '0 0 6px 0' }}>Float-supported areas only. Areas at full staff without a float manage breaks internally.</p>
             <div style={{ overflowX: 'auto' }}>
               <table className="presentation-table-compact">
@@ -694,33 +654,32 @@ function LineViewInner({
             </div>
           </section>
         ) : (
-          <section style={{ ...sectionStyle, marginTop: 8 }}>
-            <h2 style={sectionTitleStyle}>Break coverage</h2>
+          <section className="section-card" style={{ marginTop: 8 }}>
+            <h2>Break coverage</h2>
             <p style={{ fontSize: '0.9rem', color: '#555', margin: '0 0 12px 0' }}>Float-supported areas only. Areas at full staff without a float manage breaks internally.</p>
             <div style={{ overflowX: 'auto' }}>
-              <table style={presentationTableStyle}>
+              <table className="presentation-table">
                 <thead>
                   <tr>
-                    <th style={presentationThStyle}>Area</th>
+                    <th>Area</th>
                     {breakSlotLabels.map((label, i) => (
-                      <th key={i} style={{ ...presentationThStyle, textAlign: 'center' }}>{label}</th>
+                      <th key={i} style={{ textAlign: 'center' }}>{label}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {coverageSummary.map((row) => (
                     <tr key={row.areaId}>
-                      <td style={{ ...presentationTdStyle, fontWeight: 600 }}>{row.areaLabel}</td>
+                      <td style={{ fontWeight: 600 }}>{row.areaLabel}</td>
                       {row.slots.map((s, i) => {
                         if (s.peopleOnBreak === 0) {
-                          return <td key={i} style={{ ...presentationTdStyle, textAlign: 'center', color: '#bbb' }}>&mdash;</td>;
+                          return <td key={i} style={{ textAlign: 'center', color: '#bbb' }}>&mdash;</td>;
                         }
                         const floatPersonId = s.coveredByFloatId ? (slots[s.coveredByFloatId]?.[0]?.personId ?? null) : null;
                         return (
                           <td
                             key={i}
                             style={{
-                              ...presentationTdStyle,
                               textAlign: 'center',
                               background: s.uncovered ? 'rgba(192, 57, 43, 0.10)' : 'rgba(39, 174, 96, 0.10)',
                               color: s.uncovered ? '#c0392b' : '#27ae60',

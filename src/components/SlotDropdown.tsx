@@ -73,13 +73,7 @@ export function SlotDropdown({
           alignItems: 'center',
           gap: 6,
           minWidth: 140,
-          padding: '6px 8px',
-          border: '1px solid #ccc',
-          borderRadius: 6,
-          background: '#fff',
-          cursor: 'pointer',
           textAlign: 'left',
-          fontSize: '0.9rem',
         }}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -98,37 +92,12 @@ export function SlotDropdown({
         <ul
           role="listbox"
           className="slot-dropdown-list"
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            marginTop: 4,
-            padding: 4,
-            listStyle: 'none',
-            background: '#fff',
-            border: '1px solid #ccc',
-            borderRadius: 8,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            zIndex: 100,
-            maxHeight: 240,
-            overflowY: 'auto',
-          }}
         >
           <li style={{ marginBottom: 2 }}>
             <button
               type="button"
               onClick={() => select(null)}
-              style={{
-                width: '100%',
-                padding: '6px 8px',
-                textAlign: 'left',
-                border: 'none',
-                borderRadius: 4,
-                background: 'transparent',
-                cursor: 'pointer',
-                fontSize: '0.9rem',
-                color: '#888',
-              }}
+              style={{ color: '#888' }}
             >
               — Unassigned —
             </button>
@@ -139,17 +108,10 @@ export function SlotDropdown({
                 type="button"
                 onClick={() => select(person.id)}
                 style={{
-                  width: '100%',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 6,
-                  padding: '6px 8px',
-                  textAlign: 'left',
-                  border: 'none',
-                  borderRadius: 4,
-                  background: slot.personId === person.id ? '#e8f4fd' : 'transparent',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
+                  background: slot.personId === person.id ? '#e8f4fd' : undefined,
                 }}
               >
                 <span

@@ -314,9 +314,9 @@ function AreaStaffingInner({
             </div>
           );
         })}
-        {!atMax && <button type="button" onClick={addSlot}>+ Slot</button>}
+        {!atMax && <button type="button" className="btn-ghost" onClick={addSlot}>+ Slot</button>}
         {slots.length > min && (
-          <button type="button" onClick={removeSlot}>− Slot</button>
+          <button type="button" className="btn-ghost" onClick={removeSlot}>− Slot</button>
         )}
       </div>
     </section>

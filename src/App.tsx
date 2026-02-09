@@ -822,7 +822,8 @@ export default function App() {
       }
     }
 
-    // Include float slot IDs so floats themselves get break rotations assigned
+    // Include float slot IDs so floats themselves get break rotations assigned.
+    // Leads acting as coverage do NOT get break rotations — they break outside the schedule.
     const areaIdsWithFloats = [...areaIds, ...floatSlots.map((f) => f.id)];
 
     const rotationCount = getBreakRotations(currentConfig);
@@ -1360,9 +1361,10 @@ export default function App() {
           </div>
           <button
             type="button"
+            className="btn-primary"
             onClick={handleDirectLinkView}
             disabled={directLinkLoading || !directLinkPassword.trim()}
-            style={{ padding: '12px 24px', fontSize: '1rem', fontWeight: 600, borderRadius: 8, border: 'none', background: '#1a73e8', color: '#fff', cursor: 'pointer' }}
+            style={{ padding: '12px 24px', fontSize: '1rem' }}
           >
             {directLinkLoading ? 'Loading…' : 'View'}
           </button>
@@ -1411,9 +1413,9 @@ export default function App() {
   if (view === 'line-manager') {
     return (
       <>
-        <header className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <header className="app-header">
           <span>Production Line Staffing</span>
-          <button type="button" onClick={handleGoHome} style={{ padding: '8px 16px' }}>
+          <button type="button" onClick={handleGoHome}>
             Home
           </button>
         </header>
@@ -1433,26 +1435,11 @@ export default function App() {
         />
         {showShareModal && (
           <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              background: 'rgba(0,0,0,0.4)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 1000,
-            }}
+            className="modal-overlay"
             onClick={() => !shareLoading && setShowShareModal(false)}
           >
             <div
-              style={{
-                background: '#fff',
-                padding: 24,
-                borderRadius: 12,
-                maxWidth: 400,
-                width: '90%',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-              }}
+              className="modal-dialog"
               onClick={(e) => e.stopPropagation()}
             >
               <h2 style={{ marginTop: 0, marginBottom: 16 }}>Share line to cloud</h2>
@@ -1476,10 +1463,10 @@ export default function App() {
                 style={{ width: '100%', padding: '10px 12px', marginBottom: 16, boxSizing: 'border-box' }}
               />
               <div style={{ display: 'flex', gap: 8 }}>
-                <button type="button" onClick={handleShareSubmit} disabled={shareLoading} style={{ padding: '10px 18px', fontWeight: 600 }}>
+                <button type="button" className="btn-primary" onClick={handleShareSubmit} disabled={shareLoading}>
                   {shareLoading ? 'Sharing…' : 'Share'}
                 </button>
-                <button type="button" onClick={() => setShowShareModal(false)} disabled={shareLoading} style={{ padding: '10px 18px' }}>
+                <button type="button" className="btn-ghost" onClick={() => setShowShareModal(false)} disabled={shareLoading}>
                   Cancel
                 </button>
               </div>
@@ -1494,9 +1481,9 @@ export default function App() {
     const existingAreaIds = new Set(rootState.lines.flatMap((l) => l.areas.map((a) => a.id)));
     return (
       <>
-        <header className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <header className="app-header">
           <span>Production Line Staffing</span>
-          <button type="button" onClick={handleGoHome} style={{ padding: '8px 16px' }}>
+          <button type="button" onClick={handleGoHome}>
             Home
           </button>
         </header>
@@ -1512,13 +1499,13 @@ export default function App() {
   if (!currentConfig) {
     return (
       <>
-        <header className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <header className="app-header">
           <span>Production Line Staffing</span>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" onClick={handleGoHome} style={{ padding: '8px 16px' }}>
+            <button type="button" onClick={handleGoHome}>
               Home
             </button>
-            <button type="button" onClick={() => setView('line-manager')} style={{ padding: '8px 16px' }}>
+            <button type="button" onClick={() => setView('line-manager')}>
               Lines
             </button>
           </div>
@@ -1531,25 +1518,25 @@ export default function App() {
   if (!adminVisible) {
     return (
       <>
-        <header className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <header className="app-header">
           <span>Production Line Staffing — {currentConfig.name}{cloudLineId ? ' (Group)' : ''}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button type="button" onClick={handleGoHome} style={{ padding: '6px 12px', fontSize: '0.9rem' }}>
+            <button type="button" onClick={handleGoHome}>
               Home
             </button>
           {cloudLineId && (
             <>
-              <button type="button" onClick={handleCopyShareLink} style={{ padding: '6px 12px', fontSize: '0.9rem', background: shareLinkCopied ? '#27ae60' : undefined, color: shareLinkCopied ? '#fff' : undefined }}>
+              <button type="button" onClick={handleCopyShareLink} style={shareLinkCopied ? { background: '#27ae60', color: '#fff' } : undefined}>
                 {shareLinkCopied ? 'Link Copied!' : 'Share Link'}
               </button>
-              <button type="button" onClick={handleLeaveLine} style={{ padding: '6px 12px', fontSize: '0.9rem' }}>
+              <button type="button" onClick={handleLeaveLine}>
                 Leave line
               </button>
               <button
                 type="button"
+                className="btn-danger"
                 onClick={handleDeleteCloudLine}
                 title="Remove this line from the cloud (requires password)"
-                style={{ padding: '6px 12px', fontSize: '0.9rem', color: '#c0392b', borderColor: '#c0392b' }}
               >
                 Delete line from cloud
               </button>
@@ -1560,8 +1547,8 @@ export default function App() {
           </button>
           <button
             type="button"
+            className="btn-primary"
             onClick={() => setAdminVisible(true)}
-              style={{ padding: '8px 16px', fontSize: '1rem', fontWeight: 600 }}
             >
               Show admin
             </button>
@@ -1595,22 +1582,22 @@ export default function App() {
 
   return (
     <>
-      <header className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+      <header className="app-header">
         <span>Production Line Staffing — {currentConfig.name}{cloudLineId ? ' (Group)' : ''}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button type="button" onClick={handleGoHome} style={{ padding: '6px 12px', fontSize: '0.9rem' }}>
+          <button type="button" onClick={handleGoHome}>
             Home
           </button>
           {cloudLineId && (
             <>
-              <button type="button" onClick={handleLeaveLine} style={{ padding: '6px 12px', fontSize: '0.9rem' }}>
+              <button type="button" onClick={handleLeaveLine}>
                 Leave line
               </button>
               <button
                 type="button"
+                className="btn-danger"
                 onClick={handleDeleteCloudLine}
                 title="Remove this line from the cloud"
-                style={{ padding: '6px 12px', fontSize: '0.9rem', color: '#c0392b', borderColor: '#c0392b' }}
               >
                 Delete line from cloud
               </button>
@@ -1623,7 +1610,6 @@ export default function App() {
             type="button"
             onClick={() => setAdminVisible(false)}
             title="Compact view for screenshot or phone"
-            style={{ padding: '6px 12px', fontSize: '0.9rem' }}
           >
             Hide admin
           </button>
@@ -1728,16 +1714,16 @@ export default function App() {
         />
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-        <button type="button" onClick={handleSpreadTalent}>Spread talent</button>
-        <button type="button" onClick={handleFillRemaining}>Fill remaining</button>
-        <button type="button" onClick={handleRandomize}>Randomize</button>
+      <div className="action-toolbar">
+        <button type="button" className="btn-primary" onClick={handleSpreadTalent}>Spread talent</button>
+        <button type="button" className="btn-primary" onClick={handleFillRemaining}>Fill remaining</button>
+        <button type="button" className="btn-primary" onClick={handleRandomize}>Randomize</button>
         {/* STRETCH temporarily disabled
         <button type="button" onClick={handleStretch} title="Push team outside comfort zone; prefer areas they want to learn">STRETCH</button>
         */}
-        <button type="button" onClick={handleClearLine}>Clear line</button>
+        <button type="button" className="btn-danger" onClick={handleClearLine}>Clear line</button>
         {currentConfig && getBreaksEnabled(currentConfig) && (
-          <button type="button" onClick={handleRegenerateBreaks} title="Regenerate break schedule from current assignments and preferences">
+          <button type="button" className="btn-primary" onClick={handleRegenerateBreaks} title="Regenerate break schedule from current assignments and preferences">
             Regenerate breaks
           </button>
         )}
@@ -1750,7 +1736,6 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setShowAddStationForm(true)}
-                style={{ padding: '8px 14px', fontSize: '0.95rem' }}
               >
                 + Add station
               </button>
@@ -1762,7 +1747,6 @@ export default function App() {
                   );
                   setShowFloatSupportModal(true);
                 }}
-                style={{ padding: '8px 14px', fontSize: '0.95rem' }}
               >
                 Float support
               </button>
@@ -1831,11 +1815,11 @@ export default function App() {
                     setShowAddStationForm(false);
                   }}
                   disabled={!addStationName.trim()}
-                  style={{ padding: '6px 14px', fontWeight: 600 }}
+                  className="btn-primary"
                 >
                   Add
                 </button>
-                <button type="button" onClick={() => setShowAddStationForm(false)} style={{ padding: '6px 14px' }}>
+                <button type="button" className="btn-ghost" onClick={() => setShowAddStationForm(false)}>
                   Cancel
                 </button>
               </div>
@@ -1846,30 +1830,15 @@ export default function App() {
 
       {showFloatSupportModal && floatSupportDraft !== null && currentConfig && currentConfig.id !== 'ic' && (
         <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.4)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
+          className="modal-overlay"
           onClick={() => {
             setShowFloatSupportModal(false);
             setFloatSupportDraft(null);
           }}
         >
           <div
-            style={{
-              background: '#fff',
-              borderRadius: 12,
-              padding: 20,
-              maxWidth: 440,
-              maxHeight: '85vh',
-              overflow: 'auto',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
-            }}
+            className="modal-dialog"
+            style={{ maxHeight: '85vh', overflow: 'auto' }}
             onClick={(e) => e.stopPropagation()}
           >
             <h3 style={{ margin: '0 0 16px 0', fontSize: '1.1rem' }}>Float support</h3>
@@ -1932,12 +1901,13 @@ export default function App() {
                 </div>
                 <button
                   type="button"
+                  className="btn-danger"
                   onClick={() =>
                     setFloatSupportDraft((prev) =>
                       prev ? prev.filter((_, j) => j !== i) : null
                     )
                   }
-                  style={{ marginTop: 8, padding: '4px 8px', fontSize: '0.85rem' }}
+                  style={{ marginTop: 8 }}
                 >
                   Remove
                 </button>
@@ -1958,28 +1928,28 @@ export default function App() {
                   },
                 ]);
               }}
-              style={{ marginBottom: 16, padding: '8px 12px', fontSize: '0.9rem' }}
+              style={{ marginBottom: 16 }}
             >
               {floatSupportDraft.length === 0 ? '+ Add float' : '+ Add another float'}
             </button>
             <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
               <button
                 type="button"
+                className="btn-primary"
                 onClick={() => {
                   handleUpdateFloatSlots(floatSupportDraft);
                   setFloatSupportDraft(null);
                 }}
-                style={{ padding: '8px 16px', fontWeight: 600 }}
               >
                 Save
               </button>
               <button
                 type="button"
+                className="btn-ghost"
                 onClick={() => {
                   setShowFloatSupportModal(false);
                   setFloatSupportDraft(null);
                 }}
-                style={{ padding: '8px 16px' }}
               >
                 Cancel
               </button>
@@ -2271,26 +2241,11 @@ export default function App() {
 
       {showImportModal && (
         <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.4)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
+          className="modal-overlay"
           onClick={() => !importLoading && setShowImportModal(false)}
         >
           <div
-            style={{
-              background: '#fff',
-              padding: 24,
-              borderRadius: 12,
-              maxWidth: 400,
-              width: '90%',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-            }}
+            className="modal-dialog"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 style={{ marginTop: 0, marginBottom: 16 }}>Import from another cloud line</h2>
@@ -2320,10 +2275,10 @@ export default function App() {
               style={{ width: '100%', padding: '10px 12px', marginBottom: 16, boxSizing: 'border-box' }}
             />
             <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" onClick={handleImportFromCloudLine} disabled={importLoading || !importLineId} style={{ padding: '10px 18px', fontWeight: 600 }}>
+              <button type="button" className="btn-primary" onClick={handleImportFromCloudLine} disabled={importLoading || !importLineId}>
                 {importLoading ? 'Importing…' : 'Import'}
               </button>
-              <button type="button" onClick={() => setShowImportModal(false)} disabled={importLoading} style={{ padding: '10px 18px' }}>
+              <button type="button" className="btn-ghost" onClick={() => setShowImportModal(false)} disabled={importLoading}>
                 Cancel
               </button>
             </div>

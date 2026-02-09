@@ -301,12 +301,12 @@ function CombinedAreaStaffingInner({
             );
           })}
           {!atMax && (
-            <button type="button" onClick={() => onSlotsChange(areaId, [...slots, createEmptySlot()])}>
+            <button type="button" className="btn-ghost" onClick={() => onSlotsChange(areaId, [...slots, createEmptySlot()])}>
               + Slot
             </button>
           )}
           {slots.length > min && (
-            <button type="button" onClick={() => onSlotsChange(areaId, slots.slice(0, -1))}>
+            <button type="button" className="btn-ghost" onClick={() => onSlotsChange(areaId, slots.slice(0, -1))}>
               − Slot
             </button>
           )}

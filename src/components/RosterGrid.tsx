@@ -269,40 +269,40 @@ function RosterGridInner({
             <button type="button" onClick={handleAdd}>Add person</button>
           </div>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
+            <table className="data-table">
               <thead>
                 <tr>
-                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Name</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 44 }}></th>
+                  <th>Name</th>
+                  <th style={{ width: 44 }}></th>
                   {showFlexedColumn && (
-                    <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', minWidth: 100 }} title="Temporarily assign this person to another line">Flexed</th>
+                    <th style={{ minWidth: 100 }} title="Temporarily assign this person to another line">Flexed</th>
                   )}
-                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 70 }}>Absent</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 60 }}>Lead</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 55 }}>Late</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 90 }}>Leave early</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 100 }}>Break</th>
+                  <th style={{ width: 70 }}>Absent</th>
+                  <th style={{ width: 60 }}>Lead</th>
+                  <th style={{ width: 55 }}>Late</th>
+                  <th style={{ width: 90 }}>Leave early</th>
+                  <th style={{ width: 100 }}>Break</th>
                   {defaultPositionOptions.length > 0 && onDefaultPositionChange && (
-                    <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', minWidth: 140 }}>Default position</th>
+                    <th style={{ minWidth: 140 }}>Default position</th>
                   )}
                   {areaIds.map((areaId) => (
-                    <th key={areaId} style={{ padding: '6px 8px', textAlign: 'center', borderBottom: '2px solid #ddd', minWidth: 90 }}>
+                    <th key={areaId} style={{ textAlign: 'center', minWidth: 90 }}>
                       {areaLabels[areaId]}
                   </th>
                   ))}
-                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', fontSize: '0.8rem' }} colSpan={areaIds.length}>
+                  <th colSpan={areaIds.length}>
                     Want to learn (profile)
                   </th>
                 </tr>
                 <tr>
                   <th colSpan={7 + (showFlexedColumn ? 1 : 0) + (defaultPositionOptions.length > 0 && onDefaultPositionChange ? 1 : 0)} style={{ padding: 0, border: 'none' }} />
                   {areaIds.map((areaId) => (
-                    <th key={areaId} style={{ padding: '2px 4px', textAlign: 'center', borderBottom: '2px solid #ddd', fontSize: '0.75rem' }}>
+                    <th key={areaId} style={{ textAlign: 'center' }}>
                       {areaLabels[areaId]}
                     </th>
                   ))}
                   {areaIds.map((areaId) => (
-                    <th key={`learn-${areaId}`} style={{ padding: '2px 4px', textAlign: 'center', borderBottom: '2px solid #ddd', fontSize: '0.75rem' }}>
+                    <th key={`learn-${areaId}`} style={{ textAlign: 'center' }}>
                       {areaLabels[areaId]}
                     </th>
                   ))}
@@ -311,7 +311,7 @@ function RosterGridInner({
               <tbody>
                 {staffRosterPage.map((person) => (
                   <tr key={person.id} className={person.absent ? 'person-absent' : ''}>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee', verticalAlign: 'top' }}>
+                    <td style={{ verticalAlign: 'top' }}>
                       <PersonHealthBar person={person} areaIds={areaIds} />
                       <input
                         type="text"
@@ -321,7 +321,7 @@ function RosterGridInner({
                         aria-label={`Edit ${person.name}`}
                       />
                     </td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                    <td>
                       <button
                         type="button"
                         onClick={() => onRemovePerson(person.id)}
@@ -333,7 +333,7 @@ function RosterGridInner({
                       </button>
                     </td>
                     {showFlexedColumn && (
-                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                      <td>
                         <select
                           value={person.flexedToLineId ?? ''}
                           onChange={(e) => onFlexedToLineChange?.(person.id, e.target.value || null)}
@@ -348,7 +348,7 @@ function RosterGridInner({
                         </select>
                       </td>
                     )}
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                    <td>
                       <input
                         type="checkbox"
                         checked={person.absent}
@@ -356,7 +356,7 @@ function RosterGridInner({
                         aria-label={`Mark ${person.name} absent`}
                       />
                     </td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                    <td>
                       <input
                         type="checkbox"
                         checked={person.lead ?? false}
@@ -364,7 +364,7 @@ function RosterGridInner({
                         aria-label={`Mark ${person.name} as lead`}
                       />
                     </td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                    <td>
                       <input
                         type="checkbox"
                         checked={person.late ?? false}
@@ -372,7 +372,7 @@ function RosterGridInner({
                         aria-label={`Mark ${person.name} late`}
                       />
                     </td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                    <td>
                       <input
                         type="checkbox"
                         checked={person.leavingEarly ?? false}
@@ -380,7 +380,7 @@ function RosterGridInner({
                         aria-label={`Mark ${person.name} leaving early`}
                       />
                     </td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                    <td>
                       <select
                         value={person.breakPreference ?? 'no_preference'}
                         onChange={(e) => onBreakPreferenceChange(person.id, e.target.value as BreakPreference)}
@@ -394,7 +394,7 @@ function RosterGridInner({
                       </select>
                     </td>
                     {defaultPositionOptions.length > 0 && onDefaultPositionChange && (
-                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                      <td>
                         <select
                           value={
                             person.defaultAreaId != null && person.defaultSlotIndex != null
@@ -428,11 +428,7 @@ function RosterGridInner({
                       return (
                         <td
                           key={areaId}
-                          style={{
-                            padding: '2px 4px',
-                            borderBottom: '1px solid #eee',
-                            textAlign: 'center',
-                          }}
+                          style={{ textAlign: 'center' }}
                         >
                           <select
                             value={level}
@@ -463,7 +459,7 @@ function RosterGridInner({
                       return (
                         <td
                           key={areaId}
-                          style={{ padding: '2px 4px', borderBottom: '1px solid #eee', textAlign: 'center' }}
+                          style={{ textAlign: 'center' }}
                         >
                           <input
                             type="checkbox"
@@ -515,21 +511,21 @@ function RosterGridInner({
                 People temporarily assigned from other lines. They can be slotted here; skills are unchanged.
               </p>
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
+                <table className="data-table">
                   <thead>
                     <tr>
-                      <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Name</th>
-                      <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 90 }}>Send back</th>
+                      <th>Name</th>
+                      <th style={{ width: 90 }}>Send back</th>
                       {showFlexedColumn && (
-                        <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', minWidth: 100 }}>Flexed</th>
+                        <th style={{ minWidth: 100 }}>Flexed</th>
                       )}
-                      <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 70 }}>Absent</th>
-                      <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 100 }}>Break</th>
+                      <th style={{ width: 70 }}>Absent</th>
+                      <th style={{ width: 100 }}>Break</th>
                       {defaultPositionOptions.length > 0 && onDefaultPositionChange && (
-                        <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', minWidth: 140 }}>Default position</th>
+                        <th style={{ minWidth: 140 }}>Default position</th>
                       )}
                       {areaIds.map((areaId) => (
-                        <th key={areaId} style={{ padding: '6px 8px', textAlign: 'center', borderBottom: '2px solid #ddd', minWidth: 90 }}>
+                        <th key={areaId} style={{ textAlign: 'center', minWidth: 90 }}>
                           {areaLabels[areaId]}
                         </th>
                       ))}
@@ -538,11 +534,11 @@ function RosterGridInner({
                   <tbody>
                     {flexedInRosterPage.map((person) => (
                       <tr key={person.id} style={{ backgroundColor: 'rgba(33, 150, 243, 0.06)' }}>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee', verticalAlign: 'top' }}>
+                        <td style={{ verticalAlign: 'top' }}>
                           <PersonHealthBar person={person} areaIds={areaIds} />
                           <span style={{ fontWeight: 500 }}>{person.name}</span>
                         </td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                        <td>
                           <button
                             type="button"
                             onClick={() => onFlexedToLineChange?.(person.id, null)}
@@ -553,7 +549,7 @@ function RosterGridInner({
                           </button>
                         </td>
                         {showFlexedColumn && (
-                          <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                          <td>
                             <select
                               value={person.flexedToLineId ?? ''}
                               onChange={(e) => onFlexedToLineChange?.(person.id, e.target.value || null)}
@@ -567,7 +563,7 @@ function RosterGridInner({
                             </select>
                           </td>
                         )}
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                        <td>
                           <input
                             type="checkbox"
                             checked={person.absent}
@@ -575,7 +571,7 @@ function RosterGridInner({
                             aria-label={`Mark ${person.name} absent`}
                           />
                         </td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                        <td>
                           <select
                             value={person.breakPreference ?? 'no_preference'}
                             onChange={(e) => onBreakPreferenceChange(person.id, e.target.value as BreakPreference)}
@@ -588,7 +584,7 @@ function RosterGridInner({
                           </select>
                         </td>
                         {defaultPositionOptions.length > 0 && onDefaultPositionChange && (
-                          <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                          <td>
                             <select
                               value={
                                 person.defaultAreaId != null && person.defaultSlotIndex != null
@@ -622,7 +618,7 @@ function RosterGridInner({
                           return (
                             <td
                               key={areaId}
-                              style={{ padding: '2px 4px', borderBottom: '1px solid #eee', textAlign: 'center' }}
+                              style={{ textAlign: 'center' }}
                             >
                               <select
                                 value={level}
@@ -692,38 +688,38 @@ function RosterGridInner({
             <button type="button" onClick={handleAddOT}>Add OT</button>
           </div>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
+            <table className="data-table">
               <thead>
                 <tr>
-                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Name</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 44 }}></th>
+                  <th>Name</th>
+                  <th style={{ width: 44 }}></th>
                   {showFlexedColumn && (
-                    <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', minWidth: 100 }}>Flexed</th>
+                    <th style={{ minWidth: 100 }}>Flexed</th>
                   )}
-                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 50 }}>OT</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 90 }}>Here today</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', width: 100 }}>Break</th>
+                  <th style={{ width: 50 }}>OT</th>
+                  <th style={{ width: 90 }}>Here today</th>
+                  <th style={{ width: 100 }}>Break</th>
                   {defaultPositionOptions.length > 0 && onDefaultPositionChange && (
-                    <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', minWidth: 140 }}>Default position</th>
+                    <th style={{ minWidth: 140 }}>Default position</th>
                   )}
                   {areaIds.map((areaId) => (
-                    <th key={areaId} style={{ padding: '6px 8px', textAlign: 'center', borderBottom: '2px solid #ddd', minWidth: 90 }}>
+                    <th key={areaId} style={{ textAlign: 'center', minWidth: 90 }}>
                       {areaLabels[areaId]}
                     </th>
                   ))}
-                  <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #ddd', fontSize: '0.8rem' }} colSpan={areaIds.length}>
+                  <th colSpan={areaIds.length}>
                     Want to learn
                   </th>
                 </tr>
                 <tr>
                   <th colSpan={5 + (showFlexedColumn ? 1 : 0) + (defaultPositionOptions.length > 0 && onDefaultPositionChange ? 1 : 0)} style={{ padding: 0, border: 'none' }} />
                   {areaIds.map((areaId) => (
-                    <th key={areaId} style={{ padding: '2px 4px', textAlign: 'center', borderBottom: '2px solid #ddd', fontSize: '0.75rem' }}>
+                    <th key={areaId} style={{ textAlign: 'center' }}>
                       {areaLabels[areaId]}
                     </th>
                   ))}
                   {areaIds.map((areaId) => (
-                    <th key={`learn-${areaId}`} style={{ padding: '2px 4px', textAlign: 'center', borderBottom: '2px solid #ddd', fontSize: '0.75rem' }}>
+                    <th key={`learn-${areaId}`} style={{ textAlign: 'center' }}>
                       {areaLabels[areaId]}
                     </th>
                   ))}
@@ -732,7 +728,7 @@ function RosterGridInner({
               <tbody>
                 {otRosterPage.map((person) => (
                   <tr key={person.id} style={{ backgroundColor: (person.otHereToday ?? false) ? 'transparent' : 'rgba(0,0,0,0.04)' }}>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee', verticalAlign: 'top' }}>
+                    <td style={{ verticalAlign: 'top' }}>
                       <PersonHealthBar person={person} areaIds={areaIds} />
                       <input
                         type="text"
@@ -742,7 +738,7 @@ function RosterGridInner({
                         aria-label={`Edit ${person.name}`}
                       />
                     </td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                    <td>
                       <button
                         type="button"
                         onClick={() => onRemovePerson(person.id)}
@@ -754,7 +750,7 @@ function RosterGridInner({
                       </button>
                     </td>
                     {showFlexedColumn && (
-                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                      <td>
                         <select
                           value={person.flexedToLineId ?? ''}
                           onChange={(e) => onFlexedToLineChange?.(person.id, e.target.value || null)}
@@ -768,7 +764,7 @@ function RosterGridInner({
                         </select>
                       </td>
                     )}
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                    <td>
                       <input
                         type="checkbox"
                         checked
@@ -777,7 +773,7 @@ function RosterGridInner({
                         title="Uncheck to move back to Staff"
                       />
                     </td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                    <td>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: (person.otHereToday ?? false) ? 600 : 400 }}>
                         <input
                           type="checkbox"
@@ -789,7 +785,7 @@ function RosterGridInner({
                         {(person.otHereToday ?? false) ? 'Yes — can slot' : 'No'}
                       </label>
                     </td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                    <td>
                       <select
                         value={person.breakPreference ?? 'no_preference'}
                         onChange={(e) => onBreakPreferenceChange(person.id, e.target.value as BreakPreference)}
@@ -803,7 +799,7 @@ function RosterGridInner({
                       </select>
                     </td>
                     {defaultPositionOptions.length > 0 && onDefaultPositionChange && (
-                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
+                      <td>
                         <select
                           value={
                             person.defaultAreaId != null && person.defaultSlotIndex != null
@@ -837,11 +833,7 @@ function RosterGridInner({
                       return (
                         <td
                           key={areaId}
-                          style={{
-                            padding: '2px 4px',
-                            borderBottom: '1px solid #eee',
-                            textAlign: 'center',
-                          }}
+                          style={{ textAlign: 'center' }}
                         >
                           <select
                             value={level}
@@ -872,7 +864,7 @@ function RosterGridInner({
                       return (
                         <td
                           key={areaId}
-                          style={{ padding: '2px 4px', borderBottom: '1px solid #eee', textAlign: 'center' }}
+                          style={{ textAlign: 'center' }}
                         >
                           <input
                             type="checkbox"

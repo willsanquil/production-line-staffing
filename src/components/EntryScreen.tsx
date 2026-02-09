@@ -221,46 +221,17 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
     }
   };
 
-  const cardStyle: React.CSSProperties = {
-    background: '#fff',
-    borderRadius: 12,
-    padding: 24,
-    maxWidth: 420,
-    margin: '0 auto 16px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-  };
-  const btnStyle: React.CSSProperties = {
-    padding: '10px 20px',
-    fontSize: '1rem',
-    borderRadius: 8,
-    border: '1px solid #ccc',
-    background: '#f5f5f5',
-    cursor: 'pointer',
-    marginRight: 8,
-    marginTop: 8,
-  };
-  const btnPrimary: React.CSSProperties = { ...btnStyle, background: '#1a73e8', color: '#fff', borderColor: '#1a73e8' };
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '10px 12px',
-    fontSize: '1rem',
-    borderRadius: 8,
-    border: '1px solid #ccc',
-    marginTop: 6,
-    marginBottom: 12,
-    boxSizing: 'border-box',
-  };
-
   if (step === 'choose') {
     return (
       <div style={{ padding: 24, textAlign: 'center' }}>
         <h1 style={{ fontSize: '1.75rem', marginBottom: 8 }}>Production Line Staffing</h1>
         <p style={{ color: '#666', marginBottom: 24 }}>Choose how you want to use the app</p>
-        <div style={cardStyle}>
+        <div className="section-card" style={{ maxWidth: 420, margin: '0 auto' }}>
           <button
             type="button"
             onClick={onSelectLocal}
-            style={{ ...btnPrimary, width: '100%', padding: 14, marginRight: 0 }}
+            className="btn-primary"
+            style={{ width: '100%', padding: 14 }}
           >
             Local / Demo
           </button>
@@ -272,7 +243,7 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
               <button
                 type="button"
                 onClick={() => setStep('list')}
-                style={{ ...btnStyle, width: '100%', marginRight: 0 }}
+                style={{ width: '100%', marginTop: 8 }}
               >
                 Group
               </button>
@@ -306,13 +277,13 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
           <p>Loading lines…</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <button type="button" onClick={() => setStep('create')} style={btnPrimary}>
+            <button type="button" onClick={() => setStep('create')} className="btn-primary">
               Create a new line
             </button>
-            <button type="button" onClick={() => setStep('join')} style={btnStyle}>
+            <button type="button" onClick={() => setStep('join')}>
               Join an existing line
             </button>
-            <button type="button" onClick={() => setStep('clone')} style={btnStyle}>
+            <button type="button" onClick={() => setStep('clone')}>
               Clone an existing line
             </button>
           </div>
@@ -322,7 +293,7 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
             {lines.length} line(s) available. Join one and enter its password.
           </p>
         )}
-        <button type="button" onClick={() => setStep('choose')} style={{ ...btnStyle, marginTop: 16 }}>
+        <button type="button" onClick={() => setStep('choose')} style={{ marginTop: 16 }}>
           Back
         </button>
       </div>
@@ -371,14 +342,14 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
             {error}
           </div>
         )}
-        <div style={cardStyle}>
+        <div className="section-card">
           <label style={{ display: 'block', fontWeight: 600 }}>Line name</label>
           <input
             type="text"
             value={createName}
             onChange={(e) => setCreateName(e.target.value)}
             placeholder="e.g. IC Line"
-            style={inputStyle}
+            style={{ width: '100%', marginTop: 6, marginBottom: 12 }}
             autoComplete="off"
           />
           <label style={{ display: 'block', fontWeight: 600 }}>Password</label>
@@ -387,14 +358,14 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
             value={createPassword}
             onChange={(e) => setCreatePassword(e.target.value)}
             placeholder="Share this with others to join"
-            style={inputStyle}
+            style={{ width: '100%', marginTop: 6, marginBottom: 12 }}
             autoComplete="new-password"
           />
-          <button type="button" onClick={handleCreate} disabled={loading} style={btnPrimary}>
+          <button type="button" onClick={handleCreate} disabled={loading} className="btn-primary">
             {loading ? 'Creating…' : 'Create line'}
           </button>
         </div>
-        <button type="button" onClick={() => setStep('list')} style={btnStyle}>
+        <button type="button" onClick={() => setStep('list')}>
           Back
         </button>
       </div>
@@ -413,12 +384,12 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
             {error}
           </div>
         )}
-        <div style={cardStyle}>
+        <div className="section-card">
           <label style={{ display: 'block', fontWeight: 600 }}>Source line</label>
           <select
             value={cloneSourceLineId}
             onChange={(e) => setCloneSourceLineId(e.target.value)}
-            style={inputStyle}
+            style={{ width: '100%', marginTop: 6, marginBottom: 12 }}
           >
             <option value="">— Select a line to clone —</option>
             {lines.map((l) => (
@@ -433,7 +404,7 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
             value={cloneSourcePassword}
             onChange={(e) => setCloneSourcePassword(e.target.value)}
             placeholder="Password of the line to clone"
-            style={inputStyle}
+            style={{ width: '100%', marginTop: 6, marginBottom: 12 }}
             autoComplete="current-password"
           />
           <hr style={{ margin: '16px 0', border: 'none', borderTop: '1px solid #eee' }} />
@@ -443,7 +414,7 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
             value={cloneNewName}
             onChange={(e) => setCloneNewName(e.target.value)}
             placeholder="e.g. NIC Line"
-            style={inputStyle}
+            style={{ width: '100%', marginTop: 6, marginBottom: 12 }}
             autoComplete="off"
           />
           <label style={{ display: 'block', fontWeight: 600 }}>New line password</label>
@@ -452,14 +423,14 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
             value={cloneNewPassword}
             onChange={(e) => setCloneNewPassword(e.target.value)}
             placeholder="Password for the new line"
-            style={inputStyle}
+            style={{ width: '100%', marginTop: 6, marginBottom: 12 }}
             autoComplete="new-password"
           />
-          <button type="button" onClick={handleClone} disabled={loading} style={btnPrimary}>
+          <button type="button" onClick={handleClone} disabled={loading} className="btn-primary">
             {loading ? 'Cloning…' : 'Clone line'}
           </button>
         </div>
-        <button type="button" onClick={() => setStep('list')} style={btnStyle}>
+        <button type="button" onClick={() => setStep('list')}>
           Back
         </button>
       </div>
@@ -475,12 +446,12 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
           {error}
         </div>
       )}
-      <div style={cardStyle}>
+      <div className="section-card">
         <label style={{ display: 'block', fontWeight: 600 }}>Line</label>
         <select
           value={joinLineId}
           onChange={(e) => setJoinLineId(e.target.value)}
-          style={inputStyle}
+          style={{ width: '100%', marginTop: 6, marginBottom: 12 }}
         >
           <option value="">— Select a line —</option>
           {lines.map((l) => (
@@ -495,10 +466,10 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
           value={joinPassword}
           onChange={(e) => setJoinPassword(e.target.value)}
           placeholder="Enter the line password"
-          style={inputStyle}
+          style={{ width: '100%', marginTop: 6, marginBottom: 12 }}
           autoComplete="current-password"
         />
-        <button type="button" onClick={handleJoin} disabled={loading || !joinLineId} style={btnPrimary}>
+        <button type="button" onClick={handleJoin} disabled={loading || !joinLineId} className="btn-primary">
           {loading ? 'Joining…' : 'Join'}
         </button>
         {onJoinGroupPresentation && (
@@ -506,13 +477,13 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
             type="button"
             onClick={handleJoinPresentation}
             disabled={loading || !joinLineId}
-            style={{ ...btnStyle, marginLeft: 0, marginTop: 12 }}
+            style={{ marginTop: 12 }}
           >
             {loading ? 'Joining…' : 'Join Staffing View'}
           </button>
         )}
       </div>
-      <button type="button" onClick={() => setStep('list')} style={btnStyle}>
+      <button type="button" onClick={() => setStep('list')}>
         Back
       </button>
     </div>

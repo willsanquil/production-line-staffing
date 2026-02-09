@@ -88,13 +88,7 @@ function LeadSlotDropdown({
             display: 'flex',
             alignItems: 'center',
             minWidth: 140,
-            padding: '6px 8px',
-            border: '1px solid #ccc',
-            borderRadius: 6,
-            background: '#fff',
-            cursor: 'pointer',
             textAlign: 'left',
-            fontSize: '0.9rem',
           }}
           aria-haspopup="listbox"
           aria-expanded={open}
@@ -112,37 +106,14 @@ function LeadSlotDropdown({
         {open && (
           <ul
             role="listbox"
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              marginTop: 4,
-              padding: 4,
-              listStyle: 'none',
-              background: '#fff',
-              border: '1px solid #ccc',
-              borderRadius: 8,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-              zIndex: 100,
-              maxHeight: 220,
-              overflowY: 'auto',
-            }}
+            className="slot-dropdown-list"
+            style={{ maxHeight: 220 }}
           >
             <li style={{ marginBottom: 2 }}>
               <button
                 type="button"
                 onClick={() => select(null)}
-                style={{
-                  width: '100%',
-                  padding: '6px 8px',
-                  textAlign: 'left',
-                  border: 'none',
-                  borderRadius: 4,
-                  background: 'transparent',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  color: '#888',
-                }}
+                style={{ color: '#888' }}
               >
                 — Unassigned —
               </button>
@@ -153,16 +124,9 @@ function LeadSlotDropdown({
                   type="button"
                   onClick={() => select(p.id)}
                   style={{
-                    width: '100%',
                     display: 'flex',
                     alignItems: 'center',
-                    padding: '6px 8px',
-                    textAlign: 'left',
-                    border: 'none',
-                    borderRadius: 4,
-                    background: leadSlots[slotKey] === p.id ? '#e8f4fd' : 'transparent',
-                    cursor: 'pointer',
-                    fontSize: '0.9rem',
+                    background: leadSlots[slotKey] === p.id ? '#e8f4fd' : undefined,
                   }}
                 >
                   <SkillPill

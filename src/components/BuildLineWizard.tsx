@@ -158,7 +158,7 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', padding: '24px 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-        <button type="button" onClick={onCancel} style={{ padding: '8px 12px' }}>
+        <button type="button" className="btn-ghost" onClick={onCancel}>
           ← Cancel
         </button>
         <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>Build your own line</h1>
@@ -176,13 +176,13 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
             autoFocus
           />
           <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" onClick={onCancel} style={{ padding: '10px 20px' }}>
+            <button type="button" className="btn-ghost" onClick={onCancel}>
               Cancel
             </button>
             <button
               type="button"
+              className="btn-primary"
               onClick={() => setStep('sections')}
-              style={{ padding: '10px 20px', fontWeight: 600 }}
             >
               Next: Add sections
             </button>
@@ -196,7 +196,7 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
             Add the major sections (areas) of your line. For each section set min and max slots.
           </p>
           {sections.length === 0 && (
-            <button type="button" onClick={addSection} style={{ marginBottom: 16, padding: '10px 16px' }}>
+            <button type="button" onClick={addSection} style={{ marginBottom: 16 }}>
               + Add first section
             </button>
           )}
@@ -234,25 +234,25 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
                 placeholder="Max"
                 style={{ padding: '8px' }}
               />
-              <button type="button" onClick={() => removeSection(i)} style={{ padding: '8px' }}>
+              <button type="button" className="btn-danger" onClick={() => removeSection(i)}>
                 Remove
               </button>
             </div>
           ))}
           {sections.length > 0 && (
-            <button type="button" onClick={addSection} style={{ marginBottom: 16, padding: '8px 12px' }}>
+            <button type="button" onClick={addSection} style={{ marginBottom: 16 }}>
               + Add section
             </button>
           )}
           <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
-            <button type="button" onClick={() => setStep('name')} style={{ padding: '10px 20px' }}>
+            <button type="button" className="btn-ghost" onClick={() => setStep('name')}>
               Back
             </button>
             <button
               type="button"
+              className="btn-primary"
               onClick={goToFloats}
               disabled={sections.length === 0}
-              style={{ padding: '10px 20px', fontWeight: 600 }}
             >
               Next: Float support
             </button>
@@ -266,7 +266,7 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
             Float positions cover breaks across multiple areas. Add any number of floats and choose which stations each one supports.
           </p>
           {floatSlots.length === 0 && (
-            <button type="button" onClick={addFloat} style={{ marginBottom: 16, padding: '10px 16px' }}>
+            <button type="button" onClick={addFloat} style={{ marginBottom: 16 }}>
               + Add first float
             </button>
           )}
@@ -288,7 +288,7 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
                   placeholder="Float name"
                   style={{ flex: 1, padding: '8px 10px' }}
                 />
-                <button type="button" onClick={() => removeFloat(i)} style={{ padding: '8px' }}>
+                <button type="button" className="btn-danger" onClick={() => removeFloat(i)}>
                   Remove
                 </button>
               </div>
@@ -311,18 +311,18 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
             </div>
           ))}
           {floatSlots.length > 0 && (
-            <button type="button" onClick={addFloat} style={{ marginBottom: 16, padding: '8px 12px' }}>
+            <button type="button" onClick={addFloat} style={{ marginBottom: 16 }}>
               + Add another float
             </button>
           )}
           <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
-            <button type="button" onClick={() => setStep('sections')} style={{ padding: '10px 20px' }}>
+            <button type="button" className="btn-ghost" onClick={() => setStep('sections')}>
               Back
             </button>
             <button
               type="button"
+              className="btn-primary"
               onClick={() => setStep('leads')}
-              style={{ padding: '10px 20px', fontWeight: 600 }}
             >
               Next: Lead roles
             </button>
@@ -372,13 +372,13 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
             </ul>
           )}
           <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" onClick={() => setStep('floats')} style={{ padding: '10px 20px' }}>
+            <button type="button" className="btn-ghost" onClick={() => setStep('floats')}>
               Back
             </button>
             <button
               type="button"
+              className="btn-primary"
               onClick={() => setStep('breaks')}
-              style={{ padding: '10px 20px', fontWeight: 600 }}
             >
               Next: Breaks
             </button>
@@ -400,13 +400,13 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
             style={{ width: 72, padding: '8px 10px', marginBottom: 20 }}
           />
           <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" onClick={() => setStep('leads')} style={{ padding: '10px 20px' }}>
+            <button type="button" className="btn-ghost" onClick={() => setStep('leads')}>
               Back
             </button>
             <button
               type="button"
+              className="btn-primary"
               onClick={handleCreate}
-              style={{ padding: '10px 20px', fontWeight: 600, background: '#27ae60', color: '#fff', border: 'none' }}
             >
               Create line
             </button>
