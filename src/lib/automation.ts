@@ -152,7 +152,7 @@ export function applyDefaultPositionsThenSpread(
   const assigned = new Set(assignedFromLocked);
   const areaIdSet = new Set(areaIds);
 
-  // Phase 1: assign default positions (stable order so conflicts are deterministic)
+  // Phase 1: assign default positions. Try exact (area, slot) first; if taken/disabled/locked, try any other slot in same area so multiple people defaulting to same area all get that area when possible.
   const withDefault = available.filter(
     (p) =>
       p.defaultAreaId != null &&
@@ -161,14 +161,31 @@ export function applyDefaultPositionsThenSpread(
   );
   for (const person of withDefault) {
     const areaId = person.defaultAreaId!;
-    const slotIdx = person.defaultSlotIndex!;
+    const preferredSlotIdx = person.defaultSlotIndex!;
     const list = out[areaId];
-    if (!list || slotIdx < 0 || slotIdx >= list.length) continue;
-    const slot = list[slotIdx];
-    if (slot.disabled || slot.locked || slot.personId != null) continue;
+    if (!list) continue;
     if (!eligibleForArea(person, areaId, requiresFn)) continue;
-    slot.personId = person.id;
-    assigned.add(person.id);
+    // Try exact slot first
+    let placed = false;
+    if (preferredSlotIdx >= 0 && preferredSlotIdx < list.length) {
+      const slot = list[preferredSlotIdx];
+      if (!slot.disabled && !slot.locked && slot.personId == null) {
+        slot.personId = person.id;
+        assigned.add(person.id);
+        placed = true;
+      }
+    }
+    // If exact slot unavailable, try any empty slot in same area
+    if (!placed) {
+      for (let i = 0; i < list.length; i++) {
+        const slot = list[i];
+        if (slot.disabled || slot.locked || slot.personId != null) continue;
+        slot.personId = person.id;
+        assigned.add(person.id);
+        placed = true;
+        break;
+      }
+    }
   }
 
   // Phase 2: fill remaining slots (anchor slots first, then by juiced/min order, best fit)
