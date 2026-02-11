@@ -83,6 +83,7 @@ import { getCloudSession, setCloudSession, clearCloudSession, EntryScreen } from
 import { LineManager } from './components/LineManager';
 import { BuildLineWizard } from './components/BuildLineWizard';
 import { BreakTable } from './components/BreakTable';
+import { PersonProfileModal } from './components/PersonProfileModal';
 
 const PERSIST_DEBOUNCE_MS = 400;
 
@@ -179,6 +180,7 @@ export default function App() {
   const [areaCapacityOverrides, setAreaCapacityOverrides] = useState(firstLineState.areaCapacityOverrides ?? {});
   const [areaNameOverrides, setAreaNameOverrides] = useState(firstLineState.areaNameOverrides ?? {});
   const [slotLabelsByArea, setSlotLabelsByArea] = useState(firstLineState.slotLabelsByArea ?? {});
+  const [profilePersonId, setProfilePersonId] = useState<string | null>(null);
 
   const currentConfig = useMemo(
     () => rootState.lines.find((l) => l.id === rootState.currentLineId),
@@ -581,22 +583,6 @@ export default function App() {
     setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, breakPreference })));
   }, []);
 
-  const handleMakeEveryoneTrained = useCallback(() => {
-    if (!window.confirm('Set all roster members to "Trained" for every area? This will overwrite their current skill levels.')) return;
-    setRootState((prev) => {
-      const lineState = prev.lineStates[prev.currentLineId];
-      if (!lineState) return prev;
-      const roster = (lineState.roster ?? []).map((p) => {
-        const skills = { ...p.skills };
-        for (const aid of areaIds) {
-          skills[aid] = 'trained';
-        }
-        return { ...p, skills };
-      });
-      return { ...prev, lineStates: { ...prev.lineStates, [prev.currentLineId]: { ...lineState, roster } } };
-    });
-  }, [areaIds]);
-
   const handleSkillChange = useCallback((personId: string, areaId: AreaId, level: SkillLevel) => {
     setRootState((prev) =>
       updatePersonInRoot(prev, personId, (p) => ({ ...p, skills: { ...p.skills, [areaId]: level } }))
@@ -613,6 +599,14 @@ export default function App() {
     );
   }, []);
 
+  const handleOpenProfile = useCallback((personId: string) => {
+    setProfilePersonId(personId);
+  }, []);
+
+  const handleCloseProfile = useCallback(() => {
+    setProfilePersonId(null);
+  }, []);
+
   const handleDefaultPositionChange = useCallback(
     (personId: string, areaId: string | null, slotIndex: number | null) => {
       setRootState((prev) =>
@@ -625,18 +619,6 @@ export default function App() {
     },
     []
   );
-
-  const defaultPositionOptions = useMemo(() => {
-    const list: { areaId: string; slotIndex: number; label: string }[] = [];
-    for (const areaId of areaIds) {
-      list.push({
-        areaId,
-        slotIndex: 0,
-        label: areaLabels[areaId] ?? areaId,
-      });
-    }
-    return list;
-  }, [areaIds, areaLabels]);
 
   const handleAreaRequiresTrainedOrExpertChange = useCallback((areaId: string, value: boolean) => {
     setRootState((prev) => {
@@ -1630,17 +1612,12 @@ export default function App() {
         onAddPerson={handleAddPerson}
         onAddOT={handleAddOT}
         onToggleAbsent={handleToggleAbsent}
-        onToggleLead={handleToggleLead}
         onToggleOT={handleToggleOT}
         onToggleOTHereToday={handleToggleOTHereToday}
-        onToggleLate={handleToggleLate}
-        onToggleLeavingEarly={handleToggleLeavingEarly}
         onBreakPreferenceChange={handleBreakPreferenceChange}
         onSkillChange={handleSkillChange}
         onAreasWantToLearnChange={handleAreasWantToLearnChange}
         onFlexedToLineChange={handleFlexedToLineChange}
-        defaultPositionOptions={defaultPositionOptions}
-        onDefaultPositionChange={handleDefaultPositionChange}
         saveMessage={saveMessage}
         onSaveToFile={handleSaveToFile}
         onOpenFromFile={handleOpenFromFile}
@@ -1648,7 +1625,7 @@ export default function App() {
         isSaveToFileSupported={isSaveToFileSupported}
         onImportFromCloudLine={handleOpenImportModal}
         isCloudMode={!!cloudLineId}
-        onMakeEveryoneTrained={handleMakeEveryoneTrained}
+        onOpenProfile={handleOpenProfile}
       />
 
       <div className="totals-and-leads-row" style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', marginBottom: 12 }}>
@@ -1956,6 +1933,22 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {profilePersonId && (
+        <PersonProfileModal
+          personId={profilePersonId}
+          lines={rootState.lines}
+          lineStates={rootState.lineStates}
+          currentLineId={rootState.currentLineId}
+          onClose={handleCloseProfile}
+          onToggleLead={handleToggleLead}
+          onToggleLate={handleToggleLate}
+          onToggleLeavingEarly={handleToggleLeavingEarly}
+          onBreakPreferenceChange={handleBreakPreferenceChange}
+          onSkillChange={handleSkillChange}
+          onDefaultPositionChange={handleDefaultPositionChange}
+        />
       )}
 
       <div className="areas-grid">

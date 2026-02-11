@@ -21,17 +21,11 @@ interface RosterGridProps {
   onAddPerson: (name: string) => void;
   onAddOT: (name: string) => void;
   onToggleAbsent: (personId: string, absent: boolean) => void;
-  onToggleLead: (personId: string, lead: boolean) => void;
   onToggleOT: (personId: string, ot: boolean) => void;
   onToggleOTHereToday: (personId: string, otHereToday: boolean) => void;
-  onToggleLate: (personId: string, late: boolean) => void;
-  onToggleLeavingEarly: (personId: string, leavingEarly: boolean) => void;
   onBreakPreferenceChange: (personId: string, preference: BreakPreference) => void;
   onSkillChange: (personId: string, areaId: AreaId, level: SkillLevel) => void;
   onAreasWantToLearnChange: (personId: string, areaId: AreaId, checked: boolean) => void;
-  /** Default position on the line (area + slot). When provided, show Default column. */
-  defaultPositionOptions?: { areaId: string; slotIndex: number; label: string }[];
-  onDefaultPositionChange?: (personId: string, areaId: string | null, slotIndex: number | null) => void;
   /** Roster file actions (optional; when provided, shown in header next to Hide roster) */
   saveMessage?: string | null;
   onSaveToFile?: () => void;
@@ -41,8 +35,8 @@ interface RosterGridProps {
   /** Import roster from another cloud line (for merging lines). */
   onImportFromCloudLine?: () => void;
   isCloudMode?: boolean;
-  /** Set all roster members to "trained" in every area. */
-  onMakeEveryoneTrained?: () => void;
+  /** Open a detailed profile view for this person. */
+  onOpenProfile?: (personId: string) => void;
 }
 
 const SKILL_LEVELS: SkillLevel[] = ['no_experience', 'training', 'trained', 'expert'];
@@ -128,16 +122,11 @@ function RosterGridInner({
   onAddPerson,
   onAddOT,
   onToggleAbsent,
-  onToggleLead,
   onToggleOT,
   onToggleOTHereToday,
-  onToggleLate,
-  onToggleLeavingEarly,
   onBreakPreferenceChange,
   onSkillChange,
   onAreasWantToLearnChange,
-  defaultPositionOptions = [],
-  onDefaultPositionChange,
   saveMessage,
   onSaveToFile,
   onOpenFromFile,
@@ -145,7 +134,7 @@ function RosterGridInner({
   isSaveToFileSupported,
   onImportFromCloudLine,
   isCloudMode,
-  onMakeEveryoneTrained,
+  onOpenProfile,
 }: RosterGridProps) {
   const areaIds = areaIdsProp ?? [...AREA_IDS];
   const otherLines = useMemo(() => lines.filter((l) => l.id !== currentLineId), [lines, currentLineId]);
@@ -232,11 +221,6 @@ function RosterGridInner({
           <button type="button" onClick={onToggleVisible}>
             {visible ? 'Hide roster' : 'Show roster'}
           </button>
-          {onMakeEveryoneTrained && (
-            <button type="button" onClick={onMakeEveryoneTrained}>
-              Make everyone trained
-            </button>
-          )}
           {onSaveToFile && onOpenFromFile && (isSaveToFileSupported?.() ?? true) && (
             <>
               <button type="button" onClick={onSaveToFile}>Save to file</button>
@@ -278,13 +262,7 @@ function RosterGridInner({
                     <th style={{ minWidth: 100 }} title="Temporarily assign this person to another line">Flexed</th>
                   )}
                   <th style={{ width: 70 }}>Absent</th>
-                  <th style={{ width: 60 }}>Lead</th>
-                  <th style={{ width: 55 }}>Late</th>
-                  <th style={{ width: 90 }}>Leave early</th>
-                  <th style={{ width: 100 }}>Break</th>
-                  {defaultPositionOptions.length > 0 && onDefaultPositionChange && (
-                    <th style={{ minWidth: 140 }}>Default position</th>
-                  )}
+                  <th style={{ width: 70 }}>Profile</th>
                   {areaIds.map((areaId) => (
                     <th key={areaId} style={{ textAlign: 'center', minWidth: 90 }}>
                       {areaLabels[areaId]}
@@ -295,7 +273,7 @@ function RosterGridInner({
                   </th>
                 </tr>
                 <tr>
-                  <th colSpan={7 + (showFlexedColumn ? 1 : 0) + (defaultPositionOptions.length > 0 && onDefaultPositionChange ? 1 : 0)} style={{ padding: 0, border: 'none' }} />
+                  <th colSpan={5 + (showFlexedColumn ? 1 : 0)} style={{ padding: 0, border: 'none' }} />
                   {areaIds.map((areaId) => (
                     <th key={areaId} style={{ textAlign: 'center' }}>
                       {areaLabels[areaId]}
@@ -357,72 +335,17 @@ function RosterGridInner({
                       />
                     </td>
                     <td>
-                      <input
-                        type="checkbox"
-                        checked={person.lead ?? false}
-                        onChange={(e) => onToggleLead(person.id, e.target.checked)}
-                        aria-label={`Mark ${person.name} as lead`}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={person.late ?? false}
-                        onChange={(e) => onToggleLate(person.id, e.target.checked)}
-                        aria-label={`Mark ${person.name} late`}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={person.leavingEarly ?? false}
-                        onChange={(e) => onToggleLeavingEarly(person.id, e.target.checked)}
-                        aria-label={`Mark ${person.name} leaving early`}
-                      />
-                    </td>
-                    <td>
-                      <select
-                        value={person.breakPreference ?? 'no_preference'}
-                        onChange={(e) => onBreakPreferenceChange(person.id, e.target.value as BreakPreference)}
-                        style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 100 }}
-                        title="Break schedule preference"
-                        aria-label={`${person.name} break preference`}
-                      >
-                        <option value="no_preference">Prefer middle</option>
-                        <option value="prefer_early">Prefer early</option>
-                        <option value="prefer_late">Prefer late</option>
-                      </select>
-                    </td>
-                    {defaultPositionOptions.length > 0 && onDefaultPositionChange && (
-                      <td>
-                        <select
-                          value={
-                            person.defaultAreaId != null && person.defaultSlotIndex != null
-                              ? `${person.defaultAreaId}:${person.defaultSlotIndex}`
-                              : ''
-                          }
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            if (!v) {
-                              onDefaultPositionChange(person.id, null, null);
-                              return;
-                            }
-                            const [areaId, slotIndexStr] = v.split(':');
-                            const slotIndex = parseInt(slotIndexStr, 10);
-                            if (!Number.isNaN(slotIndex)) onDefaultPositionChange(person.id, areaId, slotIndex);
-                          }}
-                          style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 130 }}
-                          title="Default position on the line"
+                      {onOpenProfile && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenProfile(person.id)}
+                          aria-label={`Open profile for ${person.name}`}
+                          style={{ padding: '2px 6px', fontSize: '0.8rem' }}
                         >
-                          <option value="">—</option>
-                          {defaultPositionOptions.map((o) => (
-                            <option key={`${o.areaId}:${o.slotIndex}`} value={`${o.areaId}:${o.slotIndex}`}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                    )}
+                          Profile
+                        </button>
+                      )}
+                    </td>
                     {areaIds.map((areaId) => {
                       const level = person.skills[areaId] ?? 'no_experience';
                       return (
@@ -521,9 +444,6 @@ function RosterGridInner({
                       )}
                       <th style={{ width: 70 }}>Absent</th>
                       <th style={{ width: 100 }}>Break</th>
-                      {defaultPositionOptions.length > 0 && onDefaultPositionChange && (
-                        <th style={{ minWidth: 140 }}>Default position</th>
-                      )}
                       {areaIds.map((areaId) => (
                         <th key={areaId} style={{ textAlign: 'center', minWidth: 90 }}>
                           {areaLabels[areaId]}
@@ -583,36 +503,6 @@ function RosterGridInner({
                             <option value="prefer_late">Prefer late</option>
                           </select>
                         </td>
-                        {defaultPositionOptions.length > 0 && onDefaultPositionChange && (
-                          <td>
-                            <select
-                              value={
-                                person.defaultAreaId != null && person.defaultSlotIndex != null
-                                  ? `${person.defaultAreaId}:${person.defaultSlotIndex}`
-                                  : ''
-                              }
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                if (!v) {
-                                  onDefaultPositionChange(person.id, null, null);
-                                  return;
-                                }
-                                const [areaId, slotIndexStr] = v.split(':');
-                                const slotIndex = parseInt(slotIndexStr, 10);
-                                if (!Number.isNaN(slotIndex)) onDefaultPositionChange(person.id, areaId, slotIndex);
-                              }}
-                              style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 130 }}
-                              title="Default position"
-                            >
-                              <option value="">—</option>
-                              {defaultPositionOptions.map((o) => (
-                                <option key={`${o.areaId}:${o.slotIndex}`} value={`${o.areaId}:${o.slotIndex}`}>
-                                  {o.label}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                        )}
                         {areaIds.map((areaId) => {
                           const level = person.skills[areaId] ?? 'no_experience';
                           return (
@@ -699,9 +589,6 @@ function RosterGridInner({
                   <th style={{ width: 50 }}>OT</th>
                   <th style={{ width: 90 }}>Here today</th>
                   <th style={{ width: 100 }}>Break</th>
-                  {defaultPositionOptions.length > 0 && onDefaultPositionChange && (
-                    <th style={{ minWidth: 140 }}>Default position</th>
-                  )}
                   {areaIds.map((areaId) => (
                     <th key={areaId} style={{ textAlign: 'center', minWidth: 90 }}>
                       {areaLabels[areaId]}
@@ -712,7 +599,7 @@ function RosterGridInner({
                   </th>
                 </tr>
                 <tr>
-                  <th colSpan={5 + (showFlexedColumn ? 1 : 0) + (defaultPositionOptions.length > 0 && onDefaultPositionChange ? 1 : 0)} style={{ padding: 0, border: 'none' }} />
+                  <th colSpan={5 + (showFlexedColumn ? 1 : 0)} style={{ padding: 0, border: 'none' }} />
                   {areaIds.map((areaId) => (
                     <th key={areaId} style={{ textAlign: 'center' }}>
                       {areaLabels[areaId]}
@@ -798,36 +685,6 @@ function RosterGridInner({
                         <option value="prefer_late">Prefer late</option>
                       </select>
                     </td>
-                    {defaultPositionOptions.length > 0 && onDefaultPositionChange && (
-                      <td>
-                        <select
-                          value={
-                            person.defaultAreaId != null && person.defaultSlotIndex != null
-                              ? `${person.defaultAreaId}:${person.defaultSlotIndex}`
-                              : ''
-                          }
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            if (!v) {
-                              onDefaultPositionChange(person.id, null, null);
-                              return;
-                            }
-                            const [areaId, slotIndexStr] = v.split(':');
-                            const slotIndex = parseInt(slotIndexStr, 10);
-                            if (!Number.isNaN(slotIndex)) onDefaultPositionChange(person.id, areaId, slotIndex);
-                          }}
-                          style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 130 }}
-                          title="Default position on the line"
-                        >
-                          <option value="">—</option>
-                          {defaultPositionOptions.map((o) => (
-                            <option key={`${o.areaId}:${o.slotIndex}`} value={`${o.areaId}:${o.slotIndex}`}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                    )}
                     {areaIds.map((areaId) => {
                       const level = person.skills[areaId] ?? 'no_experience';
                       return (

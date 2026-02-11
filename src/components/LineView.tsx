@@ -459,68 +459,6 @@ function LineViewInner({
         );
       })}
 
-      {assignedLeadKeys.length > 0 && (
-        isCompact ? (
-          <section className="presentation-section-compact" style={{ padding: 6, marginBottom: 8 }}>
-            <h2 style={{ fontSize: '0.8rem', marginBottom: 4 }}>Leads</h2>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="presentation-table-compact">
-                <thead>
-                  <tr>
-                    <th className="presentation-th-compact">Position</th>
-                    <th className="presentation-th-compact">Name</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {assignedLeadKeys.map((key: string) => {
-                    const personId = leadSlots[key]!;
-                    const skillAreaId = /^\d+$/.test(key) ? (firstAreaId ?? '') : key;
-                    const skill = getSkillInArea(skillAreaId as AreaId, personId);
-                    return (
-                      <tr key={key}>
-                        <td className="presentation-td-compact">{getLeadSlotLabel(key)}</td>
-                        <td className="presentation-td-compact">
-                          <span className={`skill-name-${skill}`}>{getName(personId)}</span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        ) : (
-          <section className="section-card" style={{ marginTop: 8 }}>
-            <h2>Leads</h2>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="presentation-table">
-                <thead>
-                  <tr>
-                    <th>Position</th>
-                    <th>Name</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {assignedLeadKeys.map((key: string) => {
-                    const personId = leadSlots[key]!;
-                    const skillAreaId = /^\d+$/.test(key) ? (firstAreaId ?? '') : key;
-                    const skill = getSkillInArea(skillAreaId as AreaId, personId);
-                    return (
-                      <tr key={key}>
-                        <td>{getLeadSlotLabel(key)}</td>
-                        <td>
-                          <span className={`skill-name-${skill}`} style={{ fontSize: nameFontSize, fontWeight: 600 }}>{getName(personId)}</span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )
-      )}
-
       {floatSlots.length > 0 && (
         isCompact ? (
           <section className="presentation-section-compact" style={{ padding: 6, marginTop: 8, marginBottom: 8 }}>
@@ -590,6 +528,68 @@ function LineViewInner({
                             </td>
                           );
                         })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )
+      )}
+
+      {assignedLeadKeys.length > 0 && (
+        isCompact ? (
+          <section className="presentation-section-compact" style={{ padding: 6, marginBottom: 8 }}>
+            <h2 style={{ fontSize: '0.8rem', marginBottom: 4 }}>Leads</h2>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="presentation-table-compact">
+                <thead>
+                  <tr>
+                    <th className="presentation-th-compact">Position</th>
+                    <th className="presentation-th-compact">Name</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {assignedLeadKeys.map((key: string) => {
+                    const personId = leadSlots[key]!;
+                    const skillAreaId = /^\d+$/.test(key) ? (firstAreaId ?? '') : key;
+                    const skill = getSkillInArea(skillAreaId as AreaId, personId);
+                    return (
+                      <tr key={key}>
+                        <td className="presentation-td-compact">{getLeadSlotLabel(key)}</td>
+                        <td className="presentation-td-compact">
+                          <span className={`skill-name-${skill}`}>{getName(personId)}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : (
+          <section className="section-card" style={{ marginTop: 8 }}>
+            <h2>Leads</h2>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="presentation-table">
+                <thead>
+                  <tr>
+                    <th>Position</th>
+                    <th>Name</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {assignedLeadKeys.map((key: string) => {
+                    const personId = leadSlots[key]!;
+                    const skillAreaId = /^\d+$/.test(key) ? (firstAreaId ?? '') : key;
+                    const skill = getSkillInArea(skillAreaId as AreaId, personId);
+                    return (
+                      <tr key={key}>
+                        <td>{getLeadSlotLabel(key)}</td>
+                        <td>
+                          <span className={`skill-name-${skill}`} style={{ fontSize: nameFontSize, fontWeight: 600 }}>{getName(personId)}</span>
+                        </td>
                       </tr>
                     );
                   })}
