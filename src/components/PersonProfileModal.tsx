@@ -19,6 +19,7 @@ interface PersonProfileModalProps {
   onSkillChange: (personId: string, areaId: AreaId, level: SkillLevel) => void;
   onDefaultPositionChange: (personId: string, areaId: string | null, slotIndex: number | null) => void;
   onAreasWantToLearnChange: (personId: string, areaId: AreaId, checked: boolean) => void;
+  onFlexedToLineChange?: (personId: string, lineId: string | null) => void;
 }
 
 function findPerson(lineStates: Record<string, LineState>, personId: string): RosterPerson | null {
@@ -43,8 +44,20 @@ export function PersonProfileModal({
   onSkillChange,
   onDefaultPositionChange,
   onAreasWantToLearnChange,
+  onFlexedToLineChange,
 }: PersonProfileModalProps) {
   const person = findPerson(lineStates, personId);
+  const homeLineId = useMemo(() => {
+    for (const [lineId, state] of Object.entries(lineStates)) {
+      if (state?.roster?.some((p) => p.id === personId)) return lineId;
+    }
+    return null;
+  }, [lineStates, personId]);
+  const otherLinesForFlex = useMemo(
+    () => (homeLineId ? lines.filter((l) => l.id !== homeLineId) : []),
+    [lines, homeLineId]
+  );
+  const flexedToLine = person?.flexedToLineId ? lines.find((l) => l.id === person.flexedToLineId) : null;
   const [selectedLineId, setSelectedLineId] = useState(() => {
     if (lines.some((l) => l.id === currentLineId)) return currentLineId;
     return lines[0]?.id ?? '';
@@ -137,6 +150,38 @@ export function PersonProfileModal({
               <option value="prefer_early">Prefer early</option>
               <option value="prefer_late">Prefer late</option>
             </select>
+
+            {person && onFlexedToLineChange && lines.length > 1 && homeLineId && (
+              <>
+                <h3 style={{ margin: '16px 0 8px 0', fontSize: '1rem' }}>Flex to line</h3>
+                <p style={{ fontSize: '0.85rem', color: '#555', marginTop: 0 }}>
+                  Home line: <strong>{lines.find((l) => l.id === homeLineId)?.name ?? homeLineId}</strong>
+                  {flexedToLine ? `. Currently flexed to ${flexedToLine.name}.` : '.'}
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                  {flexedToLine ? (
+                    <button
+                      type="button"
+                      onClick={() => onFlexedToLineChange(person.id, null)}
+                      style={{ padding: '6px 12px', fontSize: '0.9rem' }}
+                    >
+                      Send back to home line
+                    </button>
+                  ) : (
+                    otherLinesForFlex.map((l) => (
+                      <button
+                        key={l.id}
+                        type="button"
+                        onClick={() => onFlexedToLineChange(person.id, l.id)}
+                        style={{ padding: '6px 12px', fontSize: '0.9rem' }}
+                      >
+                        Flex to {l.name}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
           </section>
 
           {/* Right: skills per line */}

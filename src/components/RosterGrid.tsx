@@ -315,18 +315,31 @@ function RosterGridInner({
                     </td>
                     {showFlexedColumn && (
                       <td>
-                        <select
-                          value={person.flexedToLineId ?? ''}
-                          onChange={(e) => onFlexedToLineChange?.(person.id, e.target.value || null)}
-                          style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 88 }}
-                          title="Temporarily assign to another line"
-                          aria-label={`${person.name} flexed to`}
-                        >
-                          <option value="">—</option>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                          <select
+                            value={person.flexedToLineId ?? ''}
+                            onChange={(e) => onFlexedToLineChange?.(person.id, e.target.value || null)}
+                            style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 88 }}
+                            title="Temporarily assign to another line"
+                            aria-label={`${person.name} flexed to`}
+                          >
+                            <option value="">—</option>
+                            {otherLines.map((l) => (
+                              <option key={l.id} value={l.id}>{l.name}</option>
+                            ))}
+                          </select>
                           {otherLines.map((l) => (
-                            <option key={l.id} value={l.id}>{l.name}</option>
+                            <button
+                              key={l.id}
+                              type="button"
+                              onClick={() => onFlexedToLineChange?.(person.id, l.id)}
+                              style={{ padding: '2px 6px', fontSize: '0.75rem', whiteSpace: 'nowrap' }}
+                              title={`Flex to ${l.name}`}
+                            >
+                              → {l.name}
+                            </button>
                           ))}
-                        </select>
+                        </div>
                       </td>
                     )}
                     <td>
@@ -610,17 +623,30 @@ function RosterGridInner({
                     </td>
                     {showFlexedColumn && (
                       <td>
-                        <select
-                          value={person.flexedToLineId ?? ''}
-                          onChange={(e) => onFlexedToLineChange?.(person.id, e.target.value || null)}
-                          style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 88 }}
-                          aria-label={`${person.name} flexed to`}
-                        >
-                          <option value="">—</option>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                          <select
+                            value={person.flexedToLineId ?? ''}
+                            onChange={(e) => onFlexedToLineChange?.(person.id, e.target.value || null)}
+                            style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 88 }}
+                            aria-label={`${person.name} flexed to`}
+                          >
+                            <option value="">—</option>
+                            {otherLines.map((l) => (
+                              <option key={l.id} value={l.id}>{l.name}</option>
+                            ))}
+                          </select>
                           {otherLines.map((l) => (
-                            <option key={l.id} value={l.id}>{l.name}</option>
+                            <button
+                              key={l.id}
+                              type="button"
+                              onClick={() => onFlexedToLineChange?.(person.id, l.id)}
+                              style={{ padding: '2px 6px', fontSize: '0.75rem', whiteSpace: 'nowrap' }}
+                              title={`Flex to ${l.name}`}
+                            >
+                              → {l.name}
+                            </button>
                           ))}
-                        </select>
+                        </div>
                       </td>
                     )}
                     <td>

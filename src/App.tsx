@@ -1958,6 +1958,7 @@ export default function App() {
           onSkillChange={handleSkillChange}
           onDefaultPositionChange={handleDefaultPositionChange}
           onAreasWantToLearnChange={handleAreasWantToLearnChange}
+          onFlexedToLineChange={handleFlexedToLineChange}
         />
       )}
 
