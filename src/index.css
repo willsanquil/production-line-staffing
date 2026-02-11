@@ -2,11 +2,11 @@
    Design Tokens
    ============================================================ */
 :root {
-  /* Colors — backgrounds */
-  --color-bg-page: #f0f2f5;
-  --color-bg-card: #ffffff;
-  --color-bg-subtle: #f8f9fa;
-  --color-bg-input: #ffffff;
+  /* Colors — backgrounds (surface elevation) */
+  --color-bg-page: #f2f3f6;
+  --color-bg-card: var(--surface-0);
+  --color-bg-subtle: var(--surface-2);
+  --color-bg-input: var(--surface-0);
 
   /* Colors — text */
   --color-text-primary: #1a1a2e;
@@ -157,34 +157,44 @@ body {
   flex-wrap: wrap;
   margin-bottom: var(--space-4);
   padding: var(--space-4) var(--space-5);
-  font-size: 1.5rem;
+  font-size: 1.35rem;
   font-weight: 600;
-  background: var(--color-bg-card);
+  letter-spacing: -0.02em;
+  color: var(--color-text-primary);
+  background: var(--surface-0);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border-light);
+  box-shadow: var(--shadow-xs);
 }
 
 /* ============================================================
-   Section Card
+   Section Card (elevation: sits above page)
    ============================================================ */
 .section-card {
-  background: var(--color-bg-card);
-  border-radius: var(--radius-md);
+  background: var(--surface-0);
+  border-radius: var(--radius-lg);
   padding: var(--space-5);
   margin-bottom: var(--space-4);
   border: 1px solid var(--color-border-light);
   box-shadow: var(--shadow-sm);
-  transition: box-shadow var(--transition-normal);
+  transition: box-shadow var(--transition-normal), border-color var(--transition-fast);
 }
 .section-card:hover {
   box-shadow: var(--shadow-md);
+  border-color: var(--color-border-default);
 }
 
 .section-card h2 {
   margin: 0 0 0.5rem 0;
-  font-size: 1.1rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--color-text-primary);
+}
+.section-card h3 {
   font-weight: 600;
   letter-spacing: -0.01em;
+  color: var(--color-text-secondary);
 }
 
 /* ============================================================
@@ -201,6 +211,9 @@ body {
   min-width: 0;
   min-height: 180px;
   overflow: visible;
+  background: var(--surface-0);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-light);
 }
 @media (max-width: 1400px) {
   .areas-grid { grid-template-columns: repeat(4, minmax(200px, 1fr)); }
@@ -213,13 +226,15 @@ body {
    Grand Total
    ============================================================ */
 .grand-total {
-  font-size: 1.25rem;
+  font-size: 1.2rem;
   font-weight: 600;
+  letter-spacing: -0.01em;
   padding: var(--space-4);
-  background: linear-gradient(135deg, #dbeafe, #ede9fe);
-  border: 1px solid #c7d2fe;
+  background: var(--color-accent-primary-light);
+  border: 1px solid var(--color-border-default);
   border-radius: var(--radius-md);
   margin-bottom: var(--space-4);
+  color: var(--color-text-primary);
 }
 
 /* ============================================================
@@ -228,7 +243,7 @@ body {
 .save-load-section {
   margin-top: var(--space-4);
   padding: var(--space-4);
-  background: var(--color-bg-subtle);
+  background: var(--surface-2);
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border-light);
 }
@@ -390,8 +405,8 @@ button {
   font-family: inherit;
 }
 button:hover {
-  background: var(--color-bg-subtle);
-  border-color: #c8ccd4;
+  background: var(--surface-2);
+  border-color: var(--color-border-strong);
   box-shadow: var(--shadow-xs);
 }
 button:active {
@@ -489,27 +504,28 @@ textarea {
 }
 
 /* ============================================================
-   Data Table
+   Data Table (subtle layering: header one step down)
    ============================================================ */
 .data-table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 0.8125rem;
-  border: 1px solid var(--color-border-default);
+  border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
   overflow: hidden;
+  background: var(--surface-0);
 }
 .data-table th {
   padding: var(--space-3) var(--space-4);
   text-align: left;
-  background: var(--color-bg-subtle);
+  background: var(--surface-2);
   font-weight: 600;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: var(--color-text-secondary);
-  border-bottom: 2px solid var(--color-border-default);
+  border-bottom: 1px solid var(--color-border-light);
   white-space: nowrap;
 }
 .data-table td {
@@ -518,7 +534,7 @@ textarea {
   vertical-align: middle;
 }
 .data-table tbody tr:last-child td { border-bottom: none; }
-.data-table tbody tr:hover { background: var(--color-bg-subtle); }
+.data-table tbody tr:hover { background: var(--surface-1); }
 
 /* ============================================================
    Presentation Table
@@ -527,16 +543,17 @@ textarea {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  border: 1px solid var(--color-border-default);
+  border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
   overflow: hidden;
+  background: var(--surface-0);
 }
 .presentation-table th {
   padding: var(--space-3) var(--space-4);
   text-align: left;
-  background: var(--color-bg-subtle);
+  background: var(--surface-2);
   font-weight: 600;
-  border-bottom: 1px solid var(--color-border-default);
+  border-bottom: 1px solid var(--color-border-light);
 }
 .presentation-table td {
   padding: var(--space-3) var(--space-4);
@@ -598,11 +615,12 @@ textarea {
   gap: var(--space-2);
   flex-wrap: wrap;
   align-items: center;
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-bg-card);
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface-0);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border-light);
   margin-bottom: var(--space-5);
+  box-shadow: var(--shadow-xs);
 }
 
 /* ============================================================
@@ -615,8 +633,8 @@ textarea {
   margin-top: var(--space-1);
   padding: var(--space-1);
   list-style: none;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border-default);
+  background: var(--surface-0);
+  border: 1px solid var(--color-border-light);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   z-index: 100;
@@ -636,7 +654,7 @@ textarea {
   transition: background var(--transition-fast);
 }
 .slot-dropdown-list li button:hover {
-  background: var(--color-accent-secondary);
+  background: var(--surface-2);
 }
 
 /* ============================================================
@@ -652,14 +670,14 @@ textarea {
   flex: 1 1 110px;
   min-width: 110px;
   max-width: 140px;
-  border: 1px solid var(--color-border-default);
+  border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
   padding: var(--space-3);
-  background: var(--color-bg-card);
+  background: var(--surface-0);
   font-size: 0.85rem;
 }
-.timeline-hour.has-break { border-color: #f1c40f; background: #fef9e7; }
-.timeline-hour.has-lunch { border-color: #3498db; background: #ebf5fb; }
+.timeline-hour.has-break { border-color: var(--color-warning); background: #fef9e7; }
+.timeline-hour.has-lunch { border-color: var(--color-border-focus); background: #ebf5fb; }
 
 /* ============================================================
    Task List
@@ -674,7 +692,7 @@ textarea {
   padding: var(--space-1) 6px;
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-sm);
-  background: var(--color-bg-card);
+  background: var(--surface-0);
   box-sizing: border-box;
 }
 .task-list-input::placeholder { color: var(--color-text-muted); }
@@ -718,7 +736,7 @@ textarea {
   text-align: left;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border-default);
-  background: var(--color-bg-card);
+  background: var(--surface-0);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 .slot-dropdown-trigger:hover {
@@ -751,7 +769,7 @@ textarea {
   flex-direction: column;
   gap: 6px;
   padding: 10px 12px;
-  background: var(--color-bg-subtle);
+  background: var(--surface-2);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
   min-width: 0;
@@ -780,7 +798,7 @@ textarea {
   padding: 4px 8px;
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-sm);
-  background: var(--color-bg-card);
+  background: var(--surface-3);
 }
 .slot-block-name:focus {
   border-color: var(--color-border-focus);

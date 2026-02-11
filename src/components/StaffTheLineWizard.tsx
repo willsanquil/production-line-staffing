@@ -12,6 +12,8 @@ interface StaffTheLineWizardProps {
   onMarkAbsent: (personId: string, absent: boolean) => void;
   onSetSlotsForArea: (areaId: string, newSlots: Slot[]) => void;
   onClose: () => void;
+  /** Called when user clicks Done on the final step to auto-staff the line (default positions + fill). */
+  onStaffComplete?: () => void;
 }
 
 type Step = 1 | 2 | 3;
@@ -25,6 +27,7 @@ export function StaffTheLineWizard({
   onMarkAbsent,
   onSetSlotsForArea,
   onClose,
+  onStaffComplete,
 }: StaffTheLineWizardProps) {
   const [step, setStep] = useState<Step>(1);
   const [absentChoice, setAbsentChoice] = useState<'yes' | 'no' | null>(null);
@@ -81,7 +84,11 @@ export function StaffTheLineWizard({
   };
 
   const handleNextStep1 = () => {
-    if (absentChoice === 'yes') applyAbsent();
+    if (absentChoice === 'yes') {
+      applyAbsent();
+    } else if (absentChoice === 'no') {
+      staffForAbsent.forEach((p) => onMarkAbsent(p.id, false));
+    }
     setStep(2);
   };
 
@@ -91,6 +98,7 @@ export function StaffTheLineWizard({
   };
 
   const handleDone = () => {
+    onStaffComplete?.();
     onClose();
   };
 

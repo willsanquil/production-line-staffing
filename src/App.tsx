@@ -1959,6 +1959,7 @@ export default function App() {
           onMarkAbsent={handleToggleAbsent}
           onSetSlotsForArea={setSlotsForArea}
           onClose={() => setShowStaffTheLineWizard(false)}
+          onStaffComplete={handleDefaultPositions}
         />
       )}
 
