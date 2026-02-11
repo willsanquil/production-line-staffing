@@ -96,7 +96,7 @@ export function SlotDropdown({
               onClick={() => select(null)}
               style={{ color: '#888' }}
             >
-              — Unassigned —
+              {slot.personId ? 'Clear slot' : '— Unassigned —'}
             </button>
           </li>
           {options.map(({ person }) => (
