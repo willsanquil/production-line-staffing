@@ -1,5 +1,5 @@
-import { memo, useMemo, useState, useEffect } from 'react';
-import type { AreaId, BreakPreference, LineConfig, RosterPerson, SkillLevel } from '../types';
+import { memo, useMemo, useState, useEffect, type CSSProperties } from 'react';
+import type { AreaId, FloatSlotConfig, LineConfig, RosterPerson, SkillLevel } from '../types';
 import { AREA_IDS } from '../types';
 import { sortByFirstName } from '../lib/rosterSort';
 
@@ -11,6 +11,8 @@ interface RosterGridProps {
   areaLabels: Record<AreaId, string>;
   /** When building custom lines, pass area IDs in display order. Omit for default IC areas. */
   areaIds?: string[];
+  /** Float slot configs for this line (so float columns show combined skill from supported areas). */
+  floatSlots?: FloatSlotConfig[];
   /** When multiple lines exist, show Flexed dropdown (other lines only). */
   lines?: LineConfig[];
   currentLineId?: string;
@@ -23,9 +25,7 @@ interface RosterGridProps {
   onToggleAbsent: (personId: string, absent: boolean) => void;
   onToggleOT: (personId: string, ot: boolean) => void;
   onToggleOTHereToday: (personId: string, otHereToday: boolean) => void;
-  onBreakPreferenceChange: (personId: string, preference: BreakPreference) => void;
   onSkillChange: (personId: string, areaId: AreaId, level: SkillLevel) => void;
-  onAreasWantToLearnChange: (personId: string, areaId: AreaId, checked: boolean) => void;
   /** Roster file actions (optional; when provided, shown in header next to Hide roster) */
   saveMessage?: string | null;
   onSaveToFile?: () => void;
@@ -64,6 +64,20 @@ function personHealthScore(person: RosterPerson, areaIds: string[]): number {
     sum += SKILL_SCORE[person.skills[areaId] ?? 'no_experience'];
   }
   return sum / areaIds.length;
+}
+
+/** For float columns: average skill across supported areas; returns level label. */
+function floatCombinedSkill(person: RosterPerson, supportedAreaIds: string[]): SkillLevel {
+  if (supportedAreaIds.length === 0) return 'no_experience';
+  let sum = 0;
+  for (const aid of supportedAreaIds) {
+    sum += SKILL_SCORE[person.skills[aid] ?? 'no_experience'];
+  }
+  const avg = sum / supportedAreaIds.length;
+  if (avg >= 2.5) return 'expert';
+  if (avg >= 1.5) return 'trained';
+  if (avg >= 0.5) return 'training';
+  return 'no_experience';
 }
 
 function PersonHealthBar({ person, areaIds }: { person: RosterPerson; areaIds: string[] }) {
@@ -113,6 +127,7 @@ function RosterGridInner({
   visible,
   areaLabels,
   areaIds: areaIdsProp,
+  floatSlots = [],
   lines = [],
   currentLineId = '',
   onFlexedToLineChange,
@@ -124,9 +139,7 @@ function RosterGridInner({
   onToggleAbsent,
   onToggleOT,
   onToggleOTHereToday,
-  onBreakPreferenceChange,
   onSkillChange,
-  onAreasWantToLearnChange,
   saveMessage,
   onSaveToFile,
   onOpenFromFile,
@@ -137,6 +150,12 @@ function RosterGridInner({
   onOpenProfile,
 }: RosterGridProps) {
   const areaIds = areaIdsProp ?? [...AREA_IDS];
+  const floatIdToSupported = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const f of floatSlots) m.set(f.id, f.supportedAreaIds);
+    return m;
+  }, [floatSlots]);
+  const stickyNameStyle: CSSProperties = { position: 'sticky', left: 0, zIndex: 1, background: 'var(--color-bg-card, #fff)', minWidth: 120, boxShadow: '2px 0 4px rgba(0,0,0,0.06)' };
   const otherLines = useMemo(() => lines.filter((l) => l.id !== currentLineId), [lines, currentLineId]);
   const showFlexedColumn = otherLines.length > 0 && currentLineId && onFlexedToLineChange;
   const { staffRoster, flexedInRoster, otRoster } = useMemo(() => {
@@ -256,7 +275,7 @@ function RosterGridInner({
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Name</th>
+                  <th style={stickyNameStyle}>Name</th>
                   <th style={{ width: 44 }}></th>
                   {showFlexedColumn && (
                     <th style={{ minWidth: 100 }} title="Temporarily assign this person to another line">Flexed</th>
@@ -266,22 +285,6 @@ function RosterGridInner({
                   {areaIds.map((areaId) => (
                     <th key={areaId} style={{ textAlign: 'center', minWidth: 90 }}>
                       {areaLabels[areaId]}
-                  </th>
-                  ))}
-                  <th colSpan={areaIds.length}>
-                    Want to learn (profile)
-                  </th>
-                </tr>
-                <tr>
-                  <th colSpan={5 + (showFlexedColumn ? 1 : 0)} style={{ padding: 0, border: 'none' }} />
-                  {areaIds.map((areaId) => (
-                    <th key={areaId} style={{ textAlign: 'center' }}>
-                      {areaLabels[areaId]}
-                    </th>
-                  ))}
-                  {areaIds.map((areaId) => (
-                    <th key={`learn-${areaId}`} style={{ textAlign: 'center' }}>
-                      {areaLabels[areaId]}
                     </th>
                   ))}
                 </tr>
@@ -289,7 +292,7 @@ function RosterGridInner({
               <tbody>
                 {staffRosterPage.map((person) => (
                   <tr key={person.id} className={person.absent ? 'person-absent' : ''}>
-                    <td style={{ verticalAlign: 'top' }}>
+                    <td style={{ ...stickyNameStyle, verticalAlign: 'top' }}>
                       <PersonHealthBar person={person} areaIds={areaIds} />
                       <input
                         type="text"
@@ -347,12 +350,20 @@ function RosterGridInner({
                       )}
                     </td>
                     {areaIds.map((areaId) => {
+                      const supported = floatIdToSupported.get(areaId);
+                      if (supported != null) {
+                        const level = floatCombinedSkill(person, supported);
+                        return (
+                          <td key={areaId} style={{ textAlign: 'center' }} title={`From supported areas: ${supported.join(', ')}`}>
+                            <span className={`skill-${level}`} style={{ padding: '2px 6px', borderRadius: 4, fontSize: '0.8rem' }}>
+                              {SKILL_LABELS[level]}
+                            </span>
+                          </td>
+                        );
+                      }
                       const level = person.skills[areaId] ?? 'no_experience';
                       return (
-                        <td
-                          key={areaId}
-                          style={{ textAlign: 'center' }}
-                        >
+                        <td key={areaId} style={{ textAlign: 'center' }}>
                           <select
                             value={level}
                             onChange={(e) => onSkillChange(person.id, areaId, e.target.value as SkillLevel)}
@@ -374,23 +385,6 @@ function RosterGridInner({
                               </option>
                             ))}
                           </select>
-                        </td>
-                      );
-                    })}
-                    {areaIds.map((areaId) => {
-                      const want = (person.areasWantToLearn ?? []).includes(areaId);
-                      return (
-                        <td
-                          key={areaId}
-                          style={{ textAlign: 'center' }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={want}
-                            onChange={(e) => onAreasWantToLearnChange(person.id, areaId, e.target.checked)}
-                            aria-label={`${person.name} want to learn ${areaLabels[areaId]}`}
-                            title={`Want to learn ${areaLabels[areaId]}`}
-                          />
                         </td>
                       );
                     })}
@@ -437,13 +431,12 @@ function RosterGridInner({
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Name</th>
+                      <th style={stickyNameStyle}>Name</th>
                       <th style={{ width: 90 }}>Send back</th>
                       {showFlexedColumn && (
                         <th style={{ minWidth: 100 }}>Flexed</th>
                       )}
                       <th style={{ width: 70 }}>Absent</th>
-                      <th style={{ width: 100 }}>Break</th>
                       {areaIds.map((areaId) => (
                         <th key={areaId} style={{ textAlign: 'center', minWidth: 90 }}>
                           {areaLabels[areaId]}
@@ -454,7 +447,7 @@ function RosterGridInner({
                   <tbody>
                     {flexedInRosterPage.map((person) => (
                       <tr key={person.id} style={{ backgroundColor: 'rgba(33, 150, 243, 0.06)' }}>
-                        <td style={{ verticalAlign: 'top' }}>
+                        <td style={{ ...stickyNameStyle, verticalAlign: 'top' }}>
                           <PersonHealthBar person={person} areaIds={areaIds} />
                           <span style={{ fontWeight: 500 }}>{person.name}</span>
                         </td>
@@ -491,25 +484,21 @@ function RosterGridInner({
                             aria-label={`Mark ${person.name} absent`}
                           />
                         </td>
-                        <td>
-                          <select
-                            value={person.breakPreference ?? 'no_preference'}
-                            onChange={(e) => onBreakPreferenceChange(person.id, e.target.value as BreakPreference)}
-                            style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 100 }}
-                            title="Break preference"
-                          >
-                            <option value="no_preference">Prefer middle</option>
-                            <option value="prefer_early">Prefer early</option>
-                            <option value="prefer_late">Prefer late</option>
-                          </select>
-                        </td>
                         {areaIds.map((areaId) => {
+                          const supported = floatIdToSupported.get(areaId);
+                          if (supported != null) {
+                            const level = floatCombinedSkill(person, supported);
+                            return (
+                              <td key={areaId} style={{ textAlign: 'center' }} title={`From supported areas`}>
+                                <span className={`skill-${level}`} style={{ padding: '2px 6px', borderRadius: 4, fontSize: '0.8rem' }}>
+                                  {SKILL_LABELS[level]}
+                                </span>
+                              </td>
+                            );
+                          }
                           const level = person.skills[areaId] ?? 'no_experience';
                           return (
-                            <td
-                              key={areaId}
-                              style={{ textAlign: 'center' }}
-                            >
+                            <td key={areaId} style={{ textAlign: 'center' }}>
                               <select
                                 value={level}
                                 onChange={(e) => onSkillChange(person.id, areaId, e.target.value as SkillLevel)}
@@ -581,32 +570,15 @@ function RosterGridInner({
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Name</th>
+                  <th style={stickyNameStyle}>Name</th>
                   <th style={{ width: 44 }}></th>
                   {showFlexedColumn && (
                     <th style={{ minWidth: 100 }}>Flexed</th>
                   )}
                   <th style={{ width: 50 }}>OT</th>
                   <th style={{ width: 90 }}>Here today</th>
-                  <th style={{ width: 100 }}>Break</th>
                   {areaIds.map((areaId) => (
                     <th key={areaId} style={{ textAlign: 'center', minWidth: 90 }}>
-                      {areaLabels[areaId]}
-                    </th>
-                  ))}
-                  <th colSpan={areaIds.length}>
-                    Want to learn
-                  </th>
-                </tr>
-                <tr>
-                  <th colSpan={5 + (showFlexedColumn ? 1 : 0)} style={{ padding: 0, border: 'none' }} />
-                  {areaIds.map((areaId) => (
-                    <th key={areaId} style={{ textAlign: 'center' }}>
-                      {areaLabels[areaId]}
-                    </th>
-                  ))}
-                  {areaIds.map((areaId) => (
-                    <th key={`learn-${areaId}`} style={{ textAlign: 'center' }}>
                       {areaLabels[areaId]}
                     </th>
                   ))}
@@ -615,7 +587,7 @@ function RosterGridInner({
               <tbody>
                 {otRosterPage.map((person) => (
                   <tr key={person.id} style={{ backgroundColor: (person.otHereToday ?? false) ? 'transparent' : 'rgba(0,0,0,0.04)' }}>
-                    <td style={{ verticalAlign: 'top' }}>
+                    <td style={{ ...stickyNameStyle, verticalAlign: 'top' }}>
                       <PersonHealthBar person={person} areaIds={areaIds} />
                       <input
                         type="text"
@@ -672,26 +644,21 @@ function RosterGridInner({
                         {(person.otHereToday ?? false) ? 'Yes — can slot' : 'No'}
                       </label>
                     </td>
-                    <td>
-                      <select
-                        value={person.breakPreference ?? 'no_preference'}
-                        onChange={(e) => onBreakPreferenceChange(person.id, e.target.value as BreakPreference)}
-                        style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 100 }}
-                        title="Break schedule preference"
-                        aria-label={`${person.name} break preference`}
-                      >
-                        <option value="no_preference">Prefer middle</option>
-                        <option value="prefer_early">Prefer early</option>
-                        <option value="prefer_late">Prefer late</option>
-                      </select>
-                    </td>
                     {areaIds.map((areaId) => {
+                      const supported = floatIdToSupported.get(areaId);
+                      if (supported != null) {
+                        const level = floatCombinedSkill(person, supported);
+                        return (
+                          <td key={areaId} style={{ textAlign: 'center' }} title={`From supported areas`}>
+                            <span className={`skill-${level}`} style={{ padding: '2px 6px', borderRadius: 4, fontSize: '0.8rem' }}>
+                              {SKILL_LABELS[level]}
+                            </span>
+                          </td>
+                        );
+                      }
                       const level = person.skills[areaId] ?? 'no_experience';
                       return (
-                        <td
-                          key={areaId}
-                          style={{ textAlign: 'center' }}
-                        >
+                        <td key={areaId} style={{ textAlign: 'center' }}>
                           <select
                             value={level}
                             onChange={(e) => onSkillChange(person.id, areaId, e.target.value as SkillLevel)}
@@ -713,23 +680,6 @@ function RosterGridInner({
                               </option>
                             ))}
                           </select>
-                        </td>
-                      );
-                    })}
-                    {areaIds.map((areaId) => {
-                      const want = (person.areasWantToLearn ?? []).includes(areaId);
-                      return (
-                        <td
-                          key={areaId}
-                          style={{ textAlign: 'center' }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={want}
-                            onChange={(e) => onAreasWantToLearnChange(person.id, areaId, e.target.checked)}
-                            aria-label={`${person.name} want to learn ${areaLabels[areaId]}`}
-                            title={`Want to learn ${areaLabels[areaId]}`}
-                          />
                         </td>
                       );
                     })}

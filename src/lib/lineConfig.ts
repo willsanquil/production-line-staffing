@@ -62,6 +62,21 @@ export function getLineSections(config: LineConfig): (string | readonly [string,
   return result;
 }
 
+/** Area IDs in roster column order (matches lineSections layout; combined sections have adjacent columns). */
+export function getRosterAreaIds(config: LineConfig): string[] {
+  const sections = getLineSections(config);
+  const areaIds: string[] = [];
+  for (const s of sections) {
+    if (isCombinedSection(s)) {
+      areaIds.push(s[0], s[1]);
+    } else {
+      areaIds.push(s);
+    }
+  }
+  const floatIds = (config.floatSlots ?? []).map((f) => f.id);
+  return [...areaIds, ...floatIds];
+}
+
 /** Base capacity (min/max) per area from config. Float slots get min/max 1. */
 export function getBaseCapacity(config: LineConfig): Record<string, { min: number; max: number }> {
   const out: Record<string, { min: number; max: number }> = {};

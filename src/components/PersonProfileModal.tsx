@@ -18,6 +18,7 @@ interface PersonProfileModalProps {
   onBreakPreferenceChange: (personId: string, preference: BreakPreference) => void;
   onSkillChange: (personId: string, areaId: AreaId, level: SkillLevel) => void;
   onDefaultPositionChange: (personId: string, areaId: string | null, slotIndex: number | null) => void;
+  onAreasWantToLearnChange: (personId: string, areaId: AreaId, checked: boolean) => void;
 }
 
 function findPerson(lineStates: Record<string, LineState>, personId: string): RosterPerson | null {
@@ -41,6 +42,7 @@ export function PersonProfileModal({
   onBreakPreferenceChange,
   onSkillChange,
   onDefaultPositionChange,
+  onAreasWantToLearnChange,
 }: PersonProfileModalProps) {
   const person = findPerson(lineStates, personId);
   const [selectedLineId, setSelectedLineId] = useState(() => {
@@ -53,16 +55,19 @@ export function PersonProfileModal({
     [lines, selectedLineId]
   );
 
-  const { areaIds, areaLabels } = useMemo(() => {
+  const { areaLabels, stationAreaIds } = useMemo(() => {
     if (!selectedLine) {
-      return { areaIds: [] as AreaId[], areaLabels: {} as Record<AreaId, string> };
+      return { areaLabels: {} as Record<AreaId, string>, stationAreaIds: [] as AreaId[] };
     }
     if (selectedLine.id === 'ic') {
-      return { areaIds: [...AREA_IDS], areaLabels: AREA_LABELS };
+      const ids = [...AREA_IDS] as AreaId[];
+      return { areaLabels: AREA_LABELS, stationAreaIds: ids };
     }
-    const ids = getAreaIds(selectedLine);
+    const ids = getAreaIds(selectedLine) as AreaId[];
     const labels = getBaseAreaLabels(selectedLine);
-    return { areaIds: ids as AreaId[], areaLabels: labels };
+    const floatIds = new Set((selectedLine.floatSlots ?? []).map((f) => f.id));
+    const station = ids.filter((id) => !floatIds.has(id));
+    return { areaLabels: labels, stationAreaIds: station };
   }, [selectedLine]);
 
   if (!person) {
@@ -155,7 +160,7 @@ export function PersonProfileModal({
             {selectedLine ? (
               <>
                 <p style={{ fontSize: '0.85rem', color: '#555', marginTop: 0 }}>
-                  Adjust skill levels for each station on this line. Changes apply anywhere this person is used.
+                  Adjust skill levels for each station on this line. Float positions use combined skill from supported areas.
                 </p>
                 <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid #eee', borderRadius: 6 }}>
                   <table className="data-table" style={{ fontSize: '0.9rem' }}>
@@ -166,7 +171,7 @@ export function PersonProfileModal({
                       </tr>
                     </thead>
                     <tbody>
-                      {areaIds.map((areaId) => {
+                      {stationAreaIds.map((areaId) => {
                         const level = person.skills[areaId] ?? 'no_experience';
                         return (
                           <tr key={areaId}>
@@ -186,7 +191,7 @@ export function PersonProfileModal({
                           </tr>
                         );
                       })}
-                      {areaIds.length === 0 && (
+                      {stationAreaIds.length === 0 && (
                         <tr>
                           <td colSpan={2} style={{ textAlign: 'center', padding: 12, color: '#777' }}>
                             No areas defined for this line.
@@ -220,12 +225,33 @@ export function PersonProfileModal({
                   style={{ padding: '6px 10px', fontSize: '0.9rem', minWidth: 200 }}
                 >
                   <option value="">—</option>
-                  {areaIds.map((aid) => (
+                  {stationAreaIds.map((aid) => (
                     <option key={aid} value={`${aid}:0`}>
                       {areaLabels[aid] ?? aid}
                     </option>
                   ))}
                 </select>
+
+                <h3 style={{ margin: '16px 0 8px 0', fontSize: '1rem' }}>Want to learn</h3>
+                <p style={{ fontSize: '0.85rem', color: '#555', marginTop: 0 }}>
+                  Areas this person wants to train in (used in training report).
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {stationAreaIds.map((areaId) => {
+                    const checked = (person.areasWantToLearn ?? []).includes(areaId);
+                    return (
+                      <label key={areaId} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: '0.9rem' }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => onAreasWantToLearnChange(person.id, areaId, e.target.checked)}
+                        />
+                        <span>{areaLabels[areaId] ?? areaId}</span>
+                      </label>
+                    );
+                  })}
+                  {stationAreaIds.length === 0 && <span style={{ color: '#777', fontSize: '0.9rem' }}>No station areas on this line.</span>}
+                </div>
               </>
             ) : (
               <p style={{ fontSize: '0.9rem', color: '#777' }}>No line selected.</p>

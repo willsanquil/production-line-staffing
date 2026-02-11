@@ -235,42 +235,31 @@ function AreaStaffingInner({
           )}
         </div>
       </div>
-      <div className="slots-row" style={{ flexWrap: 'wrap' }}>
+      <div className="slots-row">
         {slots.map((slot, idx) => {
           const label = getSlotLabel(areaId, idx, { [areaId]: slotLabels });
           const isDisabled = !!slot.disabled;
           const isLocked = !!slot.locked;
           const assignedName = slot.personId ? roster.find((p) => p.id === slot.personId)?.name : null;
           return (
-            <div
-              key={slot.id}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 2,
-                alignItems: 'flex-start',
-                opacity: isDisabled ? 0.65 : 1,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            <div key={slot.id} className="slot-block" style={{ opacity: isDisabled ? 0.65 : 1 }}>
+              <div className="slot-block-header">
+                <label className="slot-block-check" aria-label={isDisabled ? 'Enable slot' : 'Disable slot'}>
                   <input
                     type="checkbox"
                     checked={isDisabled}
                     onChange={() => toggleSlotDisabled(slot.id)}
                     title={isDisabled ? 'Enable slot' : 'Disable slot'}
-                    aria-label={isDisabled ? 'Enable slot' : 'Disable slot'}
                   />
                   {isDisabled ? 'Off' : 'On'}
                 </label>
                 {!isDisabled && (
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  <label className="slot-block-check" aria-label={isLocked ? 'Unlock slot' : 'Lock slot'}>
                     <input
                       type="checkbox"
                       checked={isLocked}
                       onChange={() => toggleSlotLocked(slot.id)}
                       title={isLocked ? 'Unlock (Spread/Randomize can change)' : 'Lock (Spread/Randomize will leave this slot unchanged)'}
-                      aria-label={isLocked ? 'Unlock slot' : 'Lock slot'}
                     />
                     Lock
                   </label>
@@ -280,14 +269,14 @@ function AreaStaffingInner({
                   value={slotLabels[idx] ?? ''}
                   onChange={(e) => onSlotLabelChange(areaId, idx, e.target.value)}
                   placeholder={label}
-                  style={{ fontSize: '0.8rem', padding: '2px 6px', width: 100, maxWidth: '100%', border: '1px solid #ddd', borderRadius: 4 }}
+                  className="slot-block-name"
                   aria-label={`Slot ${idx + 1} name`}
                 />
               </div>
               {isDisabled ? (
-                <span style={{ fontSize: '0.8rem', color: '#888' }}>— Disabled —</span>
+                <span className="slot-block-status slot-block-status--muted">— Disabled —</span>
               ) : isLocked ? (
-                <span style={{ fontSize: '0.9rem' }} title="Locked — unlock to change">{assignedName ?? '— Unassigned —'}</span>
+                <span className="slot-block-status" title="Locked — unlock to change">{assignedName ?? '— Unassigned —'}</span>
               ) : (
                 <>
                   <SlotDropdown
@@ -297,7 +286,6 @@ function AreaStaffingInner({
                     assignedPersonIds={allAssignedPersonIds}
                     leadAssignedPersonIds={leadAssignedPersonIds}
                     onAssign={handleAssign}
-                    slotLabel={label}
                   />
                   {breakSchedules && rotationCount != null && slot.personId && (() => {
                     const areaBreaks = breakSchedules[areaId];

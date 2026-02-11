@@ -192,8 +192,8 @@ body {
 .area-card {
   margin-bottom: 0;
   min-width: 0;
-  min-height: 220px;
-  contain: layout;
+  min-height: 180px;
+  overflow: visible;
 }
 @media (max-width: 1400px) {
   .areas-grid { grid-template-columns: repeat(4, minmax(200px, 1fr)); }
@@ -660,11 +660,121 @@ textarea {
 .task-list-input::placeholder { color: var(--color-text-muted); }
 
 /* ============================================================
-   Slots Row
+   Slots Row & Slot Dropdown
    ============================================================ */
-.slots-row { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin-bottom: var(--space-2); }
-.slot-wrap { display: flex; align-items: center; gap: var(--space-1); }
+.slots-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: flex-start;
+  margin-bottom: var(--space-2);
+}
+.slot-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
 .slot-wrap select { min-width: 120px; }
+
+.slot-dropdown-wrap {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+.slot-dropdown-label {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  margin-right: var(--space-1);
+}
+.slot-dropdown-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  width: auto;
+  max-width: 200px;
+  padding: 6px 10px;
+  font-size: 0.8125rem;
+  text-align: left;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-card);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.slot-dropdown-trigger:hover {
+  border-color: var(--color-border-focus);
+  background: var(--color-bg-subtle);
+}
+.slot-dropdown-trigger:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+.slot-dropdown-unassigned {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.slot-dropdown-chevron {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  line-height: 1;
+}
+
+/* Slot block (each slot in area staffing) */
+.slot-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  min-width: 0;
+  max-width: 220px;
+}
+.slot-block-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.slot-block-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+.slot-block-name {
+  flex: 1;
+  min-width: 60px;
+  max-width: 140px;
+  font-size: 0.8rem;
+  padding: 4px 8px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-card);
+}
+.slot-block-name:focus {
+  border-color: var(--color-border-focus);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
+.slot-block-status {
+  font-size: 0.85rem;
+  color: var(--color-text-primary);
+}
+.slot-block-status--muted {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
 
 /* ============================================================
    Scrollbar Styling

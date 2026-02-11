@@ -63,18 +63,12 @@ export function SlotDropdown({
   }
 
   return (
-    <div className="slot-wrap" ref={containerRef} style={{ position: 'relative' }}>
-      {slotLabel && <span style={{ fontSize: '0.9rem' }}>{slotLabel}</span>}
+    <div className="slot-wrap slot-dropdown-wrap" ref={containerRef} style={{ position: 'relative', display: 'inline-flex' }}>
+      {slotLabel && <span className="slot-dropdown-label">{slotLabel}</span>}
       <button
         type="button"
+        className="slot-dropdown-trigger"
         onClick={() => setOpen((o) => !o)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          minWidth: 140,
-          textAlign: 'left',
-        }}
         aria-haspopup="listbox"
         aria-expanded={open}
       >
@@ -85,7 +79,10 @@ export function SlotDropdown({
             small
           />
         ) : (
-          <span style={{ color: '#888' }}>— Unassigned —</span>
+          <>
+            <span className="slot-dropdown-unassigned">Assign…</span>
+            <span className="slot-dropdown-chevron" aria-hidden>▾</span>
+          </>
         )}
       </button>
       {open && (

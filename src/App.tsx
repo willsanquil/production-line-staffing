@@ -50,6 +50,7 @@ import { getEffectiveCapacity, getEffectiveAreaLabels, getSlotLabel as getSlotLa
 import {
   getAreaIds,
   getLineSections,
+  getRosterAreaIds,
   getEffectiveCapacityForLine,
   getEffectiveAreaLabelsForLine,
   getSlotLabelForLine,
@@ -188,6 +189,15 @@ export default function App() {
   );
   const areaIds = useMemo(
     () => (currentConfig ? (currentConfig.id === 'ic' ? [...AREA_IDS] : getAreaIds(currentConfig)) : []),
+    [currentConfig]
+  );
+  const rosterAreaIds = useMemo(
+    () =>
+      currentConfig
+        ? currentConfig.id === 'ic'
+          ? getRosterAreaIds(getDefaultICLineConfig())
+          : getRosterAreaIds(currentConfig)
+        : [],
     [currentConfig]
   );
   const lineSections = useMemo(
@@ -1603,7 +1613,8 @@ export default function App() {
         flexedInPersonIds={flexedInPersonIds}
         visible={rosterVisible}
         areaLabels={areaLabels}
-        areaIds={areaIds}
+        areaIds={rosterAreaIds}
+        floatSlots={currentConfig ? getFloatSlots(currentConfig) : []}
         lines={rootState.lines}
         currentLineId={rootState.currentLineId}
         onToggleVisible={() => setRosterVisible((v) => !v)}
@@ -1614,9 +1625,7 @@ export default function App() {
         onToggleAbsent={handleToggleAbsent}
         onToggleOT={handleToggleOT}
         onToggleOTHereToday={handleToggleOTHereToday}
-        onBreakPreferenceChange={handleBreakPreferenceChange}
         onSkillChange={handleSkillChange}
-        onAreasWantToLearnChange={handleAreasWantToLearnChange}
         onFlexedToLineChange={handleFlexedToLineChange}
         saveMessage={saveMessage}
         onSaveToFile={handleSaveToFile}
@@ -1948,6 +1957,7 @@ export default function App() {
           onBreakPreferenceChange={handleBreakPreferenceChange}
           onSkillChange={handleSkillChange}
           onDefaultPositionChange={handleDefaultPositionChange}
+          onAreasWantToLearnChange={handleAreasWantToLearnChange}
         />
       )}
 
