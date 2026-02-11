@@ -75,6 +75,8 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
   const [createPassword, setCreatePassword] = useState('');
   const [joinLineId, setJoinLineId] = useState('');
   const [joinPassword, setJoinPassword] = useState('');
+  /** When set from a front-page quick-join button, auto-select a cloud line by name. */
+  const [quickJoinName, setQuickJoinName] = useState<string | null>(null);
 
   /** After create we have lineId + password; wizard completes with config → we save and join. */
   const [configureLineId, setConfigureLineId] = useState<string | null>(null);
@@ -94,12 +96,24 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
     listCloudLines()
       .then((fetchedLines) => {
         setLines(fetchedLines);
-        // Check for cloudLine URL param to pre-select and go to join step
+        // 1) Check for cloudLine URL param to pre-select and go to join step
         const params = new URLSearchParams(window.location.search);
         const cloudLineParam = params.get('cloudLine');
         if (cloudLineParam && fetchedLines.some((l) => l.id === cloudLineParam)) {
           setJoinLineId(cloudLineParam);
           setStep('join');
+          return;
+        }
+
+        // 2) If user clicked a quick-join button (IC/NIC), auto-select first matching line by name
+        if (quickJoinName) {
+          const targetName = quickJoinName.toLowerCase();
+          const match = fetchedLines.find((l) => l.name.toLowerCase().includes(targetName));
+          if (match) {
+            setJoinLineId(match.id);
+            setStep('join');
+          }
+          setQuickJoinName(null);
         }
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
@@ -250,6 +264,29 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
               <p style={{ fontSize: '0.9rem', color: '#666', marginTop: 12 }}>
                 Create or join a shared line. Data is saved to the cloud; others can join with the password.
               </p>
+              <div style={{ borderTop: '1px solid #eee', margin: '8px 0 0 0', paddingTop: 8 }}>
+                <div style={{ fontSize: '0.85rem', color: '#555', marginBottom: 4 }}>Quick join:</div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuickJoinName('IC');
+                    setStep('list');
+                  }}
+                  style={{ width: '100%', marginTop: 4 }}
+                >
+                  Go to IC line (enter password)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuickJoinName('NIC');
+                    setStep('list');
+                  }}
+                  style={{ width: '100%', marginTop: 4 }}
+                >
+                  Go to NIC line (enter password)
+                </button>
+              </div>
             </>
           ) : (
             <p style={{ fontSize: '0.9rem', color: '#999' }}>
