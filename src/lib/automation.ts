@@ -129,8 +129,8 @@ export function randomizeAssignments(
   return out;
 }
 
-/** Spread talent: assign best-available per slot. Juiced areas filled first, de-juiced last. Excludes people assigned as leads. Areas with "needs experience" cannot get no_experience. Disabled slots are skipped. */
-export function spreadTalent(
+/** Assign people to their default position (area + slot) if that slot is available; then fill remaining slots by best fit (juiced first, de-juiced last). */
+export function applyDefaultPositionsThenSpread(
   roster: RosterPerson[],
   slotsByArea: SlotsByArea,
   juicedAreas: JuicedAreas = {},
@@ -142,27 +142,48 @@ export function spreadTalent(
 ): SlotsByArea {
   const requiresFn = areaRequiresTrainedOrExpertFn ?? areaRequiresTrainedOrExpert;
   const cap = capacity ?? AREA_CAPACITY;
-  const available = shuffle(
-    roster.filter(
-      (p) =>
-        !p.absent &&
-        !leadAssignedPersonIds.has(p.id) &&
-        (!p.ot || p.otHereToday)
-    )
+  const available = roster.filter(
+    (p) =>
+      !p.absent &&
+      !leadAssignedPersonIds.has(p.id) &&
+      (!p.ot || p.otHereToday)
   );
   const { out, assignedFromLocked } = copySlotsPreservingLocked(slotsByArea, areaIds);
   const assigned = new Set(assignedFromLocked);
-  fillAnchorSlots(out, available, assigned, areaIds, requiresFn);
-  const fillableIdx = (areaId: AreaId) =>
-    (out[areaId] ?? []).map((_, i) => i).filter((i) => !out[areaId][i].disabled && !out[areaId][i].locked);
+  const areaIdSet = new Set(areaIds);
+
+  // Phase 1: assign default positions (stable order so conflicts are deterministic)
+  const withDefault = available.filter(
+    (p) =>
+      p.defaultAreaId != null &&
+      p.defaultSlotIndex != null &&
+      areaIdSet.has(p.defaultAreaId)
+  );
+  for (const person of withDefault) {
+    const areaId = person.defaultAreaId!;
+    const slotIdx = person.defaultSlotIndex!;
+    const list = out[areaId];
+    if (!list || slotIdx < 0 || slotIdx >= list.length) continue;
+    const slot = list[slotIdx];
+    if (slot.disabled || slot.locked || slot.personId != null) continue;
+    if (!eligibleForArea(person, areaId, requiresFn)) continue;
+    slot.personId = person.id;
+    assigned.add(person.id);
+  }
+
+  // Phase 2: fill remaining slots (anchor slots first, then by juiced/min order, best fit)
+  const remaining = available.filter((p) => !assigned.has(p.id));
+  fillAnchorSlots(out, remaining, assigned, areaIds, requiresFn);
+  const fillableIdx = (aid: AreaId) =>
+    (out[aid] ?? []).map((_, i) => i).filter((i) => !out[aid][i].disabled && !out[aid][i].locked);
   const minSlotOrder: { areaId: AreaId; slotIdx: number }[] = [];
   for (const areaId of areaIds) {
     const c = cap[areaId];
     if (c) fillableIdx(areaId).slice(0, c.min).forEach((slotIdx) => minSlotOrder.push({ areaId, slotIdx }));
   }
   minSlotOrder.sort((a, b) => {
-    const priority = (areaId: AreaId) =>
-      juicedAreas[areaId] ? 1 : deJuicedAreas[areaId] ? -1 : 0;
+    const priority = (aid: AreaId) =>
+      juicedAreas[aid] ? 1 : deJuicedAreas[aid] ? -1 : 0;
     const pA = priority(a.areaId);
     const pB = priority(b.areaId);
     if (pB !== pA) return pB - pA;
@@ -178,7 +199,7 @@ export function spreadTalent(
   for (const { areaId, slotIdx } of slotOrder) {
     const slot = out[areaId]?.[slotIdx];
     if (!slot || slot.personId != null) continue;
-    const candidates = [...available]
+    const candidates = available
       .filter((p) => !assigned.has(p.id) && eligibleForArea(p, areaId, requiresFn))
       .sort((a, b) => scoreForArea(b, areaId) - scoreForArea(a, areaId));
     if (candidates.length > 0) {
@@ -187,6 +208,29 @@ export function spreadTalent(
     }
   }
   return out;
+}
+
+/** @deprecated Use applyDefaultPositionsThenSpread. Kept for compatibility. */
+export function spreadTalent(
+  roster: RosterPerson[],
+  slotsByArea: SlotsByArea,
+  juicedAreas: JuicedAreas = {},
+  leadAssignedPersonIds: Set<string> = new Set(),
+  deJuicedAreas: DeJuicedAreas = {},
+  capacity?: EffectiveCapacity | null,
+  areaIds: string[] = [...AREA_IDS],
+  areaRequiresTrainedOrExpertFn?: (areaId: string) => boolean
+): SlotsByArea {
+  return applyDefaultPositionsThenSpread(
+    roster,
+    slotsByArea,
+    juicedAreas,
+    leadAssignedPersonIds,
+    deJuicedAreas,
+    capacity,
+    areaIds,
+    areaRequiresTrainedOrExpertFn
+  );
 }
 
 /** Fill remaining: leave already-filled slots unchanged; fill only empty slots using same rules as spread talent (best fit, eligibility, juiced/dejuiced order). */

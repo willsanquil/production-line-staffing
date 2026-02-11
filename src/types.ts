@@ -148,10 +148,10 @@ export const LEAD_SLOT_AREAS = ['area_end_of_line', 'area_courtyard', 'area_bond
 export type LeadSlotAreaId = string;
 export type LeadSlots = Record<string, string | null>;
 
-/** Per-area "juice" flag: when on, Spread talent prioritizes that area with higher skill. */
+/** Per-area "juice" flag: when on, Default positions prioritizes that area with higher skill when filling remaining slots. */
 export type JuicedAreas = Partial<Record<AreaId, boolean>>;
 
-/** Per-area "de-juice" flag: when on, Spread talent fills this area last (opposite of juice). */
+/** Per-area "de-juice" flag: when on, Default positions fills this area last when filling remaining slots (opposite of juice). */
 export type DeJuicedAreas = Partial<Record<AreaId, boolean>>;
 
 /** Per-area break/lunch rotation assignments (personId -> rotation). Generated after Spread/Randomize. */

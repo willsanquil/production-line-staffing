@@ -75,7 +75,7 @@ import { AreaStaffing } from './components/AreaStaffing';
 import { CombinedAreaStaffing } from './components/CombinedAreaStaffing';
 import { LineView } from './components/LineView';
 import { DayBank } from './components/DayBank';
-import { randomizeAssignments, spreadTalent, fillRemainingAssignments } from './lib/automation';
+import { randomizeAssignments, applyDefaultPositionsThenSpread, fillRemainingAssignments } from './lib/automation';
 import { generateBreakSchedules, optimizeFloatBreakRotations } from './lib/breakSchedules';
 import { saveRootState, loadSavedDays, addSavedDay, removeSavedDay, exportStateToJson, importStateFromJson } from './lib/persist';
 import { saveToFile, overwriteFile, openFromFile, isSaveToFileSupported } from './lib/fileStorage';
@@ -921,8 +921,8 @@ export default function App() {
     regenerateBreaksForSlots(nextSlots);
   }, [roster, slots, leadAssignedPersonIds, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
 
-  const handleSpreadTalent = useCallback(() => {
-    const nextSlots = spreadTalent(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
+  const handleDefaultPositions = useCallback(() => {
+    const nextSlots = applyDefaultPositionsThenSpread(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
     setSlots(nextSlots);
     regenerateBreaksForSlots(nextSlots);
   }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
@@ -1701,7 +1701,7 @@ export default function App() {
       </div>
 
       <div className="action-toolbar">
-        <button type="button" className="btn-primary" onClick={handleSpreadTalent}>Spread talent</button>
+        <button type="button" className="btn-primary" onClick={handleDefaultPositions}>Default positions</button>
         <button type="button" className="btn-primary" onClick={handleFillRemaining}>Fill remaining</button>
         <button type="button" className="btn-primary" onClick={handleRandomize}>Randomize</button>
         {/* STRETCH temporarily disabled
