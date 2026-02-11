@@ -107,8 +107,11 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
 
         // 2) If user clicked a quick-join button (IC/NIC), go straight to password prompt for that line
         if (quickJoinName) {
-          const targetName = quickJoinName.toLowerCase();
-          const match = fetchedLines.find((l) => l.name.toLowerCase().includes(targetName));
+          const targetName = quickJoinName.toLowerCase().trim();
+          const match = fetchedLines.find((l) => {
+            const n = l.name.toLowerCase().trim();
+            return n === targetName || (n.startsWith(targetName) && (n.length === targetName.length || n[targetName.length] === ' '));
+          });
           if (match) {
             setJoinLineId(match.id);
             setJoinPassword('');
