@@ -85,6 +85,7 @@ import { LineManager } from './components/LineManager';
 import { BuildLineWizard } from './components/BuildLineWizard';
 import { BreakTable } from './components/BreakTable';
 import { PersonProfileModal } from './components/PersonProfileModal';
+import { StaffTheLineWizard } from './components/StaffTheLineWizard';
 
 const PERSIST_DEBOUNCE_MS = 400;
 
@@ -182,6 +183,7 @@ export default function App() {
   const [areaNameOverrides, setAreaNameOverrides] = useState(firstLineState.areaNameOverrides ?? {});
   const [slotLabelsByArea, setSlotLabelsByArea] = useState(firstLineState.slotLabelsByArea ?? {});
   const [profilePersonId, setProfilePersonId] = useState<string | null>(null);
+  const [showStaffTheLineWizard, setShowStaffTheLineWizard] = useState(false);
 
   const currentConfig = useMemo(
     () => rootState.lines.find((l) => l.id === rootState.currentLineId),
@@ -1701,6 +1703,9 @@ export default function App() {
       </div>
 
       <div className="action-toolbar">
+        <button type="button" className="btn-primary" onClick={() => setShowStaffTheLineWizard(true)} title="Quick setup: mark absences and disable stations">
+          Staff the line
+        </button>
         <button type="button" className="btn-primary" onClick={handleDefaultPositions}>Default positions</button>
         <button type="button" className="btn-primary" onClick={handleFillRemaining}>Fill remaining</button>
         <button type="button" className="btn-primary" onClick={handleRandomize}>Randomize</button>
@@ -1942,6 +1947,19 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {showStaffTheLineWizard && currentConfig && (
+        <StaffTheLineWizard
+          roster={roster}
+          lineSections={[...lineSections]}
+          slots={slots}
+          areaLabels={areaLabels}
+          getSlotLabel={getSlotLabel}
+          onMarkAbsent={handleToggleAbsent}
+          onSetSlotsForArea={setSlotsForArea}
+          onClose={() => setShowStaffTheLineWizard(false)}
+        />
       )}
 
       {profilePersonId && (

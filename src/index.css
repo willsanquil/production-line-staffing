@@ -14,10 +14,17 @@
   --color-text-muted: #8c919a;
   --color-text-on-accent: #ffffff;
 
-  /* Colors — borders */
-  --color-border-default: #dfe1e6;
-  --color-border-light: #ecedf0;
+  /* Colors — borders (progression: subtle → default → strong for hierarchy) */
+  --color-border-default: rgba(0, 0, 0, 0.12);
+  --color-border-light: rgba(0, 0, 0, 0.08);
+  --color-border-strong: rgba(0, 0, 0, 0.18);
   --color-border-focus: #4a90d9;
+
+  /* Surface elevation (whisper-quiet stacking) */
+  --surface-0: #ffffff;
+  --surface-1: #fafbfc;
+  --surface-2: #f5f6f8;
+  --surface-3: #eef0f3;
 
   /* Colors — accent */
   --color-accent-primary: #2563eb;
@@ -552,13 +559,26 @@ textarea {
   animation: fadeIn var(--transition-fast);
 }
 .modal-dialog {
-  background: var(--color-bg-card);
+  background: var(--surface-0);
   padding: var(--space-6);
   border-radius: var(--radius-xl);
   max-width: 440px;
   width: 90%;
   box-shadow: var(--shadow-xl);
+  border: 1px solid var(--color-border-light);
   animation: slideUp var(--transition-normal);
+}
+
+/* Staff the line wizard: stepped flow, clear hierarchy */
+.staff-the-line-wizard {
+  background: var(--surface-0);
+}
+.staff-the-line-wizard input[type="radio"],
+.staff-the-line-wizard input[type="checkbox"] {
+  accent-color: var(--color-accent-primary);
+}
+.staff-the-line-wizard label:hover {
+  color: var(--color-text-primary);
 }
 
 @keyframes fadeIn {
