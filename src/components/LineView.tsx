@@ -156,7 +156,7 @@ function LineViewInner({
     linkedSlotsByArea,
   });
 
-  const { floatSchedule, areaCoverage, coverageSummary } = floatCoverage;
+  const { floatSchedule, coverageSummary } = floatCoverage;
 
   /**
    * One combined table per area: Role (custom or "PA") | Name (skill-colored) | First Slot | Second Slot | ... with X for break assignment.
@@ -287,24 +287,17 @@ function LineViewInner({
                     </td>
                     {showBreakCols && breakSlotLabels.map((_, i) => {
                       const isOnBreak = breakRot === i + 1;
-                      const personCoverage = isOnBreak && slot.personId && areaCoverage[areaId]
-                        ? areaCoverage[areaId].find((pc) => pc.personId === slot.personId && pc.breakRotation === i + 1)
-                        : null;
-                      const isSelfManaging = !areaCoverage[areaId];
                       return (
-                        <td key={i} style={{ textAlign: 'center' }} className={compact ? `${tdClassName} presentation-td-break` : 'presentation-td-break'}>
+                        <td
+                          key={i}
+                          style={{ textAlign: 'center' }}
+                          className={compact ? `${tdClassName} presentation-td-break` : 'presentation-td-break'}
+                        >
                           {isOnBreak ? (
-                            <>
-                              <span style={{ fontWeight: 700, fontSize: compact ? undefined : '1.1rem' }}>X</span>
-                              {!isSelfManaging && personCoverage && (
-                                personCoverage.coveredByFloatId === '__self_coverage__'
-                                  ? <div style={{ fontSize: '0.75rem', color: '#4caf50', marginTop: 2 }}>{getName(personCoverage.coveredByPersonName)}</div>
-                                  : personCoverage.coveredByPersonName
-                                    ? <div style={{ fontSize: '0.75rem', color: '#1976d2', marginTop: 2 }}>{getName(personCoverage.coveredByPersonName)}</div>
-                                    : <div style={{ fontSize: '0.75rem', color: '#c0392b', marginTop: 2 }}>Uncovered</div>
-                              )}
-                            </>
-                          ) : ''}
+                            <span style={{ fontWeight: 700, fontSize: compact ? undefined : '1.1rem' }}>X</span>
+                          ) : (
+                            ''
+                          )}
                         </td>
                       );
                     })}
