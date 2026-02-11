@@ -1,7 +1,7 @@
 import type { AppState, LeadSlots, LineConfig, LineState, RootState } from '../types';
 import { loadRootState } from './persist';
 import { getInitialState, getEmptyLineState, normalizeSlotsToLineCapacity } from '../data/initialState';
-import { getDefaultICLineConfig, getLeadSlotKeys } from './lineConfig';
+import { getDefaultICLineConfig, getDefaultNICLineConfig, getLeadSlotKeys } from './lineConfig';
 
 function normalizeLineState(state: Partial<LineState>, lineConfig: LineConfig): LineState {
   const capacityOverrides = state.areaCapacityOverrides ?? {};
@@ -41,6 +41,13 @@ export function getHydratedRootState(): RootState {
   try {
     const root = loadRootState();
     if (root && root.lines?.length && root.lineStates) {
+      // Migration: if only IC exists, add NIC so users can flex between IC and NIC
+      const hasNic = root.lines.some((l) => l.id === 'nic');
+      if (!hasNic && root.lines.length === 1 && root.lines[0].id === 'ic') {
+        const nic = getDefaultNICLineConfig();
+        root.lines = [...root.lines, nic];
+        root.lineStates[nic.id] = getEmptyLineState(nic);
+      }
       const current = root.lineStates[root.currentLineId];
       const config = root.lines.find((l) => l.id === root.currentLineId);
       if (config && current) {
@@ -55,11 +62,15 @@ export function getHydratedRootState(): RootState {
     // fall through to default
   }
   const ic = getDefaultICLineConfig();
+  const nic = getDefaultNICLineConfig();
   const defaultState = getInitialState();
   cachedRoot = {
     currentLineId: ic.id,
-    lines: [ic],
-    lineStates: { [ic.id]: defaultState },
+    lines: [ic, nic],
+    lineStates: {
+      [ic.id]: defaultState,
+      [nic.id]: getEmptyLineState(nic),
+    },
   };
   return cachedRoot;
 }

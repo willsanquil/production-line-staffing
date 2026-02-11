@@ -89,6 +89,8 @@ interface LineViewProps {
   floatSlots?: FloatSlotConfig[];
   /** Per area: groups of slot indices sharing a label (linked slots self-cover each other). */
   linkedSlotsByArea?: Record<string, number[][]>;
+  /** When provided, Break Coverage row is only shown for areas where this is true. */
+  areaBreakCoverageEnabled?: Record<string, boolean>;
 }
 
 /** Compact, screenshot- and phone-friendly view: line health, areas, who is running each, and risks. */
@@ -113,6 +115,7 @@ function LineViewInner({
   breaksScope = 'station',
   floatSlots = [],
   linkedSlotsByArea = {},
+  areaBreakCoverageEnabled,
 }: LineViewProps) {
   const isCompact = useCompactPresentation();
   const sections = lineSectionsProp ?? LINE_SECTIONS;
@@ -157,6 +160,10 @@ function LineViewInner({
   });
 
   const { floatSchedule, coverageSummary } = floatCoverage;
+  const coverageSummaryFiltered =
+    areaBreakCoverageEnabled != null
+      ? coverageSummary.filter((row) => areaBreakCoverageEnabled[row.areaId])
+      : coverageSummary;
 
   /**
    * One combined table per area: Role (custom or "PA") | Name (skill-colored) | First Slot | Second Slot | ... with X for break assignment.
@@ -204,11 +211,12 @@ function LineViewInner({
           100
         : null;
     const breakAssignments = breakSchedules?.[areaId];
-    const supportingFloats = floatSlots.filter((f) => {
+    const supportingFloatsRaw = floatSlots.filter((f) => {
       if (!f.supportedAreaIds.includes(areaId)) return false;
       const fSchedule = floatSchedule[f.id];
       return fSchedule && Object.values(fSchedule).some((v) => v.type === 'covering' && v.areaId === areaId);
     });
+    const supportingFloats = areaBreakCoverageEnabled?.[areaId] === false ? [] : supportingFloatsRaw;
     const showBreakCols = !!breakAssignments && Object.keys(breakAssignments).length > 0 && rotCount >= 1;
     const understaffed = filled < min;
     const uncoveredRotations: number[] = [];
@@ -600,7 +608,7 @@ function LineViewInner({
         )
       )}
 
-      {coverageSummary.length > 0 && coverageSummary.some((row) => row.slots.some((s) => s.peopleOnBreak > 0)) && (
+      {coverageSummaryFiltered.length > 0 && coverageSummaryFiltered.some((row) => row.slots.some((s) => s.peopleOnBreak > 0)) && (
         isCompact ? (
           <section className="presentation-section-compact" style={{ padding: 6, marginTop: 8, marginBottom: 8 }}>
             <h2 style={{ fontSize: '0.8rem', marginBottom: 4 }}>Break coverage</h2>
@@ -616,7 +624,7 @@ function LineViewInner({
                   </tr>
                 </thead>
                 <tbody>
-                  {coverageSummary.map((row) => (
+                  {coverageSummaryFiltered.map((row) => (
                     <tr key={row.areaId}>
                       <td className="presentation-td-compact" style={{ fontWeight: 600 }}>{row.areaLabel}</td>
                       {row.slots.map((s, i) => {
@@ -661,7 +669,7 @@ function LineViewInner({
                   </tr>
                 </thead>
                 <tbody>
-                  {coverageSummary.map((row) => (
+                  {coverageSummaryFiltered.map((row) => (
                     <tr key={row.areaId}>
                       <td style={{ fontWeight: 600 }}>{row.areaLabel}</td>
                       {row.slots.map((s, i) => {

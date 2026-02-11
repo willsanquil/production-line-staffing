@@ -1,21 +1,39 @@
 import type { LineConfig, FloatSlotConfig, AreaCapacityOverrides, AreaNameOverrides, SlotLabelsByArea } from '../types';
 
 export const DEFAULT_IC_LINE_ID = 'ic';
+export const DEFAULT_NIC_LINE_ID = 'nic';
+
+/** Shared area layout for IC/NIC (both halves of MIC). */
+const DEFAULT_LINE_AREAS: LineConfig['areas'] = [
+  { id: 'area_14_5', name: '14.5', minSlots: 3, maxSlots: 4, requiresTrainedOrExpert: false },
+  { id: 'area_courtyard', name: 'Courtyard', minSlots: 4, maxSlots: 7, requiresTrainedOrExpert: false },
+  { id: 'area_bonding', name: 'Bonding', minSlots: 11, maxSlots: 13, requiresTrainedOrExpert: false, defaultSlotLabels: ['Float', '100s', '100s/200s', '100s/200s', '200s/300s', '200s/300s', '300s/400s', '300s/400s', '400/s', 'Rework', 'Manual Review'] },
+  { id: 'area_testing', name: 'Testing', minSlots: 2, maxSlots: 3, requiresTrainedOrExpert: false },
+  { id: 'area_potting', name: 'Potting', minSlots: 3, maxSlots: 5, requiresTrainedOrExpert: false },
+  { id: 'area_end_of_line', name: 'End Of Line', minSlots: 4, maxSlots: 4, requiresTrainedOrExpert: false },
+  { id: 'area_flip', name: 'Flip', minSlots: 1, maxSlots: 2, requiresTrainedOrExpert: false },
+];
 
 /** Built-in IC line (one half of MIC): same areas and layout as the original app. */
 export function getDefaultICLineConfig(): LineConfig {
   return {
     id: DEFAULT_IC_LINE_ID,
     name: 'IC',
-    areas: [
-      { id: 'area_14_5', name: '14.5', minSlots: 3, maxSlots: 4, requiresTrainedOrExpert: false },
-      { id: 'area_courtyard', name: 'Courtyard', minSlots: 4, maxSlots: 7, requiresTrainedOrExpert: false },
-      { id: 'area_bonding', name: 'Bonding', minSlots: 11, maxSlots: 13, requiresTrainedOrExpert: false, defaultSlotLabels: ['Float', '100s', '100s/200s', '100s/200s', '200s/300s', '200s/300s', '300s/400s', '300s/400s', '400/s', 'Rework', 'Manual Review'] },
-      { id: 'area_testing', name: 'Testing', minSlots: 2, maxSlots: 3, requiresTrainedOrExpert: false },
-      { id: 'area_potting', name: 'Potting', minSlots: 3, maxSlots: 5, requiresTrainedOrExpert: false },
-      { id: 'area_end_of_line', name: 'End Of Line', minSlots: 4, maxSlots: 4, requiresTrainedOrExpert: false },
-      { id: 'area_flip', name: 'Flip', minSlots: 1, maxSlots: 2, requiresTrainedOrExpert: false },
-    ],
+    areas: [...DEFAULT_LINE_AREAS],
+    leadAreaIds: ['area_end_of_line', 'area_courtyard', 'area_bonding'],
+    combinedSections: [['area_14_5', 'area_flip']],
+    breaksEnabled: true,
+    breaksScope: 'station',
+    breakRotations: 3,
+  };
+}
+
+/** Built-in NIC line (other half of MIC): same areas as IC so people can flex between lines. */
+export function getDefaultNICLineConfig(): LineConfig {
+  return {
+    id: DEFAULT_NIC_LINE_ID,
+    name: 'NIC',
+    areas: [...DEFAULT_LINE_AREAS],
     leadAreaIds: ['area_end_of_line', 'area_courtyard', 'area_bonding'],
     combinedSections: [['area_14_5', 'area_flip']],
     breaksEnabled: true,

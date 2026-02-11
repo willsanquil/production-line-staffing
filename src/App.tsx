@@ -322,6 +322,7 @@ export default function App() {
           [root.currentLineId]: { ...root.lineStates[root.currentLineId], ...stateRef.current } as AppState,
         },
       };
+      setRootState(payload);
       const lineId = cloudLineId;
       const password = cloudPasswordRef.current;
       if (lineId && password) {
@@ -347,6 +348,7 @@ export default function App() {
           [root.currentLineId]: { ...root.lineStates[root.currentLineId], ...stateRef.current } as AppState,
         },
       };
+      setRootState(payload);
       const lineId = cloudLineId;
       const password = cloudPasswordRef.current;
       if (lineId && password) {
@@ -360,7 +362,7 @@ export default function App() {
         saveRootState(payload);
       }
     };
-  }, [appMode, cloudLineId, rootState, slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea]);
+  }, [appMode, cloudLineId, slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea]);
 
   // When in cloud mode, poll for updates so other users' changes show up (live-ish updates).
   // Skip applying poll for a while after any local slot/lead change so we don't overwrite the user's
@@ -1592,6 +1594,7 @@ export default function App() {
           breaksScope={presentationBreakData?.breaksScope}
           floatSlots={presentationFloatSlots}
           linkedSlotsByArea={presentationLinkedSlots}
+          areaBreakCoverageEnabled={areaBreakCoverageEnabled}
         />
       </>
     );
@@ -1749,12 +1752,14 @@ export default function App() {
             <>
               <button
                 type="button"
+                className="btn-primary"
                 onClick={() => setShowAddStationForm(true)}
               >
                 + Add station
               </button>
               <button
                 type="button"
+                className="btn-primary"
                 onClick={() => {
                   setFloatSupportDraft(
                     (currentConfig.floatSlots ?? []).map((f) => ({ ...f, supportedAreaIds: [...f.supportedAreaIds] }))
@@ -1980,6 +1985,7 @@ export default function App() {
           areaLabels={areaLabels}
           getSlotLabel={getSlotLabel}
           onMarkAbsent={handleToggleAbsent}
+          onToggleOTHereToday={handleToggleOTHereToday}
           onSetSlotsForArea={setSlotsForArea}
           onClose={() => setShowStaffTheLineWizard(false)}
           onStaffComplete={handleDefaultPositions}
