@@ -66,7 +66,7 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
     }
   })();
   
-  const [step, setStep] = useState<'choose' | 'list' | 'create' | 'join' | 'configure' | 'clone'>(initialStep);
+  const [step, setStep] = useState<'choose' | 'list' | 'create' | 'join' | 'configure' | 'clone' | 'quickJoin'>(initialStep);
   const [lines, setLines] = useState<CloudLineSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,12 +105,17 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
           return;
         }
 
-        // 2) If user clicked a quick-join button (IC/NIC), auto-select first matching line by name
+        // 2) If user clicked a quick-join button (IC/NIC), go straight to password prompt for that line
         if (quickJoinName) {
           const targetName = quickJoinName.toLowerCase();
           const match = fetchedLines.find((l) => l.name.toLowerCase().includes(targetName));
           if (match) {
             setJoinLineId(match.id);
+            setJoinPassword('');
+            setError(null);
+            setStep('quickJoin');
+          } else {
+            setError(`No line found matching "${quickJoinName}"`);
             setStep('join');
           }
           setQuickJoinName(null);
@@ -190,6 +195,28 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
       .then((rootState) => {
         setCloudSession(joinLineId, joinPassword);
         onJoinGroupPresentation(rootState, joinLineId, joinPassword);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false));
+  };
+
+  /** Quick join: password-only prompt then join and go to staffing view. */
+  const handleQuickJoin = () => {
+    if (!joinLineId || !joinPassword.trim()) {
+      setError('Enter the line password');
+      return;
+    }
+    const password = joinPassword.trim();
+    setLoading(true);
+    setError(null);
+    getLineState(joinLineId, password)
+      .then((rootState) => {
+        setCloudSession(joinLineId, password);
+        if (onJoinGroupPresentation) {
+          onJoinGroupPresentation(rootState, joinLineId, password);
+        } else {
+          onJoinGroup(rootState, joinLineId, password);
+        }
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
@@ -331,6 +358,60 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
           </p>
         )}
         <button type="button" onClick={() => setStep('choose')} style={{ marginTop: 16 }}>
+          Back
+        </button>
+      </div>
+    );
+  }
+
+  if (step === 'quickJoin' && joinLineId) {
+    const quickJoinLine = lines.find((l) => l.id === joinLineId);
+    const lineDisplayName = quickJoinLine?.name ?? joinLineId;
+    return (
+      <div style={{ padding: 24, maxWidth: 400, margin: '0 auto' }}>
+        <h1 style={{ fontSize: '1.5rem', marginBottom: 8 }}>Quick join</h1>
+        <p style={{ color: '#666', marginBottom: 16 }}>
+          Enter the password for <strong>{lineDisplayName}</strong> to open the staffing view.
+        </p>
+        {error && (
+          <div style={{ background: '#fee', padding: 12, borderRadius: 8, marginBottom: 16 }}>
+            {error}
+          </div>
+        )}
+        <div className="section-card" style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>Password</label>
+          <input
+            type="password"
+            value={joinPassword}
+            onChange={(e) => {
+              setJoinPassword(e.target.value);
+              setError(null);
+            }}
+            placeholder="Line password"
+            style={{ width: '100%', padding: '8px 12px', marginBottom: 12 }}
+            autoComplete="current-password"
+            autoFocus
+            onKeyDown={(e) => e.key === 'Enter' && handleQuickJoin()}
+          />
+          <button
+            type="button"
+            onClick={handleQuickJoin}
+            disabled={loading}
+            className="btn-primary"
+            style={{ width: '100%' }}
+          >
+            {loading ? 'Opening…' : 'Open staffing view'}
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setStep('choose');
+            setJoinLineId('');
+            setJoinPassword('');
+            setError(null);
+          }}
+        >
           Back
         </button>
       </div>

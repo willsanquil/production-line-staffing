@@ -1542,7 +1542,7 @@ export default function App() {
             className="btn-primary"
             onClick={() => setAdminVisible(true)}
             >
-              Show admin
+              Admin View
             </button>
           </div>
         </header>
@@ -1601,9 +1601,9 @@ export default function App() {
           <button
             type="button"
             onClick={() => setAdminVisible(false)}
-            title="Compact view for screenshot or phone"
+            title="Presentation view for screenshot or phone"
           >
-            Hide admin
+            Staffing View
           </button>
         </div>
       </header>
