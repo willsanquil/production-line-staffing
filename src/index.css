@@ -198,13 +198,21 @@ body {
 }
 
 /* ============================================================
-   Areas Grid
+   Areas Grid + Unslotted Bank
    ============================================================ */
+.areas-with-bank {
+  display: flex;
+  gap: var(--space-5);
+  align-items: flex-start;
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
 .areas-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(200px, 1fr));
   gap: var(--space-5);
-  margin-bottom: var(--space-4);
+  flex: 1;
+  min-width: 0;
 }
 .area-card {
   margin-bottom: 0;
@@ -220,6 +228,34 @@ body {
 }
 @media (max-width: 900px) {
   .areas-grid { grid-template-columns: repeat(2, minmax(200px, 1fr)); }
+}
+
+.unslotted-bank {
+  flex: 0 0 220px;
+  min-height: 140px;
+}
+.unslotted-bank-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 320px;
+  overflow-y: auto;
+}
+.unslotted-bank-item {
+  font-size: 0.9rem;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--color-border-light);
+}
+.unslotted-bank-item--empty {
+  color: var(--color-text-muted);
+  font-style: italic;
+  background: transparent;
+  border-color: transparent;
 }
 
 /* ============================================================

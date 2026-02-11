@@ -74,6 +74,7 @@ import { LeadSlotsSection } from './components/LeadSlotsSection';
 import { AreaStaffing } from './components/AreaStaffing';
 import { CombinedAreaStaffing } from './components/CombinedAreaStaffing';
 import { LineView } from './components/LineView';
+import { UnslottedBank } from './components/UnslottedBank';
 import { DayBank } from './components/DayBank';
 import { randomizeAssignments, applyDefaultPositionsThenSpread, fillRemainingAssignments } from './lib/automation';
 import { generateBreakSchedules, optimizeFloatBreakRotations } from './lib/breakSchedules';
@@ -924,10 +925,32 @@ export default function App() {
   }, [roster, slots, leadAssignedPersonIds, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
 
   const handleDefaultPositions = useCallback(() => {
-    const nextSlots = applyDefaultPositionsThenSpread(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
+    // Fill empty lead slots with people configured as lead (by default leads go into lead slots)
+    const newLeadSlots = { ...leadSlots };
+    const usedLeadIds = new Set<string>();
+    for (const key of leadSlotKeys) {
+      if (newLeadSlots[key]) {
+        usedLeadIds.add(newLeadSlots[key]!);
+        continue;
+      }
+      const leadPerson = roster.find(
+        (p) =>
+          p.lead &&
+          !p.absent &&
+          (!p.ot || p.otHereToday) &&
+          !usedLeadIds.has(p.id)
+      );
+      if (leadPerson) {
+        newLeadSlots[key] = leadPerson.id;
+        usedLeadIds.add(leadPerson.id);
+      }
+    }
+    const newLeadAssignedPersonIds = new Set<string>(Object.values(newLeadSlots).filter(Boolean) as string[]);
+    setLeadSlots(newLeadSlots);
+    const nextSlots = applyDefaultPositionsThenSpread(roster, slots, juicedAreas, newLeadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
     setSlots(nextSlots);
     regenerateBreaksForSlots(nextSlots);
-  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
+  }, [roster, slots, juicedAreas, deJuicedAreas, leadSlots, leadSlotKeys, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
 
   const handleFillRemaining = useCallback(() => {
     const nextSlots = fillRemainingAssignments(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
@@ -1981,6 +2004,7 @@ export default function App() {
         />
       )}
 
+      <div className="areas-with-bank">
       <div className="areas-grid">
         {lineSections.map((section) => {
           const isCombined = Array.isArray(section);
@@ -2094,6 +2118,12 @@ export default function App() {
               />
             );
           })}
+      </div>
+      <UnslottedBank
+        roster={roster}
+        leadAssignedPersonIds={leadAssignedPersonIds}
+        allAssignedPersonIds={allAssignedPersonIds}
+      />
       </div>
 
 
