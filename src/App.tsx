@@ -2119,6 +2119,7 @@ export default function App() {
                 onSectionTasksChange={() => {}}
                 onAssign={setSlotAssignment}
                 requiresTrainedOrExpert={false}
+                supportedAreaIds={f.supportedAreaIds}
                 breakSchedules={getBreaksEnabled(currentConfig) ? breakSchedules : undefined}
                 rotationCount={getBreaksEnabled(currentConfig) ? getBreakRotations(currentConfig) : undefined}
               />
@@ -2155,29 +2156,8 @@ export default function App() {
         const floatSlots = getFloatSlots(currentConfig);
         return (
           <>
-            {areaIds.map((areaId) => {
-              const assignments = breakSchedules?.[areaId];
-              if (!assignments || Object.keys(assignments).length === 0) return null;
-              const people = Object.keys(assignments).map((id) => {
-                const p = roster.find((r) => r.id === id);
-                return { id, name: p?.name ?? id };
-              });
-              const floatSlot = floatSlots.find((f) => f.id === areaId);
-              const title = floatSlot
-                ? `Break schedule — ${floatSlot.name} (supports: ${floatSlot.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ') || 'none'})`
-                : `Break schedule — ${areaLabels[areaId] ?? areaId}`;
-              return (
-                <BreakTable
-                  key={areaId}
-                  people={people}
-                  assignments={assignments}
-                  rotationCount={rotationCount}
-                  title={title}
-                />
-              );
-            })}
             {floatSlots.length > 0 && (
-              <div className="section-card" style={{ marginTop: 16 }}>
+              <div className="section-card" style={{ marginBottom: 16 }}>
                 <h3 style={{ margin: '0 0 8px 0', fontWeight: 700, fontSize: '1.05rem' }}>Float break schedule</h3>
                 <p style={{ color: '#555', fontSize: '0.9rem', marginBottom: 12 }}>
                   Floats cover their areas when others are on break. Each float gets a break rotation; assign someone and click Regenerate breaks to update.
@@ -2230,6 +2210,27 @@ export default function App() {
                 })}
               </div>
             )}
+            {areaIds.map((areaId) => {
+              const assignments = breakSchedules?.[areaId];
+              if (!assignments || Object.keys(assignments).length === 0) return null;
+              const people = Object.keys(assignments).map((id) => {
+                const p = roster.find((r) => r.id === id);
+                return { id, name: p?.name ?? id };
+              });
+              const floatSlot = floatSlots.find((f) => f.id === areaId);
+              const title = floatSlot
+                ? `Break schedule — ${floatSlot.name} (supports: ${floatSlot.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ') || 'none'})`
+                : `Break schedule — ${areaLabels[areaId] ?? areaId}`;
+              return (
+                <BreakTable
+                  key={areaId}
+                  people={people}
+                  assignments={assignments}
+                  rotationCount={rotationCount}
+                  title={title}
+                />
+              );
+            })}
             {/* Lead break coverage info */}
             {leadSlotKeys.some((key) => leadBreakCoverage[key] && leadSlots[key]) && (
               <div className="section-card" style={{ marginTop: 16 }}>

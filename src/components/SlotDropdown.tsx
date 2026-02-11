@@ -1,8 +1,29 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import type { AreaId, RosterPerson, Slot } from '../types';
+import type { AreaId, RosterPerson, SkillLevel, Slot } from '../types';
 import { SkillPill } from './SkillPill';
 import { sortByFirstName } from '../lib/rosterSort';
 import { formatPersonStatusLabel } from '../lib/personLabel';
+
+const SKILL_SCORE: Record<SkillLevel, number> = {
+  no_experience: 0,
+  training: 1,
+  trained: 2,
+  expert: 3,
+};
+
+/** For float slots: combined skill across supported areas. */
+function combinedSkillForAreas(person: RosterPerson, areaIds: string[]): SkillLevel {
+  if (areaIds.length === 0) return 'no_experience';
+  let sum = 0;
+  for (const aid of areaIds) {
+    sum += SKILL_SCORE[person.skills[aid as AreaId] ?? 'no_experience'];
+  }
+  const avg = sum / areaIds.length;
+  if (avg >= 2.5) return 'expert';
+  if (avg >= 1.5) return 'trained';
+  if (avg >= 0.5) return 'training';
+  return 'no_experience';
+}
 
 interface SlotDropdownProps {
   slot: Slot;
@@ -11,6 +32,8 @@ interface SlotDropdownProps {
   assignedPersonIds: Set<string>;
   /** People assigned as leads (excluded from area slots). */
   leadAssignedPersonIds?: Set<string>;
+  /** For float slots: area IDs this float supports; skill pill uses combined skill across these. */
+  supportedAreaIds?: string[];
   onAssign: (slotId: string, personId: string | null) => void;
   slotLabel?: string;
 }
@@ -21,9 +44,15 @@ export function SlotDropdown({
   roster,
   assignedPersonIds,
   leadAssignedPersonIds,
+  supportedAreaIds,
   onAssign,
   slotLabel,
 }: SlotDropdownProps) {
+  const getDisplayLevel = (p: RosterPerson): SkillLevel =>
+    supportedAreaIds?.length
+      ? combinedSkillForAreas(p, supportedAreaIds)
+      : (p.skills[areaId] ?? 'no_experience');
+
   const available = useMemo(() => {
     const filtered = roster.filter(
       (p) =>
@@ -74,7 +103,7 @@ export function SlotDropdown({
       >
         {currentPerson ? (
           <SkillPill
-            level={currentPerson.skills[areaId]}
+            level={getDisplayLevel(currentPerson)}
             label={formatPersonStatusLabel(currentPerson)}
             small
           />
@@ -112,14 +141,14 @@ export function SlotDropdown({
                 }}
               >
                 <span
-                  className={`skill-${person.skills[areaId] ?? 'no_experience'}`}
+                  className={`skill-${getDisplayLevel(person)}`}
                   style={{
                     width: 12,
                     height: 12,
                     borderRadius: 2,
                     flexShrink: 0,
                   }}
-                  title={person.skills[areaId]}
+                  title={getDisplayLevel(person)}
                 />
                 <span>{formatPersonStatusLabel(person)}{slot.personId === person.id ? ' ✓' : ''}</span>
               </button>

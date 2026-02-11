@@ -58,6 +58,8 @@ interface AreaStaffingProps {
   onToggleBreakCoverage?: (areaId: AreaId, enabled: boolean) => void;
   /** Whether to show the break coverage toggle (only when breaks are enabled for the line). */
   showBreakCoverageToggle?: boolean;
+  /** For float slots: area IDs this float supports (skill pill shows combined skill). */
+  supportedAreaIds?: string[];
 }
 
 function AreaStaffingInner({
@@ -82,6 +84,7 @@ function AreaStaffingInner({
   breakCoverageEnabled = false,
   onToggleBreakCoverage,
   showBreakCoverageToggle = false,
+  supportedAreaIds,
 }: AreaStaffingProps) {
   const enabledSlots = slots.filter((s) => !s.disabled);
   const filled = enabledSlots.filter((s) => s.personId).length;
@@ -285,6 +288,7 @@ function AreaStaffingInner({
                     roster={roster}
                     assignedPersonIds={allAssignedPersonIds}
                     leadAssignedPersonIds={leadAssignedPersonIds}
+                    supportedAreaIds={supportedAreaIds}
                     onAssign={handleAssign}
                   />
                   {breakSchedules && rotationCount != null && slot.personId && (() => {
