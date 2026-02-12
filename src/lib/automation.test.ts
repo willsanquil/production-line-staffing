@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stretchAssignments } from './automation';
+import { applyDefaultPositionsThenSpread, fillRemainingAssignments, stretchAssignments } from './automation';
 import type { RosterPerson, SlotsByArea } from '../types';
 
 /** Helper: build a minimal RosterPerson with defaults. */
@@ -89,5 +89,71 @@ describe('stretchAssignments', () => {
 
     // The no_experience person should be placed since area doesn't require experience
     expect(result['area_a'][0].personId).toBe('newbie1');
+  });
+});
+
+describe('assignment fallback matching', () => {
+  it('fillRemainingAssignments places everyone when a valid full matching exists', () => {
+    // area_a + area_b, one open slot each.
+    // p1 can only do area_a (area_b requires trained/expert for this test).
+    // p2 can do both and is "better" at area_a.
+    // Greedy can pick p2 for area_a and strand p1; matching must place both.
+    const roster: RosterPerson[] = [
+      makePerson({ id: 'p1', skills: { area_a: 'training', area_b: 'no_experience' } }),
+      makePerson({ id: 'p2', skills: { area_a: 'expert', area_b: 'trained' } }),
+    ];
+    const slots: SlotsByArea = {
+      area_a: [{ id: 'a1', personId: null }],
+      area_b: [{ id: 'b1', personId: null }],
+    };
+
+    const result = fillRemainingAssignments(
+      roster,
+      slots,
+      {},
+      new Set(),
+      {},
+      { area_a: { min: 1, max: 1 }, area_b: { min: 1, max: 1 } } as any,
+      ['area_a', 'area_b'],
+      (areaId: string) => areaId === 'area_b'
+    );
+
+    const assigned = new Set(
+      ['area_a', 'area_b']
+        .flatMap((aid) => (result[aid] ?? []).map((s) => s.personId))
+        .filter((id): id is string => id != null)
+    );
+    expect(assigned.has('p1')).toBe(true);
+    expect(assigned.has('p2')).toBe(true);
+  });
+
+  it('applyDefaultPositionsThenSpread places everyone when possible after defaults', () => {
+    const roster: RosterPerson[] = [
+      makePerson({ id: 'p1', skills: { area_a: 'training', area_b: 'no_experience' } }),
+      makePerson({ id: 'p2', skills: { area_a: 'expert', area_b: 'trained' } }),
+    ];
+    const slots: SlotsByArea = {
+      area_a: [{ id: 'a1', personId: null }],
+      area_b: [{ id: 'b1', personId: null }],
+    };
+
+    const result = applyDefaultPositionsThenSpread(
+      roster,
+      slots,
+      {},
+      new Set(),
+      {},
+      { area_a: { min: 1, max: 1 }, area_b: { min: 1, max: 1 } } as any,
+      ['area_a', 'area_b'],
+      (areaId: string) => areaId === 'area_b'
+    );
+
+    const assigned = new Set(
+      ['area_a', 'area_b']
+        .flatMap((aid) => (result[aid] ?? []).map((s) => s.personId))
+        .filter((id): id is string => id != null)
+    );
+    expect(assigned.has('p1')).toBe(true);
+    expect(assigned.has('p2')).toBe(true);
   });
 });

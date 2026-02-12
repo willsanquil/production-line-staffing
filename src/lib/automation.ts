@@ -96,6 +96,81 @@ function fillAnchorSlots(
   }
 }
 
+/**
+ * Final fallback: maximize number of placements for remaining people into remaining
+ * enabled/unlocked empty slots (respecting area eligibility).
+ *
+ * Uses bipartite maximum matching (Kuhn algorithm). This guarantees we place
+ * as many available people as possible when greedy ordering leaves someone out.
+ */
+function fillUnassignedByMaxMatching(
+  out: SlotsByArea,
+  pool: RosterPerson[],
+  assigned: Set<string>,
+  areaIds: string[],
+  areaRequiresTrainedOrExpertFn: (id: string) => boolean = areaRequiresTrainedOrExpert
+): void {
+  const openSlots: { areaId: AreaId; slotIdx: number }[] = [];
+  for (const aid of areaIds) {
+    const areaId = aid as AreaId;
+    const list = out[areaId] ?? [];
+    for (let i = 0; i < list.length; i++) {
+      const slot = list[i];
+      if (!slot.disabled && !slot.locked && slot.personId == null) {
+        openSlots.push({ areaId, slotIdx: i });
+      }
+    }
+  }
+  if (openSlots.length === 0) return;
+
+  const remainingPeople = pool.filter((p) => !assigned.has(p.id));
+  if (remainingPeople.length === 0) return;
+
+  const edgesByPerson = new Map<string, number[]>();
+  for (const person of remainingPeople) {
+    const edges: number[] = [];
+    for (let si = 0; si < openSlots.length; si++) {
+      const slot = openSlots[si];
+      if (eligibleForArea(person, slot.areaId, areaRequiresTrainedOrExpertFn)) edges.push(si);
+    }
+    edgesByPerson.set(person.id, edges);
+  }
+
+  // Place constrained people first (fewer options) for a stabler, higher-yield match.
+  const personIds = remainingPeople
+    .map((p) => p.id)
+    .sort((a, b) => (edgesByPerson.get(a)?.length ?? 0) - (edgesByPerson.get(b)?.length ?? 0));
+  const matchedPersonBySlot = new Array<string | null>(openSlots.length).fill(null);
+
+  function tryAssign(personId: string, visitedSlots: boolean[]): boolean {
+    const edges = edgesByPerson.get(personId) ?? [];
+    for (const slotIdx of edges) {
+      if (visitedSlots[slotIdx]) continue;
+      visitedSlots[slotIdx] = true;
+      const currentPersonId = matchedPersonBySlot[slotIdx];
+      if (currentPersonId == null || tryAssign(currentPersonId, visitedSlots)) {
+        matchedPersonBySlot[slotIdx] = personId;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  for (const personId of personIds) {
+    tryAssign(personId, new Array(openSlots.length).fill(false));
+  }
+
+  for (let si = 0; si < openSlots.length; si++) {
+    const personId = matchedPersonBySlot[si];
+    if (!personId) continue;
+    const { areaId, slotIdx } = openSlots[si];
+    const slot = out[areaId]?.[slotIdx];
+    if (!slot || slot.personId != null || slot.disabled || slot.locked) continue;
+    slot.personId = personId;
+    assigned.add(personId);
+  }
+}
+
 /** Randomize: assign available people to slots (one per slot), no double booking. Locked slots are left unchanged. */
 export function randomizeAssignments(
   roster: RosterPerson[],
@@ -224,6 +299,7 @@ export function applyDefaultPositionsThenSpread(
       assigned.add(candidates[0].id);
     }
   }
+  fillUnassignedByMaxMatching(out, available, assigned, areaIds, requiresFn);
   return out;
 }
 
@@ -307,6 +383,7 @@ export function fillRemainingAssignments(
       assigned.add(candidates[0].id);
     }
   }
+  fillUnassignedByMaxMatching(out, available, assigned, areaIds, requiresFn);
   return out;
 }
 
