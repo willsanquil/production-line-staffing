@@ -216,7 +216,9 @@ function LineViewInner({
       const fSchedule = floatSchedule[f.id];
       return fSchedule && Object.values(fSchedule).some((v) => v.type === 'covering' && v.areaId === areaId);
     });
-    const supportingFloats = areaBreakCoverageEnabled?.[areaId] === false ? [] : supportingFloatsRaw;
+    // Always show covering float rows in each area table for visibility, even when
+    // the "Needs break coverage" toggle is off for that area.
+    const supportingFloats = supportingFloatsRaw;
     const showBreakCols = !!breakAssignments && Object.keys(breakAssignments).length > 0 && rotCount >= 1;
     const understaffed = filled < min;
     const uncoveredRotations: number[] = [];
