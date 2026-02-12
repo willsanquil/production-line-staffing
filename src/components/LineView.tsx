@@ -608,11 +608,42 @@ function LineViewInner({
         )
       )}
 
-      {coverageSummaryFiltered.length > 0 && coverageSummaryFiltered.some((row) => row.slots.some((s) => s.peopleOnBreak > 0)) && (
+      {((floatSlots.length > 0) || (coverageSummaryFiltered.length > 0 && coverageSummaryFiltered.some((row) => row.slots.some((s) => s.peopleOnBreak > 0)))) && (
         isCompact ? (
           <section className="presentation-section-compact" style={{ padding: 6, marginTop: 8, marginBottom: 8 }}>
             <h2 style={{ fontSize: '0.8rem', marginBottom: 4 }}>Break coverage</h2>
             <p style={{ fontSize: '0.75rem', color: '#555', margin: '0 0 6px 0' }}>Float-supported areas only. Areas at full staff without a float manage breaks internally.</p>
+            {floatSlots.length > 0 && (
+              <>
+                <h3 style={{ fontSize: '0.75rem', margin: '8px 0 4px 0', color: '#1976d2' }}>Floats (covering / on break)</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                  {floatSlots.map((f) => {
+                    const personId = slots[f.id]?.[0]?.personId ?? null;
+                    const fSchedule = floatSchedule[f.id] ?? {};
+                    return (
+                      <div key={f.id} style={{ padding: 8, background: 'rgba(33, 150, 243, 0.06)', border: '1px solid rgba(33, 150, 243, 0.3)', borderRadius: 6, fontSize: '0.85rem' }}>
+                        <strong style={{ color: '#1976d2' }}>{f.name}</strong>
+                        <span style={{ color: '#555' }}> — {personId ? getName(personId) : '—'}</span>
+                        <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                          {breakSlotLabels.map((label, i) => {
+                            const rot = i + 1;
+                            const activity = fSchedule[rot];
+                            const isBreak = activity?.type === 'on_break';
+                            const covering = activity?.type === 'covering' ? (areaLabels[activity.areaId] ?? activity.areaId) : null;
+                            return (
+                              <span key={i} style={{ fontWeight: isBreak ? 700 : undefined }}>
+                                {label}: {isBreak ? 'On break' : covering ?? '—'}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+            {coverageSummaryFiltered.length > 0 && (
             <div style={{ overflowX: 'auto' }}>
               <table className="presentation-table-compact">
                 <thead>
@@ -653,11 +684,56 @@ function LineViewInner({
                 </tbody>
               </table>
             </div>
+            )}
           </section>
         ) : (
           <section className="section-card" style={{ marginTop: 8 }}>
             <h2>Break coverage</h2>
             <p style={{ fontSize: '0.9rem', color: '#555', margin: '0 0 12px 0' }}>Float-supported areas only. Areas at full staff without a float manage breaks internally.</p>
+            {floatSlots.length > 0 && (
+              <>
+                <h3 style={{ fontSize: '0.9rem', margin: '0 0 8px 0', color: '#1976d2' }}>Floats (covering / on break)</h3>
+                <div style={{ overflowX: 'auto', marginBottom: 16 }}>
+                  <table className="presentation-table">
+                    <thead>
+                      <tr>
+                        <th>Float</th>
+                        <th>Assigned</th>
+                        {breakSlotLabels.map((label, i) => (
+                          <th key={i}>{label}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {floatSlots.map((f) => {
+                        const personId = slots[f.id]?.[0]?.personId ?? null;
+                        const fSchedule = floatSchedule[f.id] ?? {};
+                        return (
+                          <tr key={f.id} style={{ background: 'rgba(33, 150, 243, 0.06)' }}>
+                            <td style={{ fontWeight: 600, color: '#1976d2' }}>{f.name}</td>
+                            <td>{personId ? getName(personId) : '—'}</td>
+                            {breakSlotLabels.map((_, i) => {
+                              const rot = i + 1;
+                              const activity = fSchedule[rot];
+                              return (
+                                <td key={i}>
+                                  {activity?.type === 'on_break'
+                                    ? <span style={{ fontWeight: 700, color: '#1976d2' }}>On break</span>
+                                    : activity?.type === 'covering'
+                                      ? <span style={{ fontWeight: 700 }}>{areaLabels[activity.areaId] ?? activity.areaId}</span>
+                                      : '—'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+            {coverageSummaryFiltered.length > 0 && (
             <div style={{ overflowX: 'auto' }}>
               <table className="presentation-table">
                 <thead>
@@ -697,6 +773,7 @@ function LineViewInner({
                 </tbody>
               </table>
             </div>
+            )}
           </section>
         )
       )}
