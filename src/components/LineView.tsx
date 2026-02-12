@@ -149,8 +149,18 @@ function LineViewInner({
     return out;
   })();
 
+  // Coverage toggle is authoritative: floats/leads may only cover areas explicitly
+  // marked as needing break coverage.
+  const floatSlotsForCoverage: FloatSlotConfig[] =
+    areaBreakCoverageEnabled != null
+      ? floatSlots.map((f) => ({
+          ...f,
+          supportedAreaIds: f.supportedAreaIds.filter((id) => areaBreakCoverageEnabled[id]),
+        }))
+      : floatSlots;
+
   const floatCoverage: FloatCoverageResult = computeFloatCoverage({
-    floatSlots,
+    floatSlots: floatSlotsForCoverage,
     slots,
     breakSchedules: breakSchedules ?? {},
     rotationCount: rotCount,
@@ -211,13 +221,11 @@ function LineViewInner({
           100
         : null;
     const breakAssignments = breakSchedules?.[areaId];
-    const supportingFloatsRaw = floatSlots.filter((f) => {
+    const supportingFloatsRaw = floatSlotsForCoverage.filter((f) => {
       if (!f.supportedAreaIds.includes(areaId)) return false;
       const fSchedule = floatSchedule[f.id];
       return fSchedule && Object.values(fSchedule).some((v) => v.type === 'covering' && v.areaId === areaId);
     });
-    // Always show covering float rows in each area table for visibility, even when
-    // the "Needs break coverage" toggle is off for that area.
     const supportingFloats = supportingFloatsRaw;
     const showBreakCols = !!breakAssignments && Object.keys(breakAssignments).length > 0 && rotCount >= 1;
     const understaffed = filled < min;
