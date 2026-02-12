@@ -90,6 +90,11 @@ export function computeFloatCoverage(input: ComputeFloatCoverageInput): FloatCov
     const schedule: Record<number, FloatSlotActivity> = {};
     const floatSlotSlots = slots[float.id] ?? [];
     const floatPersonId = floatSlotSlots[0]?.personId ?? null;
+    const supportedAreaIdsInOrder = areaIdsInSectionOrder.filter((areaId) =>
+      float.supportedAreaIds.includes(areaId)
+    );
+    const supportedAreaIds =
+      supportedAreaIdsInOrder.length > 0 ? supportedAreaIdsInOrder : [...float.supportedAreaIds];
 
     // Get the float person's own break rotation
     const floatBreakEntry = floatPersonId
@@ -110,11 +115,13 @@ export function computeFloatCoverage(input: ComputeFloatCoverageInput): FloatCov
         continue;
       }
 
-      // Find first supported area (in section order) with someone on break this rotation
-      // that is NOT already covered by a previously-processed float
+      // Find a supported area with someone on break this rotation that is NOT already
+      // covered by a previously-processed float. Rotate starting point by rotation so
+      // later areas (e.g., BMB Install) are not always deprioritized.
       let foundArea: string | null = null;
-      for (const areaId of areaIdsInSectionOrder) {
-        if (!float.supportedAreaIds.includes(areaId)) continue;
+      const startIdx = supportedAreaIds.length > 0 ? ((rot - 1) % supportedAreaIds.length) : 0;
+      for (let i = 0; i < supportedAreaIds.length; i++) {
+        const areaId = supportedAreaIds[(startIdx + i) % supportedAreaIds.length];
         if (coveredByRotation[rot].has(areaId)) continue; // already covered
         const areaBreaks = breakSchedules[areaId];
         if (!areaBreaks) continue;

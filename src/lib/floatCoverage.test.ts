@@ -156,6 +156,42 @@ describe('computeFloatCoverage', () => {
     });
   });
 
+  it('rotates priority by rotation so later supported areas are covered too', () => {
+    const floatSlots: FloatSlotConfig[] = [
+      { id: 'float_1', name: 'Float 1', supportedAreaIds: ['area_a', 'area_b'] },
+    ];
+    const slots: SlotsByArea = {
+      float_1: [{ id: 'f1s0', personId: 'floatPerson' }],
+      area_a: [{ id: 'a1s0', personId: 'workerA' }],
+      area_b: [{ id: 'b1s0', personId: 'workerB' }],
+    };
+    const breakSchedules: BreakSchedulesByArea = {
+      float_1: { floatPerson: { breakRotation: 3, lunchRotation: 3 } },
+      area_a: { workerA: { breakRotation: 1, lunchRotation: 1 }, workerA2: { breakRotation: 2, lunchRotation: 2 } },
+      area_b: { workerB: { breakRotation: 1, lunchRotation: 1 }, workerB2: { breakRotation: 2, lunchRotation: 2 } },
+    };
+
+    const result = computeFloatCoverage(
+      makeInput({
+        floatSlots,
+        slots,
+        breakSchedules,
+        rotationCount: 3,
+        areaIdsInSectionOrder: ['area_a', 'area_b'],
+        areaLabels: { area_a: 'Area A', area_b: 'Area B', float_1: 'Float 1' },
+      })
+    );
+
+    expect(result.floatSchedule['float_1'][1]).toEqual({
+      type: 'covering',
+      areaId: 'area_a',
+    });
+    expect(result.floatSchedule['float_1'][2]).toEqual({
+      type: 'covering',
+      areaId: 'area_b',
+    });
+  });
+
   // ── Test 6: Person covered → coveredByFloatId is set ─────────────────
   it('records coverage info when a person is covered by a float', () => {
     const floatSlots: FloatSlotConfig[] = [
