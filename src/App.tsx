@@ -43,7 +43,7 @@ function getLineHealthScore(
   }
   return count > 0 ? sum / count : null;
 }
-import { getHydratedRootState } from './lib/initialState';
+import { getHydratedRootState, clearHydrateCache } from './lib/initialState';
 import { getRosterForLine, getFlexedInPersonIds } from './lib/personLabel';
 import { sortByFirstName } from './lib/rosterSort';
 import { getEffectiveCapacity, getEffectiveAreaLabels, getSlotLabel as getSlotLabelIC } from './lib/areaConfig';
@@ -88,7 +88,7 @@ import { BreakTable } from './components/BreakTable';
 import { PersonProfileModal } from './components/PersonProfileModal';
 import { StaffTheLineWizard } from './components/StaffTheLineWizard';
 
-const PERSIST_DEBOUNCE_MS = 400;
+const PERSIST_DEBOUNCE_MS = 300;
 
 function getAssignedPersonIds(slots: SlotsByArea, areaIds: string[]): Set<string> {
   const set = new Set<string>();
@@ -262,6 +262,12 @@ export default function App() {
   stateRef.current = { slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, leadBreakCoverage, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea };
   const rootStateRef = useRef(rootState);
   rootStateRef.current = rootState;
+
+  /** After roster or line-config edits: block cloud poll and persist once React has applied state (so refs are up to date). */
+  const schedulePersistForRootEdit = useCallback(() => {
+    lastLocalChangeRef.current = Date.now();
+    setTimeout(() => persistFlushRef.current?.(), 0);
+  }, []);
   const lastLocalChangeRef = useRef(0);
   const cloudSaveInProgressRef = useRef(false);
   /** Counter incremented when the entire line state should be reloaded from rootState
@@ -311,8 +317,34 @@ export default function App() {
   }, [rootState.currentLineId, lineStateReloadKey]);
 
   const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistFlushRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
     if (appMode !== 'app') return;
+    const flush = () => {
+      if (persistTimeoutRef.current) {
+        clearTimeout(persistTimeoutRef.current);
+        persistTimeoutRef.current = null;
+      }
+      const root = rootStateRef.current;
+      const payload = {
+        ...root,
+        lineStates: {
+          ...root.lineStates,
+          [root.currentLineId]: { ...root.lineStates[root.currentLineId], ...stateRef.current } as AppState,
+        },
+      };
+      const lineId = cloudLineId;
+      const password = cloudPasswordRef.current;
+      if (lineId && password) {
+        setLineState(lineId, password, payload).catch((e) => console.error('Cloud save failed:', e));
+      } else {
+        saveRootState(payload);
+        clearHydrateCache();
+      }
+    };
+    persistFlushRef.current = flush;
+
     const id = setTimeout(() => {
       const root = rootStateRef.current;
       const payload = {
@@ -322,7 +354,7 @@ export default function App() {
           [root.currentLineId]: { ...root.lineStates[root.currentLineId], ...stateRef.current } as AppState,
         },
       };
-      setRootState(payload);
+      // Only persist — do not setRootState(payload) here; refs can be stale and would overwrite recent roster/line edits
       const lineId = cloudLineId;
       const password = cloudPasswordRef.current;
       if (lineId && password) {
@@ -331,6 +363,7 @@ export default function App() {
         });
       } else {
         saveRootState(payload);
+        clearHydrateCache();
       }
       persistTimeoutRef.current = null;
     }, PERSIST_DEBOUNCE_MS);
@@ -348,7 +381,7 @@ export default function App() {
           [root.currentLineId]: { ...root.lineStates[root.currentLineId], ...stateRef.current } as AppState,
         },
       };
-      setRootState(payload);
+      // Only persist on cleanup — do not setRootState to avoid overwriting in-flight roster/line edits
       const lineId = cloudLineId;
       const password = cloudPasswordRef.current;
       if (lineId && password) {
@@ -360,9 +393,22 @@ export default function App() {
           });
       } else {
         saveRootState(payload);
+        clearHydrateCache();
       }
     };
   }, [appMode, cloudLineId, slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea]);
+
+  useEffect(() => {
+    function onLeave() {
+      persistFlushRef.current?.();
+    }
+    window.addEventListener('pagehide', onLeave);
+    window.addEventListener('beforeunload', onLeave);
+    return () => {
+      window.removeEventListener('pagehide', onLeave);
+      window.removeEventListener('beforeunload', onLeave);
+    };
+  }, []);
 
   // When in cloud mode, poll for updates so other users' changes show up (live-ish updates).
   // Skip applying poll for a while after any local slot/lead change so we don't overwrite the user's
@@ -504,7 +550,8 @@ export default function App() {
 
   const handleNameChange = useCallback((personId: string, name: string) => {
     setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, name: name.trim() || p.name })));
-  }, []);
+    schedulePersistForRootEdit();
+  }, [schedulePersistForRootEdit]);
 
   const handleAddPerson = useCallback((name: string) => {
     const person = createEmptyPerson(name, areaIds);
@@ -513,7 +560,8 @@ export default function App() {
       const roster = [...(lineState?.roster ?? []), person];
       return { ...prev, lineStates: { ...prev.lineStates, [prev.currentLineId]: { ...lineState, roster } } };
     });
-  }, [areaIds]);
+    schedulePersistForRootEdit();
+  }, [areaIds, schedulePersistForRootEdit]);
 
   const handleRemovePerson = useCallback((personId: string) => {
     const person = roster.find((p) => p.id === personId);
@@ -526,6 +574,7 @@ export default function App() {
         const roster = (lineState?.roster ?? []).filter((p) => p.id !== personId);
         return { ...prev, lineStates: { ...prev.lineStates, [homeLineId]: { ...lineState, roster } } };
       });
+      schedulePersistForRootEdit();
     }
     setSlots((prev) => {
       const next = {} as SlotsByArea;
@@ -542,25 +591,29 @@ export default function App() {
       }
       return next;
     });
-  }, [roster, rootState.lineStates, areaIds, leadSlotKeys]);
+  }, [roster, rootState.lineStates, areaIds, leadSlotKeys, schedulePersistForRootEdit]);
 
   const handleToggleAbsent = useCallback((personId: string, absent: boolean) => {
     setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, absent })));
-  }, []);
+    schedulePersistForRootEdit();
+  }, [schedulePersistForRootEdit]);
 
   const handleToggleLead = useCallback((personId: string, lead: boolean) => {
     setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, lead })));
-  }, []);
+    schedulePersistForRootEdit();
+  }, [schedulePersistForRootEdit]);
 
   const handleToggleOT = useCallback((personId: string, ot: boolean) => {
     setRootState((prev) =>
       updatePersonInRoot(prev, personId, (p) => ({ ...p, ot, otHereToday: ot ? false : p.otHereToday }))
     );
-  }, []);
+    schedulePersistForRootEdit();
+  }, [schedulePersistForRootEdit]);
 
   const handleToggleOTHereToday = useCallback((personId: string, otHereToday: boolean) => {
     setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, otHereToday })));
-  }, []);
+    schedulePersistForRootEdit();
+  }, [schedulePersistForRootEdit]);
 
   const handleAddOT = useCallback((name: string) => {
     const person = createEmptyOTPerson(name, areaIds);
@@ -569,21 +622,25 @@ export default function App() {
       const roster = [...(lineState?.roster ?? []), person];
       return { ...prev, lineStates: { ...prev.lineStates, [prev.currentLineId]: { ...lineState, roster } } };
     });
-  }, [areaIds]);
+    schedulePersistForRootEdit();
+  }, [areaIds, schedulePersistForRootEdit]);
 
   const handleToggleLate = useCallback((personId: string, late: boolean) => {
     setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, late })));
-  }, []);
+    schedulePersistForRootEdit();
+  }, [schedulePersistForRootEdit]);
 
   const handleToggleLeavingEarly = useCallback((personId: string, leavingEarly: boolean) => {
     setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, leavingEarly })));
-  }, []);
+    schedulePersistForRootEdit();
+  }, [schedulePersistForRootEdit]);
 
   const handleFlexedToLineChange = useCallback((personId: string, lineId: string | null) => {
     setRootState((prev) =>
       updatePersonInRoot(prev, personId, (p) => ({ ...p, flexedToLineId: lineId || undefined }))
     );
-  }, []);
+    schedulePersistForRootEdit();
+  }, [schedulePersistForRootEdit]);
 
   const handleToggleJuice = useCallback((areaId: AreaId, juiced: boolean) => {
     setJuicedAreas((prev) => ({ ...prev, [areaId]: juiced }));
@@ -596,13 +653,15 @@ export default function App() {
 
   const handleBreakPreferenceChange = useCallback((personId: string, breakPreference: BreakPreference) => {
     setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, breakPreference })));
-  }, []);
+    schedulePersistForRootEdit();
+  }, [schedulePersistForRootEdit]);
 
   const handleSkillChange = useCallback((personId: string, areaId: AreaId, level: SkillLevel) => {
     setRootState((prev) =>
       updatePersonInRoot(prev, personId, (p) => ({ ...p, skills: { ...p.skills, [areaId]: level } }))
     );
-  }, []);
+    schedulePersistForRootEdit();
+  }, [schedulePersistForRootEdit]);
 
   const handleAreasWantToLearnChange = useCallback((personId: string, areaId: AreaId, checked: boolean) => {
     setRootState((prev) =>
@@ -612,7 +671,8 @@ export default function App() {
         return { ...p, areasWantToLearn: list.filter((a) => a !== areaId) };
       })
     );
-  }, []);
+    schedulePersistForRootEdit();
+  }, [schedulePersistForRootEdit]);
 
   const handleOpenProfile = useCallback((personId: string) => {
     setProfilePersonId(personId);
@@ -631,8 +691,9 @@ export default function App() {
           defaultSlotIndex: slotIndex ?? null,
         }))
       );
+      schedulePersistForRootEdit();
     },
-    []
+    [schedulePersistForRootEdit]
   );
 
   const handleAreaRequiresTrainedOrExpertChange = useCallback((areaId: string, value: boolean) => {
@@ -648,7 +709,8 @@ export default function App() {
       lines[lineIndex] = { ...line, areas };
       return { ...prev, lines };
     });
-  }, []);
+    schedulePersistForRootEdit();
+  }, [schedulePersistForRootEdit]);
 
   const handleAddStation = useCallback(
     (name: string, minSlots: number, maxSlots: number, hasLeadRole: boolean) => {
@@ -698,8 +760,9 @@ export default function App() {
         const lineStates = { ...prev.lineStates, [prev.currentLineId]: newLineState };
         return { ...prev, lines, lineStates };
       });
+    schedulePersistForRootEdit();
     },
-    []
+    [schedulePersistForRootEdit]
   );
 
   const handleUpdateFloatSlots = useCallback((nextFloatSlots: FloatSlotConfig[]) => {
@@ -726,7 +789,8 @@ export default function App() {
       return { ...prev, lines, lineStates };
     });
     setShowFloatSupportModal(false);
-  }, []);
+    schedulePersistForRootEdit();
+  }, [schedulePersistForRootEdit]);
 
   const handleAreaCapacityChange = useCallback((areaId: AreaId, payload: { min?: number; max?: number }) => {
     const base = effectiveCapacity[areaId];

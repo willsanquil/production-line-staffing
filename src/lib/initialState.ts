@@ -36,6 +36,11 @@ function normalizeLineState(state: Partial<LineState>, lineConfig: LineConfig): 
 /** Single source of truth: load from localStorage once at app load. Returns full root state (multi-line) or builds default. */
 let cachedRoot: RootState | null = null;
 
+/** Clear cache so next getHydratedRootState() reads from localStorage (e.g. after save). */
+export function clearHydrateCache(): void {
+  cachedRoot = null;
+}
+
 export function getHydratedRootState(): RootState {
   if (cachedRoot) return cachedRoot;
   try {
