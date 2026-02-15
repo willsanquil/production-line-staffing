@@ -337,7 +337,12 @@ export default function App() {
       const lineId = cloudLineId;
       const password = cloudPasswordRef.current;
       if (lineId && password) {
-        setLineState(lineId, password, payload).catch((e) => console.error('Cloud save failed:', e));
+        cloudSaveInProgressRef.current = true;
+        setLineState(lineId, password, payload)
+          .catch((e) => console.error('Cloud save failed:', e))
+          .finally(() => {
+            cloudSaveInProgressRef.current = false;
+          });
       } else {
         saveRootState(payload);
         clearHydrateCache();
@@ -358,9 +363,14 @@ export default function App() {
       const lineId = cloudLineId;
       const password = cloudPasswordRef.current;
       if (lineId && password) {
-        setLineState(lineId, password, payload).catch((e) => {
-          console.error('Cloud save failed:', e);
-        });
+        cloudSaveInProgressRef.current = true;
+        setLineState(lineId, password, payload)
+          .catch((e) => {
+            console.error('Cloud save failed:', e);
+          })
+          .finally(() => {
+            cloudSaveInProgressRef.current = false;
+          });
       } else {
         saveRootState(payload);
         clearHydrateCache();
@@ -510,6 +520,7 @@ export default function App() {
   }, [currentConfig, slots, slotLabelsByArea]);
 
   const setSlotAssignment = useCallback((areaId: AreaId, slotId: string, personId: string | null) => {
+    lastLocalChangeRef.current = Date.now();
     setSlots((prev) => ({
       ...prev,
       [areaId]: prev[areaId].map((s) =>
@@ -1410,6 +1421,7 @@ export default function App() {
         setCloudLineId(cloudLineFromUrl);
         cloudPasswordRef.current = directLinkPassword.trim();
         setCloudSession(cloudLineFromUrl, directLinkPassword.trim());
+        setLineStateReloadKey((k) => k + 1);
         setAdminVisible(false);
         setAppMode('app');
         if (typeof window !== 'undefined' && window.history.replaceState) {
@@ -1472,12 +1484,14 @@ export default function App() {
           setRootState(root);
           setCloudLineId(lineId);
           cloudPasswordRef.current = password;
+          setLineStateReloadKey((k) => k + 1);
           setAppMode('app');
         }}
         onJoinGroupPresentation={(root, lineId, password) => {
           setRootState(root);
           setCloudLineId(lineId);
           cloudPasswordRef.current = password;
+          setLineStateReloadKey((k) => k + 1);
           setAdminVisible(false);
           setAppMode('app');
         }}
