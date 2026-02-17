@@ -4,16 +4,17 @@ import { RosterGrid } from './RosterGrid';
 import type { RosterPerson } from '../types';
 
 function makePerson(overrides: Partial<RosterPerson> & { id: string; name: string }): RosterPerson {
+  const { id, name, ...rest } = overrides;
   return {
-    id: overrides.id,
-    name: overrides.name,
+    id,
+    name,
     absent: false,
     lead: false,
     ot: false,
     late: false,
     leavingEarly: false,
     skills: {},
-    ...overrides,
+    ...rest,
   };
 }
 
