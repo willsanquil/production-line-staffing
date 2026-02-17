@@ -54,6 +54,7 @@ import {
   getSlotLabelForLine,
   areaRequiresTrainedOrExpertFromConfig,
   getDefaultICLineConfig,
+  getDefaultNICLineConfig,
   getBreaksEnabled,
   getBreaksScope,
   getBreakRotations,
@@ -189,28 +190,41 @@ export default function App() {
     () => rootState.lines.find((l) => l.id === rootState.currentLineId),
     [rootState.lines, rootState.currentLineId]
   );
+  /** For IC/NIC, always use full default areas/sections so display never breaks; keep user floatSlots. */
+  const effectiveConfig = useMemo(() => {
+    if (!currentConfig) return null;
+    if (currentConfig.id === 'ic') {
+      const def = getDefaultICLineConfig();
+      return { ...def, floatSlots: currentConfig.floatSlots ?? def.floatSlots };
+    }
+    if (currentConfig.id === 'nic') {
+      const def = getDefaultNICLineConfig();
+      return { ...def, floatSlots: currentConfig.floatSlots ?? def.floatSlots };
+    }
+    return currentConfig;
+  }, [currentConfig]);
   const areaIds = useMemo(
-    () => (currentConfig ? getAreaIds(currentConfig) : []),
-    [currentConfig]
+    () => (effectiveConfig ? getAreaIds(effectiveConfig) : []),
+    [effectiveConfig]
   );
   const rosterAreaIds = useMemo(
-    () => (currentConfig ? getRosterAreaIds(currentConfig) : []),
-    [currentConfig]
+    () => (effectiveConfig ? getRosterAreaIds(effectiveConfig) : []),
+    [effectiveConfig]
   );
   const lineSections = useMemo(
-    () => (currentConfig ? getLineSections(currentConfig) : []),
-    [currentConfig]
+    () => (effectiveConfig ? getLineSections(effectiveConfig) : []),
+    [effectiveConfig]
   );
   const leadSlotKeys = useMemo(
-    () => (currentConfig ? getLeadSlotKeys(currentConfig) : []),
-    [currentConfig]
+    () => (effectiveConfig ? getLeadSlotKeys(effectiveConfig) : []),
+    [effectiveConfig]
   );
   const effectiveCapacity = useMemo(
     () =>
-      currentConfig
-        ? getEffectiveCapacityForLine(currentConfig, areaCapacityOverrides)
+      effectiveConfig
+        ? getEffectiveCapacityForLine(effectiveConfig, areaCapacityOverrides)
         : ({} as Record<string, { min: number; max: number }>),
-    [currentConfig, areaCapacityOverrides]
+    [effectiveConfig, areaCapacityOverrides]
   );
   // Full staff = user override, or leads + sum of all areas' min capacity
   const [fullStaffOverride, setFullStaffOverride] = useState<number | null>(null);
@@ -221,22 +235,22 @@ export default function App() {
   const fullStaff = fullStaffOverride ?? computedFullStaff;
   const areaLabels = useMemo(
     () =>
-      currentConfig
-        ? getEffectiveAreaLabelsForLine(currentConfig, areaNameOverrides)
+      effectiveConfig
+        ? getEffectiveAreaLabelsForLine(effectiveConfig, areaNameOverrides)
         : {},
-    [currentConfig, areaNameOverrides]
+    [effectiveConfig, areaNameOverrides]
   );
   const getSlotLabel = useCallback(
     (areaId: string, slotIndex: number) =>
-      currentConfig
-        ? getSlotLabelForLine(currentConfig, areaId, slotIndex, slotLabelsByArea)
+      effectiveConfig
+        ? getSlotLabelForLine(effectiveConfig, areaId, slotIndex, slotLabelsByArea)
         : getSlotLabelIC(areaId, slotIndex, slotLabelsByArea),
-    [currentConfig, slotLabelsByArea]
+    [effectiveConfig, slotLabelsByArea]
   );
   const areaRequiresTrainedOrExpert = useCallback(
     (areaId: string) =>
-      currentConfig ? areaRequiresTrainedOrExpertFromConfig(currentConfig, areaId) : true,
-    [currentConfig]
+      effectiveConfig ? areaRequiresTrainedOrExpertFromConfig(effectiveConfig, areaId) : true,
+    [effectiveConfig]
   );
 
   const roster = useMemo(
@@ -459,32 +473,32 @@ export default function App() {
 
   /** Break schedule data for presentation mode: full schedules, rotation count, scope. */
   const presentationBreakData = useMemo(() => {
-    if (!currentConfig || !getBreaksEnabled(currentConfig) || !breakSchedules) return null;
-    const rotationCount = getBreakRotations(currentConfig);
-    const scope = getBreaksScope(currentConfig);
+    if (!effectiveConfig || !getBreaksEnabled(effectiveConfig) || !breakSchedules) return null;
+    const rotationCount = getBreakRotations(effectiveConfig);
+    const scope = getBreaksScope(effectiveConfig);
     return { breakSchedules, rotationCount, breaksScope: scope };
-  }, [currentConfig, breakSchedules]);
+  }, [effectiveConfig, breakSchedules]);
 
   /** Float slots for presentation: real floats + synthetic lead floats (if coverage enabled). */
   const presentationFloatSlots = useMemo(() => {
-    if (!currentConfig) return [];
-    const real = getFloatSlots(currentConfig);
-    const scope = getBreaksScope(currentConfig);
+    if (!effectiveConfig) return [];
+    const real = getFloatSlots(effectiveConfig);
+    const scope = getBreaksScope(effectiveConfig);
     if (scope !== 'station') return real;
     const synthetic: FloatSlotConfig[] = [];
-    const stationAreaIds = currentConfig.areas.map((a) => a.id);
+    const stationAreaIds = effectiveConfig.areas.map((a) => a.id);
     for (const key of leadSlotKeys) {
       if (!leadBreakCoverage[key] || !leadSlots[key]) continue;
-      const label = getLeadSlotLabel(currentConfig, key, areaLabels);
+      const label = getLeadSlotLabel(effectiveConfig, key, areaLabels);
       synthetic.push({ id: `${LEAD_COVERAGE_PREFIX}${key}`, name: `Lead: ${label}`, supportedAreaIds: stationAreaIds });
     }
     return [...real, ...synthetic];
-  }, [currentConfig, leadSlotKeys, leadBreakCoverage, leadSlots, areaLabels]);
+  }, [effectiveConfig, leadSlotKeys, leadBreakCoverage, leadSlots, areaLabels]);
 
   /** Slots for presentation: real slots + synthetic lead float slots. */
   const presentationSlots = useMemo(() => {
-    if (!currentConfig) return slots;
-    const scope = getBreaksScope(currentConfig);
+    if (!effectiveConfig) return slots;
+    const scope = getBreaksScope(effectiveConfig);
     if (scope !== 'station') return slots;
     const augmented: SlotsByArea = { ...slots };
     for (const key of leadSlotKeys) {
@@ -495,19 +509,19 @@ export default function App() {
       augmented[syntheticId] = [{ id: `${syntheticId}_s0`, personId }];
     }
     return augmented;
-  }, [currentConfig, slots, leadSlotKeys, leadBreakCoverage, leadSlots]);
+  }, [effectiveConfig, slots, leadSlotKeys, leadBreakCoverage, leadSlots]);
 
   /** Linked slot groups for presentation: per area, groups of slot indices sharing a label. */
   const presentationLinkedSlots = useMemo(() => {
-    if (!currentConfig) return {};
+    if (!effectiveConfig) return {};
     const result: Record<string, number[][]> = {};
-    for (const area of currentConfig.areas) {
+    for (const area of effectiveConfig.areas) {
       const areaSlots = slots[area.id] ?? [];
-      const groups = getLinkedSlotGroupsForArea(currentConfig, area.id, areaSlots.length, slotLabelsByArea);
+      const groups = getLinkedSlotGroupsForArea(effectiveConfig, area.id, areaSlots.length, slotLabelsByArea);
       if (groups.length > 0) result[area.id] = groups;
     }
     return result;
-  }, [currentConfig, slots, slotLabelsByArea]);
+  }, [effectiveConfig, slots, slotLabelsByArea]);
 
   const setSlotAssignment = useCallback((areaId: AreaId, slotId: string, personId: string | null) => {
     lastLocalChangeRef.current = Date.now();
@@ -849,7 +863,7 @@ export default function App() {
   }, []);
 
   const regenerateBreaksForSlots = useCallback((nextSlots: SlotsByArea) => {
-    if (!currentConfig || !getBreaksEnabled(currentConfig)) {
+    if (!effectiveConfig || !getBreaksEnabled(effectiveConfig)) {
       setBreakSchedules({});
       return;
     }
@@ -860,17 +874,17 @@ export default function App() {
     const floatSlotIndicesByArea: Record<string, number[]> = {};
     for (const areaId of areaIds) {
       const areaSlots = nextSlots[areaId] ?? [];
-      linkedSlotsByArea[areaId] = getLinkedSlotGroupsForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
-      floatSlotIndicesByArea[areaId] = getFloatSlotIndicesForArea(currentConfig, areaId, areaSlots.length, slotLabelsByArea);
+      linkedSlotsByArea[areaId] = getLinkedSlotGroupsForArea(effectiveConfig, areaId, areaSlots.length, slotLabelsByArea);
+      floatSlotIndicesByArea[areaId] = getFloatSlotIndicesForArea(effectiveConfig, areaId, areaSlots.length, slotLabelsByArea);
     }
-    const floatSlots = getFloatSlots(currentConfig);
+    const floatSlots = getFloatSlots(effectiveConfig);
     for (const f of floatSlots) {
       floatSlotIndicesByArea[f.id] = [0];
     }
 
     // Collect area IDs that have break coverage enabled — float/lead coverage applies only to these.
     // In these areas, break preferences are overridden for maximum coverage spread.
-    const scope = getBreaksScope(currentConfig);
+    const scope = getBreaksScope(effectiveConfig);
     const coverageEnabledAreaIds = areaIds.filter((id) => areaBreakCoverageEnabled[id]);
     const floatSupportedAreaIds = new Set<string>();
     for (const f of floatSlots) {
@@ -891,7 +905,7 @@ export default function App() {
     // Leads acting as coverage do NOT get break rotations — they break outside the schedule.
     const areaIdsWithFloats = [...areaIds, ...floatSlots.map((f) => f.id)];
 
-    const rotationCount = getBreakRotations(currentConfig);
+    const rotationCount = getBreakRotations(effectiveConfig);
     const rawSchedules = generateBreakSchedules(roster, nextSlots, areaIdsWithFloats, {
       rotationCount,
       scope,
@@ -903,7 +917,7 @@ export default function App() {
     setBreakSchedules(
       optimizeFloatBreakRotations(rawSchedules, floatSlots, nextSlots, rotationCount)
     );
-  }, [currentConfig, areaIds, roster, leadSlots, leadBreakCoverage, areaBreakCoverageEnabled, slotLabelsByArea, areaLabels, leadSlotKeys]);
+  }, [effectiveConfig, areaIds, roster, leadSlots, leadBreakCoverage, areaBreakCoverageEnabled, slotLabelsByArea, areaLabels, leadSlotKeys]);
 
   const handleRegenerateBreaks = useCallback(() => {
     regenerateBreaksForSlots(slots);
@@ -1115,8 +1129,8 @@ export default function App() {
       },
     }));
     const normalizedSlots =
-      currentConfig
-        ? normalizeSlotsToLineCapacity(imported.slots, currentConfig, imported.areaCapacityOverrides)
+      effectiveConfig
+        ? normalizeSlotsToLineCapacity(imported.slots, effectiveConfig, imported.areaCapacityOverrides)
         : normalizeSlotsToCapacity(imported.slots, imported.areaCapacityOverrides);
     setSlots(normalizedSlots);
     setLeadSlots(imported.leadSlots ?? Object.fromEntries(leadSlotKeys.map((id) => [id, null])));
@@ -1133,7 +1147,7 @@ export default function App() {
     setAreaNameOverrides(imported.areaNameOverrides ?? {});
     setSlotLabelsByArea(imported.slotLabelsByArea ?? {});
     setSavedDays(loadSavedDays());
-  }, [currentConfig, leadSlotKeys]);
+  }, [effectiveConfig, leadSlotKeys]);
 
   const handleSaveToFile = useCallback(async () => {
     const root = rootStateRef.current;
@@ -1657,7 +1671,7 @@ export default function App() {
           lineHealthScore={lineHealthScore}
           lineSections={[...lineSections]}
           leadSlotKeys={leadSlotKeys}
-          getLeadSlotLabel={(key) => getLeadSlotLabel(currentConfig!, key, areaLabels)}
+          getLeadSlotLabel={(key) => getLeadSlotLabel(effectiveConfig!, key, areaLabels)}
           getSlotLabel={getSlotLabel}
           areaRequiresTrainedOrExpert={areaRequiresTrainedOrExpert}
           breakSchedules={presentationBreakData?.breakSchedules}
@@ -1713,7 +1727,7 @@ export default function App() {
         visible={rosterVisible}
         areaLabels={areaLabels}
         areaIds={rosterAreaIds}
-        floatSlots={currentConfig ? getFloatSlots(currentConfig) : []}
+        floatSlots={effectiveConfig ? getFloatSlots(effectiveConfig) : []}
         lines={rootState.lines}
         currentLineId={rootState.currentLineId}
         onToggleVisible={() => setRosterVisible((v) => !v)}
@@ -1790,12 +1804,12 @@ export default function App() {
           roster={roster}
           leadSlots={leadSlots}
           leadSlotKeys={leadSlotKeys}
-          getLeadSlotLabel={(key) => getLeadSlotLabel(currentConfig!, key, areaLabels)}
+          getLeadSlotLabel={(key) => getLeadSlotLabel(effectiveConfig!, key, areaLabels)}
           areaIds={areaIds}
           onLeadSlotChange={setLeadSlot}
           leadBreakCoverage={leadBreakCoverage}
           onToggleLeadBreakCoverage={handleToggleLeadBreakCoverage}
-          showBreakCoverageToggle={!!currentConfig && getBreaksEnabled(currentConfig)}
+          showBreakCoverageToggle={!!effectiveConfig && getBreaksEnabled(effectiveConfig)}
         />
       </div>
 
@@ -1810,7 +1824,7 @@ export default function App() {
         <button type="button" onClick={handleStretch} title="Push team outside comfort zone; prefer areas they want to learn">STRETCH</button>
         */}
         <button type="button" className="btn-danger" onClick={handleClearLine}>Clear line</button>
-        {currentConfig && getBreaksEnabled(currentConfig) && (
+        {effectiveConfig && getBreaksEnabled(effectiveConfig) && (
           <button type="button" className="btn-primary" onClick={handleRegenerateBreaks} title="Regenerate break schedule from current assignments and preferences">
             Regenerate breaks
           </button>
@@ -1829,7 +1843,7 @@ export default function App() {
               setShowFloatSupportModal(true);
             }}
           >
-            {getFloatSlots(currentConfig).length === 0 ? 'Add float' : 'Float support'}
+            {getFloatSlots(effectiveConfig ?? currentConfig).length === 0 ? 'Add float' : 'Float support'}
           </button>
           {currentConfig.id !== 'ic' && !showAddStationForm ? (
             <button
@@ -1959,7 +1973,7 @@ export default function App() {
                 />
                 <div style={{ fontSize: '0.85rem', color: '#555', marginBottom: 6 }}>Supports:</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {currentConfig.areas.map((a) => {
+                  {(effectiveConfig ?? currentConfig).areas.map((a) => {
                     const checked = f.supportedAreaIds.includes(a.id);
                     return (
                       <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
@@ -2013,7 +2027,7 @@ export default function App() {
                   {
                     id,
                     name: `Float ${(prev?.length ?? 0) + 1}`,
-                    supportedAreaIds: currentConfig ? currentConfig.areas.map((a) => a.id) : [],
+                    supportedAreaIds: (effectiveConfig ?? currentConfig) ? (effectiveConfig ?? currentConfig)!.areas.map((a) => a.id) : [],
                   },
                 ]);
               }}
@@ -2126,7 +2140,7 @@ export default function App() {
                 breakCoverageEnabledA={!!areaBreakCoverageEnabled[idA]}
                 breakCoverageEnabledB={!!areaBreakCoverageEnabled[idB]}
                 onToggleBreakCoverage={handleToggleAreaBreakCoverage}
-                showBreakCoverageToggle={!!currentConfig && getBreaksEnabled(currentConfig)}
+                showBreakCoverageToggle={!!effectiveConfig && getBreaksEnabled(effectiveConfig)}
               />
             );
           }
@@ -2158,12 +2172,12 @@ export default function App() {
               onRequiresTrainedOrExpertChange={(value) => handleAreaRequiresTrainedOrExpertChange(areaId, value)}
               breakCoverageEnabled={!!areaBreakCoverageEnabled[areaId]}
               onToggleBreakCoverage={handleToggleAreaBreakCoverage}
-              showBreakCoverageToggle={!!currentConfig && getBreaksEnabled(currentConfig)}
+              showBreakCoverageToggle={!!effectiveConfig && getBreaksEnabled(effectiveConfig)}
             />
           );
         })}
-        {currentConfig &&
-          getFloatSlots(currentConfig).map((f) => {
+        {effectiveConfig &&
+          getFloatSlots(effectiveConfig).map((f) => {
             const supportsLabel =
               f.supportedAreaIds.length > 0
                 ? f.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ')
@@ -2194,8 +2208,8 @@ export default function App() {
                 onAssign={setSlotAssignment}
                 requiresTrainedOrExpert={false}
                 supportedAreaIds={f.supportedAreaIds}
-                breakSchedules={getBreaksEnabled(currentConfig) ? breakSchedules : undefined}
-                rotationCount={getBreaksEnabled(currentConfig) ? getBreakRotations(currentConfig) : undefined}
+                breakSchedules={getBreaksEnabled(effectiveConfig) ? breakSchedules : undefined}
+                rotationCount={getBreaksEnabled(effectiveConfig) ? getBreakRotations(effectiveConfig) : undefined}
               />
             );
           })}
@@ -2209,9 +2223,9 @@ export default function App() {
       </div>
 
 
-      {currentConfig && getBreaksEnabled(currentConfig) && (() => {
-        const rotationCount = getBreakRotations(currentConfig);
-        const scope = getBreaksScope(currentConfig);
+      {effectiveConfig && getBreaksEnabled(effectiveConfig) && (() => {
+        const rotationCount = getBreakRotations(effectiveConfig);
+        const scope = getBreaksScope(effectiveConfig);
         if (scope === 'line') {
           const lineAssignments = breakSchedules?.[BREAK_LINE_WIDE_KEY];
           if (!lineAssignments || Object.keys(lineAssignments).length === 0) return null;
@@ -2228,7 +2242,7 @@ export default function App() {
             />
           );
         }
-        const floatSlots = getFloatSlots(currentConfig);
+        const floatSlots = getFloatSlots(effectiveConfig);
         return (
           <>
             {floatSlots.length > 0 && (
@@ -2316,7 +2330,7 @@ export default function App() {
                 {leadSlotKeys.map((key) => {
                   if (!leadBreakCoverage[key] || !leadSlots[key]) return null;
                   const leadPerson = roster.find((r) => r.id === leadSlots[key]);
-                  const label = currentConfig ? getLeadSlotLabel(currentConfig, key, areaLabels) : key;
+                  const label = effectiveConfig ? getLeadSlotLabel(effectiveConfig, key, areaLabels) : key;
                   return (
                     <div
                       key={key}

@@ -211,6 +211,8 @@ body {
   min-width: 0;
   overflow-x: auto;
   overflow-y: visible;
+  /* Ensure at least ~2 columns visible so areas + float aren't hidden */
+  min-width: 420px;
 }
 .areas-grid {
   display: grid;
