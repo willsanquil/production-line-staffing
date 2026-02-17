@@ -53,6 +53,7 @@ interface CombinedAreaStaffingProps {
   onToggleDeJuice: (areaId: AreaId, deJuiced: boolean) => void;
   onCapacityChange: (areaId: AreaId, payload: { min?: number; max?: number }) => void;
   onSlotLabelChange: (areaId: AreaId, slotIndex: number, value: string) => void;
+  onClearArea?: (areaId: AreaId) => void;
   onSlotsChange: (areaId: AreaId, slots: Slot[]) => void;
   onSectionTasksChange?: (areaId: AreaId, tasks: unknown[]) => void;
   onAssign: (areaId: AreaId, slotId: string, personId: string | null) => void;
@@ -85,6 +86,7 @@ function CombinedAreaStaffingInner({
   leadAssignedPersonIds,
   onCapacityChange,
   onSlotLabelChange,
+  onClearArea,
   onSlotsChange,
   onAssign,
   requiresTrainedOrExpertA = false,
@@ -192,6 +194,16 @@ function CombinedAreaStaffingInner({
               aria-label={`${areaLabel} max slots`}
             />
           </label>
+          {onClearArea && (
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => onClearArea(areaId)}
+              title={`Clear assigned people from ${areaLabel}`}
+            >
+              Clear area
+            </button>
+          )}
         </div>
         {(belowMin || needsTrainedOrExpert) && (
           <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: '#c0392b' }}>

@@ -41,6 +41,7 @@ interface AreaStaffingProps {
   onAreaNameChange: (areaId: AreaId, name: string) => void;
   onCapacityChange: (areaId: AreaId, payload: { min?: number; max?: number }) => void;
   onSlotLabelChange: (areaId: AreaId, slotIndex: number, value: string) => void;
+  onClearArea?: (areaId: AreaId) => void;
   sectionTasks?: unknown[];
   onSlotsChange: (areaId: AreaId, slots: Slot[]) => void;
   onSectionTasksChange?: (areaId: AreaId, tasks: unknown[]) => void;
@@ -75,6 +76,7 @@ function AreaStaffingInner({
   onAreaNameChange,
   onCapacityChange,
   onSlotLabelChange,
+  onClearArea,
   onSlotsChange,
   onAssign,
   requiresTrainedOrExpert = false,
@@ -199,6 +201,16 @@ function AreaStaffingInner({
             aria-label="Max slots"
           />
         </label>
+        {onClearArea && (
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => onClearArea(areaId)}
+            title={`Clear assigned people from ${areaLabel}`}
+          >
+            Clear area
+          </button>
+        )}
       </div>
       <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: belowMin ? '#c0392b' : '#666' }}>
         {belowMin && '— Below minimum —'}

@@ -78,6 +78,7 @@ import { UnslottedBank } from './components/UnslottedBank';
 import { DayBank } from './components/DayBank';
 import { randomizeAssignments, applyDefaultPositionsThenSpread, fillRemainingAssignments } from './lib/automation';
 import { generateBreakSchedules, optimizeFloatBreakRotations } from './lib/breakSchedules';
+import { clearAreaAssignments } from './lib/slots';
 import { saveRootState, loadSavedDays, addSavedDay, removeSavedDay, exportStateToJson, importStateFromJson } from './lib/persist';
 import { saveToFile, overwriteFile, openFromFile, isSaveToFileSupported } from './lib/fileStorage';
 import { getLineState, setLineState, createCloudLine, deleteCloudLine, listCloudLines } from './lib/cloudLines';
@@ -845,15 +846,19 @@ export default function App() {
 
   const handleClearLine = useCallback(() => {
     setSlots((prev) => {
-      const next = {} as SlotsByArea;
+      let next = prev;
       for (const areaId of areaIds) {
-        const list = prev[areaId];
-        if (list) next[areaId] = list.map((s) => s.locked ? s : { ...s, personId: null });
+        next = clearAreaAssignments(next, areaId);
       }
-      return { ...prev, ...next };
+      return next;
     });
     setBreakSchedules({});
   }, [areaIds]);
+
+  const handleClearArea = useCallback((areaId: AreaId) => {
+    lastLocalChangeRef.current = Date.now();
+    setSlots((prev) => clearAreaAssignments(prev, areaId));
+  }, []);
 
   const regenerateBreaksForSlots = useCallback((nextSlots: SlotsByArea) => {
     if (!currentConfig || !getBreaksEnabled(currentConfig)) {
@@ -2123,6 +2128,7 @@ export default function App() {
                 onToggleDeJuice={handleToggleDeJuice}
                 onCapacityChange={handleAreaCapacityChange}
                 onSlotLabelChange={handleSlotLabelChange}
+                onClearArea={handleClearArea}
                 onSlotsChange={setSlotsForArea}
                 onAssign={setSlotAssignment}
                 requiresTrainedOrExpertA={areaRequiresTrainedOrExpert(idA)}
@@ -2156,6 +2162,7 @@ export default function App() {
               onAreaNameChange={handleAreaNameChange}
               onCapacityChange={handleAreaCapacityChange}
               onSlotLabelChange={handleSlotLabelChange}
+              onClearArea={handleClearArea}
               sectionTasks={sectionTasks[areaId] ?? []}
               onSlotsChange={setSlotsForArea}
               onAssign={setSlotAssignment}
@@ -2192,6 +2199,7 @@ export default function App() {
                 onAreaNameChange={() => {}}
                 onCapacityChange={() => {}}
                 onSlotLabelChange={() => {}}
+                onClearArea={handleClearArea}
                 sectionTasks={[]}
                 onSlotsChange={setSlotsForArea}
                 onSectionTasksChange={() => {}}

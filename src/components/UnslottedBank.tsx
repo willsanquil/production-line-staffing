@@ -20,6 +20,7 @@ function UnslottedBankInner({
       !leadAssignedPersonIds.has(p.id) &&
       !allAssignedPersonIds.has(p.id)
   );
+  const absent = roster.filter((p) => p.absent);
 
   return (
     <section className="section-card area-card unslotted-bank" aria-label="Unslotted people">
@@ -34,6 +35,20 @@ function UnslottedBankInner({
           <li className="unslotted-bank-item unslotted-bank-item--empty">Everyone is slotted</li>
         ) : (
           unslotted.map((p) => (
+            <li key={p.id} className="unslotted-bank-item" title={formatPersonStatusLabel(p)}>
+              {p.name}
+            </li>
+          ))
+        )}
+      </ul>
+      <h3 style={{ margin: '0.9rem 0 0.4rem 0', fontSize: '0.95rem', fontWeight: 600 }}>
+        Absent list
+      </h3>
+      <ul className="unslotted-bank-list">
+        {absent.length === 0 ? (
+          <li className="unslotted-bank-item unslotted-bank-item--empty">No one marked absent</li>
+        ) : (
+          absent.map((p) => (
             <li key={p.id} className="unslotted-bank-item" title={formatPersonStatusLabel(p)}>
               {p.name}
             </li>

@@ -170,36 +170,60 @@ function RosterGridInner({
   }, [roster, flexedInPersonIds]);
   const [newName, setNewName] = useState('');
   const [newOTName, setNewOTName] = useState('');
+  const [searchText, setSearchText] = useState('');
+  const [otVisible, setOtVisible] = useState(true);
   const [staffPage, setStaffPage] = useState(0);
   const [otPage, setOtPage] = useState(0);
+  const normalizedSearch = searchText.trim().toLowerCase();
+  const filteredStaffRoster = useMemo(
+    () =>
+      staffRoster.filter(
+        (person) => normalizedSearch === '' || person.name.toLowerCase().includes(normalizedSearch)
+      ),
+    [staffRoster, normalizedSearch]
+  );
+  const filteredFlexedInRoster = useMemo(
+    () =>
+      flexedInRoster.filter(
+        (person) => normalizedSearch === '' || person.name.toLowerCase().includes(normalizedSearch)
+      ),
+    [flexedInRoster, normalizedSearch]
+  );
+  const filteredOtRoster = useMemo(
+    () =>
+      otRoster.filter(
+        (person) => normalizedSearch === '' || person.name.toLowerCase().includes(normalizedSearch)
+      ),
+    [otRoster, normalizedSearch]
+  );
 
-  const staffTotalPages = Math.max(1, Math.ceil(staffRoster.length / PAGE_SIZE));
-  const flexedInTotalPages = Math.max(1, Math.ceil(flexedInRoster.length / PAGE_SIZE));
-  const otTotalPages = Math.max(1, Math.ceil(otRoster.length / PAGE_SIZE));
+  const staffTotalPages = Math.max(1, Math.ceil(filteredStaffRoster.length / PAGE_SIZE));
+  const flexedInTotalPages = Math.max(1, Math.ceil(filteredFlexedInRoster.length / PAGE_SIZE));
+  const otTotalPages = Math.max(1, Math.ceil(filteredOtRoster.length / PAGE_SIZE));
   const staffPageIndex = Math.min(staffPage, staffTotalPages - 1);
   const [flexedInPage, setFlexedInPage] = useState(0);
   const flexedInPageIndex = Math.min(flexedInPage, flexedInTotalPages - 1);
   const otPageIndex = Math.min(otPage, otTotalPages - 1);
   const staffRosterPage = useMemo(
     () =>
-      staffRoster.slice(
+      filteredStaffRoster.slice(
         staffPageIndex * PAGE_SIZE,
         (staffPageIndex + 1) * PAGE_SIZE
       ),
-    [staffRoster, staffPageIndex]
+    [filteredStaffRoster, staffPageIndex]
   );
   const flexedInRosterPage = useMemo(
     () =>
-      flexedInRoster.slice(
+      filteredFlexedInRoster.slice(
         flexedInPageIndex * PAGE_SIZE,
         (flexedInPageIndex + 1) * PAGE_SIZE
       ),
-    [flexedInRoster, flexedInPageIndex]
+    [filteredFlexedInRoster, flexedInPageIndex]
   );
   const otRosterPage = useMemo(
     () =>
-      otRoster.slice(otPageIndex * PAGE_SIZE, (otPageIndex + 1) * PAGE_SIZE),
-    [otRoster, otPageIndex]
+      filteredOtRoster.slice(otPageIndex * PAGE_SIZE, (otPageIndex + 1) * PAGE_SIZE),
+    [filteredOtRoster, otPageIndex]
   );
 
   useEffect(() => {
@@ -240,6 +264,9 @@ function RosterGridInner({
           <button type="button" onClick={onToggleVisible}>
             {visible ? 'Hide roster' : 'Show roster'}
           </button>
+          <button type="button" onClick={() => setOtVisible((v) => !v)}>
+            {otVisible ? 'Hide OT' : 'Show OT'}
+          </button>
           {onSaveToFile && onOpenFromFile && (isSaveToFileSupported?.() ?? true) && (
             <>
               <button type="button" onClick={onSaveToFile}>Save to file</button>
@@ -257,6 +284,16 @@ function RosterGridInner({
       </div>
       {visible && (
         <>
+          <div style={{ marginBottom: '0.75rem' }}>
+            <input
+              type="text"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              placeholder="Search roster by name..."
+              aria-label="Search roster"
+              style={{ minWidth: 220, padding: '6px 8px', maxWidth: 360, width: '100%' }}
+            />
+          </div>
           {/* Staff */}
           <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem' }}>Staff</h3>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
@@ -406,7 +443,7 @@ function RosterGridInner({
               </tbody>
             </table>
           </div>
-          {staffRoster.length > 0 && (
+          {filteredStaffRoster.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
               <button
                 type="button"
@@ -419,7 +456,7 @@ function RosterGridInner({
               <span style={{ fontSize: '0.9rem' }}>
                 Page {staffPageIndex + 1} of {staffTotalPages}
                 <span style={{ color: '#666', marginLeft: 4 }}>
-                  ({staffRoster.length} staff)
+                  ({filteredStaffRoster.length} staff)
                 </span>
               </span>
               <button
@@ -434,7 +471,7 @@ function RosterGridInner({
           )}
 
           {/* Flexed to this line – people from other lines; can be assigned to slots here */}
-          {flexedInRoster.length > 0 && (
+          {filteredFlexedInRoster.length > 0 && (
             <>
               <h3 style={{ margin: '1.25rem 0 0.5rem 0', fontSize: '1rem' }}>Flexed to this line</h3>
               <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#666' }}>
@@ -537,7 +574,7 @@ function RosterGridInner({
                   </tbody>
                 </table>
               </div>
-              {flexedInRoster.length > PAGE_SIZE && (
+              {filteredFlexedInRoster.length > PAGE_SIZE && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
                   <button
                     type="button"
@@ -548,7 +585,7 @@ function RosterGridInner({
                   </button>
                   <span style={{ fontSize: '0.9rem' }}>
                     Page {flexedInPageIndex + 1} of {flexedInTotalPages}
-                    <span style={{ color: '#666', marginLeft: 4 }}>({flexedInRoster.length} flexed in)</span>
+                    <span style={{ color: '#666', marginLeft: 4 }}>({filteredFlexedInRoster.length} flexed in)</span>
                   </span>
                   <button
                     type="button"
@@ -563,182 +600,186 @@ function RosterGridInner({
           )}
 
           {/* OT pool – separate list; "Here today" controls slotting eligibility */}
-          <h3 style={{ margin: '1.25rem 0 0.5rem 0', fontSize: '1rem' }}>OT pool</h3>
-          <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#666' }}>
-            OT are not available for the line until you mark them &quot;Here today&quot;.
-          </p>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-            <input
-              type="text"
-              value={newOTName}
-              onChange={(e) => setNewOTName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddOT()}
-              placeholder="New OT name..."
-              style={{ minWidth: 140, padding: '6px 8px' }}
-              aria-label="New OT person name"
-            />
-            <button type="button" onClick={handleAddOT}>Add OT</button>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th style={stickyNameStyle}>Name</th>
-                  <th style={{ width: 44 }}></th>
-                  {showFlexedColumn && (
-                    <th style={{ minWidth: 100 }}>Flexed</th>
-                  )}
-                  <th style={{ width: 50 }}>OT</th>
-                  <th style={{ width: 90 }}>Here today</th>
-                  {areaIds.map((areaId) => (
-                    <th key={areaId} style={{ textAlign: 'center', minWidth: 90 }}>
-                      {areaLabels[areaId]}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {otRosterPage.map((person) => (
-                  <tr key={person.id} style={{ backgroundColor: (person.otHereToday ?? false) ? 'transparent' : 'rgba(0,0,0,0.04)' }}>
-                    <td style={{ ...stickyNameStyle, verticalAlign: 'top' }}>
-                      <PersonHealthBar person={person} areaIds={areaIds} />
-                      <input
-                        type="text"
-                        value={person.name}
-                        onChange={(e) => onNameChange(person.id, e.target.value)}
-                        style={{ width: '100%', minWidth: 100, padding: '4px 6px', fontSize: 'inherit' }}
-                        aria-label={`Edit ${person.name}`}
-                      />
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        onClick={() => onRemovePerson(person.id)}
-                        aria-label={`Remove ${person.name}`}
-                        title="Remove from roster"
-                        style={{ padding: '2px 6px', fontSize: '0.8rem' }}
-                      >
-                        −
-                      </button>
-                    </td>
-                    {showFlexedColumn && (
-                      <td>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-                          <select
-                            value={person.flexedToLineId ?? ''}
-                            onChange={(e) => onFlexedToLineChange?.(person.id, e.target.value || null)}
-                            style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 88 }}
-                            aria-label={`${person.name} flexed to`}
-                          >
-                            <option value="">—</option>
-                            {otherLines.map((l) => (
-                              <option key={l.id} value={l.id}>{l.name}</option>
-                            ))}
-                          </select>
-                          {otherLines.map((l) => (
-                            <button
-                              key={l.id}
-                              type="button"
-                              onClick={() => onFlexedToLineChange?.(person.id, l.id)}
-                              style={{ padding: '2px 6px', fontSize: '0.75rem', whiteSpace: 'nowrap' }}
-                              title={`Flex to ${l.name}`}
-                            >
-                              → {l.name}
-                            </button>
-                          ))}
-                        </div>
-                      </td>
-                    )}
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked
-                        onChange={(e) => onToggleOT(person.id, !e.target.checked)}
-                        aria-label={`Move ${person.name} back to Staff`}
-                        title="Uncheck to move back to Staff"
-                      />
-                    </td>
-                    <td>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: (person.otHereToday ?? false) ? 600 : 400 }}>
-                        <input
-                          type="checkbox"
-                          checked={person.otHereToday ?? false}
-                          onChange={(e) => onToggleOTHereToday(person.id, e.target.checked)}
-                          aria-label={`${person.name} is here today`}
-                          title="Check when this OT is on site and available to slot"
-                        />
-                        {(person.otHereToday ?? false) ? 'Yes — can slot' : 'No'}
-                      </label>
-                    </td>
-                    {areaIds.map((areaId) => {
-                      const supported = floatIdToSupported.get(areaId);
-                      if (supported != null) {
-                        const level = floatCombinedSkill(person, supported);
-                        return (
-                          <td key={areaId} style={{ textAlign: 'center' }} title={`From supported areas`}>
-                            <span className={`skill-${level}`} style={{ padding: '2px 6px', borderRadius: 4, fontSize: '0.8rem' }}>
-                              {SKILL_LABELS[level]}
-                            </span>
-                          </td>
-                        );
-                      }
-                      const level = person.skills[areaId] ?? 'no_experience';
-                      return (
-                        <td key={areaId} style={{ textAlign: 'center' }}>
-                          <select
-                            value={level}
-                            onChange={(e) => onSkillChange(person.id, areaId, e.target.value as SkillLevel)}
-                            className={`skill-${level}`}
-                            style={{
-                              width: '100%',
-                              maxWidth: 120,
-                              padding: '4px 6px',
-                              border: '1px solid rgba(0,0,0,0.2)',
-                              borderRadius: 4,
-                              fontSize: '0.8rem',
-                              cursor: 'pointer',
-                            }}
-                            title={SKILL_LABELS[level]}
-                          >
-                            {SKILL_LEVELS.map((l) => (
-                              <option key={l} value={l}>
-                                {SKILL_LABELS[l]}
-                              </option>
-                            ))}
-                          </select>
+          {otVisible && (
+            <>
+              <h3 style={{ margin: '1.25rem 0 0.5rem 0', fontSize: '1rem' }}>OT pool</h3>
+              <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#666' }}>
+                OT are not available for the line until you mark them &quot;Here today&quot;.
+              </p>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  value={newOTName}
+                  onChange={(e) => setNewOTName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddOT()}
+                  placeholder="New OT name..."
+                  style={{ minWidth: 140, padding: '6px 8px' }}
+                  aria-label="New OT person name"
+                />
+                <button type="button" onClick={handleAddOT}>Add OT</button>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th style={stickyNameStyle}>Name</th>
+                      <th style={{ width: 44 }}></th>
+                      {showFlexedColumn && (
+                        <th style={{ minWidth: 100 }}>Flexed</th>
+                      )}
+                      <th style={{ width: 50 }}>OT</th>
+                      <th style={{ width: 90 }}>Here today</th>
+                      {areaIds.map((areaId) => (
+                        <th key={areaId} style={{ textAlign: 'center', minWidth: 90 }}>
+                          {areaLabels[areaId]}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {otRosterPage.map((person) => (
+                      <tr key={person.id} style={{ backgroundColor: (person.otHereToday ?? false) ? 'transparent' : 'rgba(0,0,0,0.04)' }}>
+                        <td style={{ ...stickyNameStyle, verticalAlign: 'top' }}>
+                          <PersonHealthBar person={person} areaIds={areaIds} />
+                          <input
+                            type="text"
+                            value={person.name}
+                            onChange={(e) => onNameChange(person.id, e.target.value)}
+                            style={{ width: '100%', minWidth: 100, padding: '4px 6px', fontSize: 'inherit' }}
+                            aria-label={`Edit ${person.name}`}
+                          />
                         </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {otRoster.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={() => setOtPage((p) => Math.max(0, p - 1))}
-                disabled={otPageIndex <= 0}
-                aria-label="Previous page"
-              >
-                ← Prev
-              </button>
-              <span style={{ fontSize: '0.9rem' }}>
-                Page {otPageIndex + 1} of {otTotalPages}
-                <span style={{ color: '#666', marginLeft: 4 }}>
-                  ({otRoster.length} OT)
-                </span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setOtPage((p) => Math.min(otTotalPages - 1, p + 1))}
-                disabled={otPageIndex >= otTotalPages - 1}
-                aria-label="Next page"
-              >
-                Next →
-              </button>
-            </div>
+                        <td>
+                          <button
+                            type="button"
+                            onClick={() => onRemovePerson(person.id)}
+                            aria-label={`Remove ${person.name}`}
+                            title="Remove from roster"
+                            style={{ padding: '2px 6px', fontSize: '0.8rem' }}
+                          >
+                            −
+                          </button>
+                        </td>
+                        {showFlexedColumn && (
+                          <td>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                              <select
+                                value={person.flexedToLineId ?? ''}
+                                onChange={(e) => onFlexedToLineChange?.(person.id, e.target.value || null)}
+                                style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 88 }}
+                                aria-label={`${person.name} flexed to`}
+                              >
+                                <option value="">—</option>
+                                {otherLines.map((l) => (
+                                  <option key={l.id} value={l.id}>{l.name}</option>
+                                ))}
+                              </select>
+                              {otherLines.map((l) => (
+                                <button
+                                  key={l.id}
+                                  type="button"
+                                  onClick={() => onFlexedToLineChange?.(person.id, l.id)}
+                                  style={{ padding: '2px 6px', fontSize: '0.75rem', whiteSpace: 'nowrap' }}
+                                  title={`Flex to ${l.name}`}
+                                >
+                                  → {l.name}
+                                </button>
+                              ))}
+                            </div>
+                          </td>
+                        )}
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked
+                            onChange={(e) => onToggleOT(person.id, !e.target.checked)}
+                            aria-label={`Move ${person.name} back to Staff`}
+                            title="Uncheck to move back to Staff"
+                          />
+                        </td>
+                        <td>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: (person.otHereToday ?? false) ? 600 : 400 }}>
+                            <input
+                              type="checkbox"
+                              checked={person.otHereToday ?? false}
+                              onChange={(e) => onToggleOTHereToday(person.id, e.target.checked)}
+                              aria-label={`${person.name} is here today`}
+                              title="Check when this OT is on site and available to slot"
+                            />
+                            {(person.otHereToday ?? false) ? 'Yes — can slot' : 'No'}
+                          </label>
+                        </td>
+                        {areaIds.map((areaId) => {
+                          const supported = floatIdToSupported.get(areaId);
+                          if (supported != null) {
+                            const level = floatCombinedSkill(person, supported);
+                            return (
+                              <td key={areaId} style={{ textAlign: 'center' }} title={`From supported areas`}>
+                                <span className={`skill-${level}`} style={{ padding: '2px 6px', borderRadius: 4, fontSize: '0.8rem' }}>
+                                  {SKILL_LABELS[level]}
+                                </span>
+                              </td>
+                            );
+                          }
+                          const level = person.skills[areaId] ?? 'no_experience';
+                          return (
+                            <td key={areaId} style={{ textAlign: 'center' }}>
+                              <select
+                                value={level}
+                                onChange={(e) => onSkillChange(person.id, areaId, e.target.value as SkillLevel)}
+                                className={`skill-${level}`}
+                                style={{
+                                  width: '100%',
+                                  maxWidth: 120,
+                                  padding: '4px 6px',
+                                  border: '1px solid rgba(0,0,0,0.2)',
+                                  borderRadius: 4,
+                                  fontSize: '0.8rem',
+                                  cursor: 'pointer',
+                                }}
+                                title={SKILL_LABELS[level]}
+                              >
+                                {SKILL_LEVELS.map((l) => (
+                                  <option key={l} value={l}>
+                                    {SKILL_LABELS[l]}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {filteredOtRoster.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => setOtPage((p) => Math.max(0, p - 1))}
+                    disabled={otPageIndex <= 0}
+                    aria-label="Previous page"
+                  >
+                    ← Prev
+                  </button>
+                  <span style={{ fontSize: '0.9rem' }}>
+                    Page {otPageIndex + 1} of {otTotalPages}
+                    <span style={{ color: '#666', marginLeft: 4 }}>
+                      ({filteredOtRoster.length} OT)
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setOtPage((p) => Math.min(otTotalPages - 1, p + 1))}
+                    disabled={otPageIndex >= otTotalPages - 1}
+                    aria-label="Next page"
+                  >
+                    Next →
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </>
       )}
