@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { AppState, AreaId, BreakPreference, FloatSlotConfig, RootState, RosterPerson, SavedDay, SlotsByArea } from './types';
 import type { SkillLevel } from './types';
-import { AREA_IDS, LINE_SECTIONS } from './types';
-
 const SKILL_SCORE: Record<SkillLevel, number> = {
   no_experience: 0,
   training: 1,
@@ -46,7 +44,7 @@ function getLineHealthScore(
 import { getHydratedRootState, clearHydrateCache } from './lib/initialState';
 import { getRosterForLine, getFlexedInPersonIds } from './lib/personLabel';
 import { sortByFirstName } from './lib/rosterSort';
-import { getEffectiveCapacity, getEffectiveAreaLabels, getSlotLabel as getSlotLabelIC } from './lib/areaConfig';
+import { getSlotLabel as getSlotLabelIC } from './lib/areaConfig';
 import {
   getAreaIds,
   getLineSections,
@@ -192,20 +190,15 @@ export default function App() {
     [rootState.lines, rootState.currentLineId]
   );
   const areaIds = useMemo(
-    () => (currentConfig ? (currentConfig.id === 'ic' ? [...AREA_IDS] : getAreaIds(currentConfig)) : []),
+    () => (currentConfig ? getAreaIds(currentConfig) : []),
     [currentConfig]
   );
   const rosterAreaIds = useMemo(
-    () =>
-      currentConfig
-        ? currentConfig.id === 'ic'
-          ? getRosterAreaIds(getDefaultICLineConfig())
-          : getRosterAreaIds(currentConfig)
-        : [],
+    () => (currentConfig ? getRosterAreaIds(currentConfig) : []),
     [currentConfig]
   );
   const lineSections = useMemo(
-    () => (currentConfig ? (currentConfig.id === 'ic' ? LINE_SECTIONS : getLineSections(currentConfig)) : []),
+    () => (currentConfig ? getLineSections(currentConfig) : []),
     [currentConfig]
   );
   const leadSlotKeys = useMemo(
@@ -215,9 +208,7 @@ export default function App() {
   const effectiveCapacity = useMemo(
     () =>
       currentConfig
-        ? currentConfig.id === 'ic'
-          ? getEffectiveCapacity(areaCapacityOverrides)
-          : getEffectiveCapacityForLine(currentConfig, areaCapacityOverrides)
+        ? getEffectiveCapacityForLine(currentConfig, areaCapacityOverrides)
         : ({} as Record<string, { min: number; max: number }>),
     [currentConfig, areaCapacityOverrides]
   );
@@ -231,15 +222,13 @@ export default function App() {
   const areaLabels = useMemo(
     () =>
       currentConfig
-        ? currentConfig.id === 'ic'
-          ? getEffectiveAreaLabels(areaNameOverrides)
-          : getEffectiveAreaLabelsForLine(currentConfig, areaNameOverrides)
+        ? getEffectiveAreaLabelsForLine(currentConfig, areaNameOverrides)
         : {},
     [currentConfig, areaNameOverrides]
   );
   const getSlotLabel = useCallback(
     (areaId: string, slotIndex: number) =>
-      currentConfig && currentConfig.id !== 'ic'
+      currentConfig
         ? getSlotLabelForLine(currentConfig, areaId, slotIndex, slotLabelsByArea)
         : getSlotLabelIC(areaId, slotIndex, slotLabelsByArea),
     [currentConfig, slotLabelsByArea]
@@ -782,7 +771,6 @@ export default function App() {
       const lineIndex = prev.lines.findIndex((l) => l.id === prev.currentLineId);
       if (lineIndex === -1) return prev;
       const line = prev.lines[lineIndex];
-      if (line.id === 'ic') return prev;
       const lines = prev.lines.slice();
       lines[lineIndex] = { ...line, floatSlots: nextFloatSlots.length > 0 ? nextFloatSlots : undefined };
       const lineState = prev.lineStates[prev.currentLineId];
@@ -1127,7 +1115,7 @@ export default function App() {
       },
     }));
     const normalizedSlots =
-      currentConfig && currentConfig.id !== 'ic'
+      currentConfig
         ? normalizeSlotsToLineCapacity(imported.slots, currentConfig, imported.areaCapacityOverrides)
         : normalizeSlotsToCapacity(imported.slots, imported.areaCapacityOverrides);
     setSlots(normalizedSlots);
@@ -1829,31 +1817,30 @@ export default function App() {
         )}
       </div>
 
-      {currentConfig && currentConfig.id !== 'ic' && (
+      {currentConfig && (
         <div style={{ marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-          {!showAddStationForm ? (
-            <>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={() => setShowAddStationForm(true)}
-              >
-                + Add station
-              </button>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={() => {
-                  setFloatSupportDraft(
-                    (currentConfig.floatSlots ?? []).map((f) => ({ ...f, supportedAreaIds: [...f.supportedAreaIds] }))
-                  );
-                  setShowFloatSupportModal(true);
-                }}
-              >
-                Float support
-              </button>
-            </>
-          ) : (
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => {
+              setFloatSupportDraft(
+                (currentConfig.floatSlots ?? []).map((f) => ({ ...f, supportedAreaIds: [...f.supportedAreaIds] }))
+              );
+              setShowFloatSupportModal(true);
+            }}
+          >
+            {getFloatSlots(currentConfig).length === 0 ? 'Add float' : 'Float support'}
+          </button>
+          {currentConfig.id !== 'ic' && !showAddStationForm ? (
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => setShowAddStationForm(true)}
+            >
+              + Add station
+            </button>
+          ) : null}
+          {currentConfig.id !== 'ic' && showAddStationForm ? (
             <div
               style={{
                 background: '#f8f9fa',
@@ -1926,11 +1913,11 @@ export default function App() {
                 </button>
               </div>
             </div>
-          )}
+          ) : null}
         </div>
       )}
 
-      {showFloatSupportModal && floatSupportDraft !== null && currentConfig && currentConfig.id !== 'ic' && (
+      {showFloatSupportModal && floatSupportDraft !== null && currentConfig && (
         <div
           className="modal-overlay"
           onClick={() => {
