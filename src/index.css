@@ -206,19 +206,12 @@ body {
   align-items: flex-start;
   margin-bottom: var(--space-4);
 }
-.areas-grid-scroll {
-  flex: 1;
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: visible;
-  /* Ensure at least ~2 columns visible so areas + float aren't hidden */
-  min-width: 420px;
-}
 .areas-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(200px, 1fr));
   gap: var(--space-5);
-  min-width: min-content;
+  flex: 1;
+  min-width: 0;
 }
 .area-card {
   margin-bottom: 0;
@@ -234,10 +227,6 @@ body {
 }
 @media (max-width: 900px) {
   .areas-grid { grid-template-columns: repeat(2, minmax(200px, 1fr)); }
-}
-/* Grid keeps minimum column width so scroll container can scroll to show all cards (e.g. float) */
-.areas-grid-scroll .areas-grid {
-  width: max-content;
 }
 
 .unslotted-bank {

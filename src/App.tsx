@@ -2095,7 +2095,6 @@ export default function App() {
       )}
 
       <div className="areas-with-bank">
-      <div className="areas-grid-scroll">
       <div className="areas-grid">
         {lineSections.map((section) => {
           const isCombined = Array.isArray(section);
@@ -2213,7 +2212,6 @@ export default function App() {
               />
             );
           })}
-      </div>
       </div>
       <UnslottedBank
         roster={roster}
