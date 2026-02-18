@@ -65,6 +65,7 @@ interface CombinedAreaStaffingProps {
   breakCoverageEnabledB?: boolean;
   onToggleBreakCoverage?: (areaId: AreaId, enabled: boolean) => void;
   showBreakCoverageToggle?: boolean;
+  compactView?: boolean;
 }
 
 function CombinedAreaStaffingInner({
@@ -97,6 +98,7 @@ function CombinedAreaStaffingInner({
   breakCoverageEnabledB = false,
   onToggleBreakCoverage,
   showBreakCoverageToggle = false,
+  compactView = false,
 }: CombinedAreaStaffingProps) {
   function renderSubArea(
     areaId: AreaId,
@@ -134,6 +136,38 @@ function CombinedAreaStaffingInner({
       onSlotsChange(areaId, slots.map((s) => (s.id === slotId ? { ...s, locked: !s.locked } : s)));
     }
     const spectrumPosition = avgSeniorityVal != null ? (avgSeniorityVal / 3) * 100 : null;
+
+    if (compactView) {
+      return (
+        <div key={areaId} style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 8 }}>{areaLabel}</div>
+          <div className="slots-row">
+            {slots.map((slot, idx) => {
+              const label = getSlotLabel(areaId, idx, { [areaId]: slotLabels });
+              const displayLabel = slotLabels[idx] ?? label;
+              const isDisabled = !!slot.disabled;
+              return (
+                <div key={slot.id} className="slot-block slot-block--compact" style={{ opacity: isDisabled ? 0.65 : 1 }}>
+                  <span className="slot-block-name slot-block-name--readonly" style={{ marginBottom: 6 }}>{displayLabel || `Slot ${idx + 1}`}</span>
+                  {isDisabled ? (
+                    <span className="slot-block-status slot-block-status--muted">— Off —</span>
+                  ) : (
+                    <SlotDropdown
+                      slot={slot}
+                      areaId={areaId}
+                      roster={roster}
+                      assignedPersonIds={allAssignedPersonIds}
+                      leadAssignedPersonIds={leadAssignedPersonIds}
+                      onAssign={(slotId, personId) => onAssign(areaId, slotId, personId)}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div key={areaId} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid #eee' }}>
@@ -320,9 +354,9 @@ function CombinedAreaStaffingInner({
   }
 
   return (
-    <section className="section-card area-card">
+    <section className={`section-card area-card${compactView ? ' area-card--compact' : ''}`}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-        <span style={{ fontSize: '1.25rem', fontWeight: 700 }}>{combinedLabel}</span>
+        <span style={{ fontSize: compactView ? '1.1rem' : '1.25rem', fontWeight: 700 }}>{combinedLabel}</span>
       </div>
 
       {renderSubArea(areaIdA, areaLabelA, slotsA, minA, maxA, slotLabelsA, requiresTrainedOrExpertA, onRequiresTrainedOrExpertChangeA, breakCoverageEnabledA)}

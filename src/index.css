@@ -198,19 +198,19 @@ body {
 }
 
 /* ============================================================
-   Areas Grid + Unslotted Bank
+   Areas Grid + Unslotted Bank (bank below grid so float is visible)
    ============================================================ */
 .areas-with-bank {
   display: flex;
+  flex-direction: column;
   gap: var(--space-5);
-  align-items: flex-start;
   margin-bottom: var(--space-4);
 }
 .areas-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(200px, 1fr));
   gap: var(--space-5);
-  flex: 1;
+  width: 100%;
   min-width: 0;
 }
 .area-card {
@@ -222,6 +222,18 @@ body {
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border-light);
 }
+.area-card--compact {
+  min-height: 120px;
+}
+.slot-block--compact {
+  min-width: 0;
+}
+.slot-block-name--readonly {
+  border: none;
+  background: transparent;
+  cursor: default;
+  font-weight: 500;
+}
 @media (max-width: 1400px) {
   .areas-grid { grid-template-columns: repeat(4, minmax(200px, 1fr)); }
 }
@@ -229,9 +241,20 @@ body {
   .areas-grid { grid-template-columns: repeat(2, minmax(200px, 1fr)); }
 }
 
+/* Unslotted + Absent below the grid (full width), side-by-side on larger screens */
 .unslotted-bank {
-  flex: 0 0 220px;
-  min-height: 140px;
+  width: 100%;
+  min-height: 0;
+}
+.unslotted-bank-below {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  align-items: flex-start;
+}
+.unslotted-bank-below .unslotted-bank-block {
+  flex: 1 1 200px;
+  min-width: 0;
 }
 .unslotted-bank-list {
   list-style: none;
@@ -240,7 +263,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  max-height: 320px;
+  max-height: 220px;
   overflow-y: auto;
 }
 .unslotted-bank-item {

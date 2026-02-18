@@ -61,6 +61,8 @@ interface AreaStaffingProps {
   showBreakCoverageToggle?: boolean;
   /** For float slots: area IDs this float supports (skill pill shows combined skill). */
   supportedAreaIds?: string[];
+  /** When true, show only area title + slot name + assignee (no On/Lock, staffing stats, knowledge bar). */
+  compactView?: boolean;
 }
 
 function AreaStaffingInner({
@@ -87,6 +89,7 @@ function AreaStaffingInner({
   onToggleBreakCoverage,
   showBreakCoverageToggle = false,
   supportedAreaIds,
+  compactView = false,
 }: AreaStaffingProps) {
   const enabledSlots = slots.filter((s) => !s.disabled);
   const filled = enabledSlots.filter((s) => s.personId).length;
@@ -132,6 +135,39 @@ function AreaStaffingInner({
 
   function handleAssign(slotId: string, personId: string | null) {
     onAssign(areaId, slotId, personId);
+  }
+
+  if (compactView) {
+    return (
+      <section className="section-card area-card area-card--compact">
+        <h2 style={{ margin: '0 0 10px 0', fontSize: '1.1rem', fontWeight: 700 }}>{areaLabel}</h2>
+        <div className="slots-row">
+          {slots.map((slot, idx) => {
+            const label = getSlotLabel(areaId, idx, { [areaId]: slotLabels });
+            const displayLabel = slotLabels[idx] ?? label;
+            const isDisabled = !!slot.disabled;
+            return (
+              <div key={slot.id} className="slot-block slot-block--compact" style={{ opacity: isDisabled ? 0.65 : 1 }}>
+                <span className="slot-block-name slot-block-name--readonly" style={{ marginBottom: 6 }}>{displayLabel || `Slot ${idx + 1}`}</span>
+                {isDisabled ? (
+                  <span className="slot-block-status slot-block-status--muted">— Off —</span>
+                ) : (
+                  <SlotDropdown
+                    slot={slot}
+                    areaId={areaId}
+                    roster={roster}
+                    assignedPersonIds={allAssignedPersonIds}
+                    leadAssignedPersonIds={leadAssignedPersonIds}
+                    supportedAreaIds={supportedAreaIds}
+                    onAssign={handleAssign}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    );
   }
 
   return (

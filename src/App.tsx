@@ -185,6 +185,8 @@ export default function App() {
   const [slotLabelsByArea, setSlotLabelsByArea] = useState(firstLineState.slotLabelsByArea ?? {});
   const [profilePersonId, setProfilePersonId] = useState<string | null>(null);
   const [showStaffTheLineWizard, setShowStaffTheLineWizard] = useState(false);
+  /** When false, area cards show only slot names + assignee (simple view). When true, full configure UI. */
+  const [configureMode, setConfigureMode] = useState(false);
 
   const currentConfig = useMemo(
     () => rootState.lines.find((l) => l.id === rootState.currentLineId),
@@ -1845,6 +1847,14 @@ export default function App() {
           >
             {getFloatSlots(effectiveConfig ?? currentConfig).length === 0 ? 'Add float' : 'Float support'}
           </button>
+          <button
+            type="button"
+            className={configureMode ? 'btn-primary' : 'btn-ghost'}
+            onClick={() => setConfigureMode((c) => !c)}
+            title={configureMode ? 'Switch to simple view (slot names + people only)' : 'Show On/Lock, needs, knowledge bar, etc.'}
+          >
+            {configureMode ? 'Simple view' : 'Configure mode'}
+          </button>
           {currentConfig.id !== 'ic' && !showAddStationForm ? (
             <button
               type="button"
@@ -2140,6 +2150,7 @@ export default function App() {
                 breakCoverageEnabledB={!!areaBreakCoverageEnabled[idB]}
                 onToggleBreakCoverage={handleToggleAreaBreakCoverage}
                 showBreakCoverageToggle={!!effectiveConfig && getBreaksEnabled(effectiveConfig)}
+                compactView={!configureMode}
               />
             );
           }
@@ -2172,6 +2183,7 @@ export default function App() {
               breakCoverageEnabled={!!areaBreakCoverageEnabled[areaId]}
               onToggleBreakCoverage={handleToggleAreaBreakCoverage}
               showBreakCoverageToggle={!!effectiveConfig && getBreaksEnabled(effectiveConfig)}
+              compactView={!configureMode}
             />
           );
         })}
@@ -2209,6 +2221,7 @@ export default function App() {
                 supportedAreaIds={f.supportedAreaIds}
                 breakSchedules={getBreaksEnabled(effectiveConfig) ? breakSchedules : undefined}
                 rotationCount={getBreaksEnabled(effectiveConfig) ? getBreakRotations(effectiveConfig) : undefined}
+                compactView={!configureMode}
               />
             );
           })}
