@@ -65,6 +65,9 @@ interface CombinedAreaStaffingProps {
   breakCoverageEnabledB?: boolean;
   onToggleBreakCoverage?: (areaId: AreaId, enabled: boolean) => void;
   showBreakCoverageToggle?: boolean;
+  /** Per-area per-slot break coverage: areaId -> slotId -> boolean. */
+  slotBreakCoverageEnabled?: Record<string, Record<string, boolean>>;
+  onToggleSlotBreakCoverage?: (areaId: AreaId, slotId: string, enabled: boolean) => void;
   compactView?: boolean;
 }
 
@@ -98,6 +101,8 @@ function CombinedAreaStaffingInner({
   breakCoverageEnabledB = false,
   onToggleBreakCoverage,
   showBreakCoverageToggle = false,
+  slotBreakCoverageEnabled = {},
+  onToggleSlotBreakCoverage,
   compactView = false,
 }: CombinedAreaStaffingProps) {
   function renderSubArea(
@@ -110,6 +115,7 @@ function CombinedAreaStaffingInner({
     requiresTrainedOrExpert: boolean,
     onRequiresTrainedOrExpertChange?: (value: boolean) => void,
     breakCoverageEnabled = false,
+    slotBreakCoverageForArea: Record<string, boolean> = {},
   ) {
     const enabledSlots = slots.filter((s) => !s.disabled);
     const filled = enabledSlots.filter((s) => s.personId).length;
@@ -326,14 +332,27 @@ function CombinedAreaStaffingInner({
                 ) : isLocked ? (
                   <span className="slot-block-status" title="Locked — unlock to change">{assignedName ?? '— Unassigned —'}</span>
                 ) : (
-                  <SlotDropdown
-                    slot={slot}
-                    areaId={areaId}
-                    roster={roster}
-                    assignedPersonIds={allAssignedPersonIds}
-                    leadAssignedPersonIds={leadAssignedPersonIds}
-                    onAssign={(slotId, personId) => onAssign(areaId, slotId, personId)}
-                  />
+                  <>
+                    <SlotDropdown
+                      slot={slot}
+                      areaId={areaId}
+                      roster={roster}
+                      assignedPersonIds={allAssignedPersonIds}
+                      leadAssignedPersonIds={leadAssignedPersonIds}
+                      onAssign={(slotId, personId) => onAssign(areaId, slotId, personId)}
+                    />
+                    {showBreakCoverageToggle && onToggleSlotBreakCoverage && (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', marginTop: 6, cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={!!slotBreakCoverageForArea[slot.id]}
+                          onChange={(e) => onToggleSlotBreakCoverage(areaId, slot.id, e.target.checked)}
+                          aria-label="Slot needs break coverage"
+                        />
+                        Needs break coverage
+                      </label>
+                    )}
+                  </>
                 )}
               </div>
             );
@@ -359,8 +378,8 @@ function CombinedAreaStaffingInner({
         <span style={{ fontSize: compactView ? '1.1rem' : '1.25rem', fontWeight: 700 }}>{combinedLabel}</span>
       </div>
 
-      {renderSubArea(areaIdA, areaLabelA, slotsA, minA, maxA, slotLabelsA, requiresTrainedOrExpertA, onRequiresTrainedOrExpertChangeA, breakCoverageEnabledA)}
-      {renderSubArea(areaIdB, areaLabelB, slotsB, minB, maxB, slotLabelsB, requiresTrainedOrExpertB, onRequiresTrainedOrExpertChangeB, breakCoverageEnabledB)}
+      {renderSubArea(areaIdA, areaLabelA, slotsA, minA, maxA, slotLabelsA, requiresTrainedOrExpertA, onRequiresTrainedOrExpertChangeA, breakCoverageEnabledA, slotBreakCoverageEnabled[areaIdA] ?? {})}
+      {renderSubArea(areaIdB, areaLabelB, slotsB, minB, maxB, slotLabelsB, requiresTrainedOrExpertB, onRequiresTrainedOrExpertChangeB, breakCoverageEnabledB, slotBreakCoverageEnabled[areaIdB] ?? {})}
     </section>
   );
 }

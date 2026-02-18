@@ -213,6 +213,8 @@ export function addSavedDay(
     breakSchedules: state.breakSchedules ? JSON.parse(JSON.stringify(state.breakSchedules)) : {},
     leadBreakCoverage: state.leadBreakCoverage ? JSON.parse(JSON.stringify(state.leadBreakCoverage)) : {},
     areaBreakCoverageEnabled: state.areaBreakCoverageEnabled ? JSON.parse(JSON.stringify(state.areaBreakCoverageEnabled)) : {},
+    areaRequiresTrainedOrExpertOverrides: state.areaRequiresTrainedOrExpertOverrides ? JSON.parse(JSON.stringify(state.areaRequiresTrainedOrExpertOverrides)) : {},
+    slotBreakCoverageEnabled: state.slotBreakCoverageEnabled ? JSON.parse(JSON.stringify(state.slotBreakCoverageEnabled)) : {},
   };
   days.push(newOne);
   saveDaysList(days);

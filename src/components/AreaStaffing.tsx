@@ -59,6 +59,10 @@ interface AreaStaffingProps {
   onToggleBreakCoverage?: (areaId: AreaId, enabled: boolean) => void;
   /** Whether to show the break coverage toggle (only when breaks are enabled for the line). */
   showBreakCoverageToggle?: boolean;
+  /** Per-slot break coverage for this area: slotId -> true if that slot needs break coverage. */
+  slotBreakCoverageEnabled?: Record<string, boolean>;
+  /** Toggle break coverage for a specific slot (configure view). */
+  onToggleSlotBreakCoverage?: (areaId: AreaId, slotId: string, enabled: boolean) => void;
   /** For float slots: area IDs this float supports (skill pill shows combined skill). */
   supportedAreaIds?: string[];
   /** When true, show only area title + slot name + assignee (no On/Lock, staffing stats, knowledge bar). */
@@ -88,6 +92,8 @@ function AreaStaffingInner({
   breakCoverageEnabled = false,
   onToggleBreakCoverage,
   showBreakCoverageToggle = false,
+  slotBreakCoverageEnabled = {},
+  onToggleSlotBreakCoverage,
   supportedAreaIds,
   compactView = false,
 }: AreaStaffingProps) {
@@ -339,6 +345,17 @@ function AreaStaffingInner({
                     supportedAreaIds={supportedAreaIds}
                     onAssign={handleAssign}
                   />
+                  {showBreakCoverageToggle && onToggleSlotBreakCoverage && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', marginTop: 6, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={!!slotBreakCoverageEnabled[slot.id]}
+                        onChange={(e) => onToggleSlotBreakCoverage(areaId, slot.id, e.target.checked)}
+                        aria-label={`Slot needs break coverage`}
+                      />
+                      Needs break coverage
+                    </label>
+                  )}
                   {breakSchedules && rotationCount != null && slot.personId && (() => {
                     const areaBreaks = breakSchedules[areaId];
                     const rot = areaBreaks?.[slot.personId]?.breakRotation;

@@ -180,6 +180,8 @@ export interface SavedDay {
   leadBreakCoverage?: Record<string, boolean>;
   /** Per-area flag: when true, break coverage is needed for this area. Default false. */
   areaBreakCoverageEnabled?: Record<string, boolean>;
+  areaRequiresTrainedOrExpertOverrides?: Record<string, boolean>;
+  slotBreakCoverageEnabled?: Record<string, Record<string, boolean>>;
 }
 
 export interface AppState {
@@ -200,6 +202,10 @@ export interface AppState {
   areaCapacityOverrides?: AreaCapacityOverrides;
   areaNameOverrides?: AreaNameOverrides;
   slotLabelsByArea?: SlotLabelsByArea;
+  /** Overrides for "needs experience" when area is not in line.areas (e.g. IC/NIC). */
+  areaRequiresTrainedOrExpertOverrides?: Record<string, boolean>;
+  /** Per-slot break coverage: areaId -> slotId -> true if that slot needs break coverage. */
+  slotBreakCoverageEnabled?: Record<string, Record<string, boolean>>;
 }
 
 /** Single area definition when building a line (name, capacity, optional default slot labels). */

@@ -179,6 +179,8 @@ export function getEmptyLineState(config: LineConfig): LineState {
     areaCapacityOverrides: {},
     areaNameOverrides: {},
     slotLabelsByArea: {},
+    areaRequiresTrainedOrExpertOverrides: {},
+    slotBreakCoverageEnabled: {},
   };
 }
 export function createEmptyTask(text = '') {
