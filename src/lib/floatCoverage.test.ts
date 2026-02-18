@@ -52,10 +52,11 @@ describe('computeFloatCoverage', () => {
       })
     );
 
-    // Float should cover area_a during rotation 1 (workerA is on break)
+    // Float should cover area_a during rotation 1 (workerA is on break; slot index 0)
     expect(result.floatSchedule['float_1'][1]).toEqual({
       type: 'covering',
       areaId: 'area_a',
+      slotIndex: 0,
     });
     // Rotation 2 is the float's own break
     expect(result.floatSchedule['float_1'][2]).toEqual({ type: 'on_break' });
@@ -149,10 +150,11 @@ describe('computeFloatCoverage', () => {
       })
     );
 
-    // Rotation 1: both areas need coverage, float picks area_a (first in order)
+    // Rotation 1: both areas need coverage, float picks area_a (first in order; slot index 0)
     expect(result.floatSchedule['float_1'][1]).toEqual({
       type: 'covering',
       areaId: 'area_a',
+      slotIndex: 0,
     });
   });
 
@@ -162,8 +164,14 @@ describe('computeFloatCoverage', () => {
     ];
     const slots: SlotsByArea = {
       float_1: [{ id: 'f1s0', personId: 'floatPerson' }],
-      area_a: [{ id: 'a1s0', personId: 'workerA' }],
-      area_b: [{ id: 'b1s0', personId: 'workerB' }],
+      area_a: [
+        { id: 'a1s0', personId: 'workerA' },
+        { id: 'a2s0', personId: 'workerA2' },
+      ],
+      area_b: [
+        { id: 'b1s0', personId: 'workerB' },
+        { id: 'b2s0', personId: 'workerB2' },
+      ],
     };
     const breakSchedules: BreakSchedulesByArea = {
       float_1: { floatPerson: { breakRotation: 3, lunchRotation: 3 } },
@@ -182,13 +190,17 @@ describe('computeFloatCoverage', () => {
       })
     );
 
+    // Rotation 1: workerA (area_a slot 0) on break → float covers area_a
     expect(result.floatSchedule['float_1'][1]).toEqual({
       type: 'covering',
       areaId: 'area_a',
+      slotIndex: 0,
     });
+    // Rotation 2: workerA2 and workerB2 on break; startIdx = (2-1) % 2 = 1 → area_b first, float covers area_b slot 1
     expect(result.floatSchedule['float_1'][2]).toEqual({
       type: 'covering',
       areaId: 'area_b',
+      slotIndex: 1,
     });
   });
 

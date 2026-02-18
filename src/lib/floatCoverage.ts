@@ -3,7 +3,7 @@ import type { FloatSlotConfig, SlotsByArea, BreakSchedulesByArea } from '../type
 // ── Types ──────────────────────────────────────────────────────────────
 
 export type FloatSlotActivity =
-  | { type: 'covering'; areaId: string }
+  | { type: 'covering'; areaId: string; slotIndex: number }
   | { type: 'on_break' }
   | { type: 'idle' };
 
@@ -118,24 +118,31 @@ export function computeFloatCoverage(input: ComputeFloatCoverageInput): FloatCov
       // Find a supported area with someone on break this rotation that is NOT already
       // covered by a previously-processed float. Rotate starting point by rotation so
       // later areas (e.g., BMB Install) are not always deprioritized.
+      // Track which slot index within the area is being covered for display (e.g. "Covering 300s/400s").
       let foundArea: string | null = null;
+      let foundSlotIndex = 0;
       const startIdx = supportedAreaIds.length > 0 ? ((rot - 1) % supportedAreaIds.length) : 0;
       for (let i = 0; i < supportedAreaIds.length; i++) {
         const areaId = supportedAreaIds[(startIdx + i) % supportedAreaIds.length];
         if (coveredByRotation[rot].has(areaId)) continue; // already covered
         const areaBreaks = breakSchedules[areaId];
         if (!areaBreaks) continue;
-        const someoneOnBreak = Object.values(areaBreaks).some(
-          (entry) => entry.breakRotation === rot
-        );
-        if (someoneOnBreak) {
-          foundArea = areaId;
-          break;
+        const areaSlots = slots[areaId] ?? [];
+        for (let si = 0; si < areaSlots.length; si++) {
+          const personId = areaSlots[si].personId;
+          if (!personId) continue;
+          const entry = areaBreaks[personId];
+          if (entry?.breakRotation === rot) {
+            foundArea = areaId;
+            foundSlotIndex = si;
+            break;
+          }
         }
+        if (foundArea) break;
       }
 
       if (foundArea) {
-        schedule[rot] = { type: 'covering', areaId: foundArea };
+        schedule[rot] = { type: 'covering', areaId: foundArea, slotIndex: foundSlotIndex };
         coveredByRotation[rot].add(foundArea);
       } else {
         schedule[rot] = { type: 'idle' };

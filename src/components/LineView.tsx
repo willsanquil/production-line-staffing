@@ -342,14 +342,17 @@ function LineViewInner({
                       const coveringHere = activity?.type === 'covering' && activity.areaId === areaId;
                       const onBreak = activity?.type === 'on_break';
                       const coveringElsewhere = activity?.type === 'covering' && activity.areaId !== areaId;
+                      const slotLabel = activity?.type === 'covering' && 'slotIndex' in activity && activity.slotIndex !== undefined
+                        ? getLabel(activity.areaId, activity.slotIndex)
+                        : null;
                       return (
                         <td key={i} style={{ textAlign: 'center' }} className={compact ? `${tdClassName} presentation-td-break` : 'presentation-td-break'}>
                           {coveringHere
-                            ? <span style={{ fontWeight: 700, fontSize: compact ? undefined : '0.85rem', color: '#1976d2' }}>Covering</span>
+                            ? <span style={{ fontWeight: 700, fontSize: compact ? undefined : '0.85rem', color: '#1976d2' }}>{slotLabel ? `Covering ${slotLabel}` : 'Covering'}</span>
                             : onBreak
                               ? <span style={{ color: '#888', fontSize: compact ? undefined : '0.85rem' }}>On break</span>
                               : coveringElsewhere
-                                ? <span style={{ color: '#bbb', fontSize: compact ? undefined : '0.85rem' }}>At {areaLabels[activity.areaId] ?? activity.areaId}</span>
+                                ? <span style={{ color: '#bbb', fontSize: compact ? undefined : '0.85rem' }}>{slotLabel ? `Covering ${slotLabel}` : `At ${areaLabels[activity.areaId] ?? activity.areaId}`}</span>
                                 : <span style={{ color: '#ccc' }}>&mdash;</span>}
                         </td>
                       );
@@ -497,7 +500,9 @@ function LineViewInner({
                         const rot = i + 1;
                         const activity = fSchedule[rot];
                         const isBreak = activity?.type === 'on_break';
-                        const covering = activity?.type === 'covering' ? (areaLabels[activity.areaId] ?? activity.areaId) : null;
+                        const covering = activity?.type === 'covering'
+                          ? ('slotIndex' in activity && activity.slotIndex !== undefined ? getLabel(activity.areaId, activity.slotIndex) : (areaLabels[activity.areaId] ?? activity.areaId))
+                          : null;
                         return (
                           <span key={i} style={{ fontWeight: isBreak ? 700 : undefined }}>
                             {label}: {isBreak ? 'On break' : covering ?? '—'}
@@ -541,7 +546,7 @@ function LineViewInner({
                               {activity?.type === 'on_break'
                                 ? <span style={{ fontWeight: 700, color: '#1976d2' }}>On break</span>
                                 : activity?.type === 'covering'
-                                  ? <span style={{ fontWeight: 700 }}>{areaLabels[activity.areaId] ?? activity.areaId}</span>
+                                  ? <span style={{ fontWeight: 700 }}>{'slotIndex' in activity && activity.slotIndex !== undefined ? getLabel(activity.areaId, activity.slotIndex) : (areaLabels[activity.areaId] ?? activity.areaId)}</span>
                                   : '—'}
                             </td>
                           );
@@ -639,7 +644,9 @@ function LineViewInner({
                             const rot = i + 1;
                             const activity = fSchedule[rot];
                             const isBreak = activity?.type === 'on_break';
-                            const covering = activity?.type === 'covering' ? (areaLabels[activity.areaId] ?? activity.areaId) : null;
+                            const covering = activity?.type === 'covering'
+                              ? ('slotIndex' in activity && activity.slotIndex !== undefined ? getLabel(activity.areaId, activity.slotIndex) : (areaLabels[activity.areaId] ?? activity.areaId))
+                              : null;
                             return (
                               <span key={i} style={{ fontWeight: isBreak ? 700 : undefined }}>
                                 {label}: {isBreak ? 'On break' : covering ?? '—'}
@@ -730,7 +737,7 @@ function LineViewInner({
                                   {activity?.type === 'on_break'
                                     ? <span style={{ fontWeight: 700, color: '#1976d2' }}>On break</span>
                                     : activity?.type === 'covering'
-                                      ? <span style={{ fontWeight: 700 }}>{areaLabels[activity.areaId] ?? activity.areaId}</span>
+                                      ? <span style={{ fontWeight: 700 }}>{'slotIndex' in activity && activity.slotIndex !== undefined ? getLabel(activity.areaId, activity.slotIndex) : (areaLabels[activity.areaId] ?? activity.areaId)}</span>
                                       : '—'}
                                 </td>
                               );
