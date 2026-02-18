@@ -91,6 +91,8 @@ interface LineViewProps {
   linkedSlotsByArea?: Record<string, number[][]>;
   /** When provided, Break Coverage row is only shown for areas where this is true. */
   areaBreakCoverageEnabled?: Record<string, boolean>;
+  /** Per-slot break coverage: areaId -> slotId -> true. Used to include areas in float support and prioritize which slot to cover. */
+  slotBreakCoverageEnabled?: Record<string, Record<string, boolean>>;
 }
 
 /** Compact, screenshot- and phone-friendly view: line health, areas, who is running each, and risks. */
@@ -116,6 +118,7 @@ function LineViewInner({
   floatSlots = [],
   linkedSlotsByArea = {},
   areaBreakCoverageEnabled,
+  slotBreakCoverageEnabled = {},
 }: LineViewProps) {
   const isCompact = useCompactPresentation();
   const sections = lineSectionsProp ?? LINE_SECTIONS;
@@ -149,13 +152,16 @@ function LineViewInner({
     return out;
   })();
 
-  // Coverage toggle is authoritative: floats/leads may only cover areas explicitly
-  // marked as needing break coverage.
+  // Coverage: include area if area-level OR any per-slot "needs break coverage" is enabled.
+  const isAreaCoverageEnabled = (areaId: string) =>
+    areaBreakCoverageEnabled?.[areaId] === true ||
+    (slotBreakCoverageEnabled[areaId] && Object.values(slotBreakCoverageEnabled[areaId]).some(Boolean));
+
   const floatSlotsForCoverage: FloatSlotConfig[] =
-    areaBreakCoverageEnabled != null
+    areaBreakCoverageEnabled != null || Object.keys(slotBreakCoverageEnabled).length > 0
       ? floatSlots.map((f) => ({
           ...f,
-          supportedAreaIds: f.supportedAreaIds.filter((id) => areaBreakCoverageEnabled[id]),
+          supportedAreaIds: f.supportedAreaIds.filter((id) => isAreaCoverageEnabled(id)),
         }))
       : floatSlots;
 
@@ -167,12 +173,13 @@ function LineViewInner({
     areaIdsInSectionOrder,
     areaLabels,
     linkedSlotsByArea,
+    slotBreakCoverageEnabled,
   });
 
   const { floatSchedule, coverageSummary } = floatCoverage;
   const coverageSummaryFiltered =
-    areaBreakCoverageEnabled != null
-      ? coverageSummary.filter((row) => areaBreakCoverageEnabled[row.areaId])
+    areaBreakCoverageEnabled != null || Object.keys(slotBreakCoverageEnabled).length > 0
+      ? coverageSummary.filter((row) => isAreaCoverageEnabled(row.areaId))
       : coverageSummary;
 
   /**

@@ -47,6 +47,8 @@ export interface ComputeFloatCoverageInput {
   /** Per area: groups of slot indices that share a label (e.g. Inside/Outside lanes).
    * People in a linked group cover each other when only one is on break. */
   linkedSlotsByArea?: Record<string, number[][]>;
+  /** Per-slot "needs break coverage": areaId -> slotId -> true. When set, prefer covering these slots first. */
+  slotBreakCoverageEnabled?: Record<string, Record<string, boolean>>;
 }
 
 export interface FloatCoverageResult {
@@ -70,7 +72,15 @@ export function computeFloatCoverage(input: ComputeFloatCoverageInput): FloatCov
     areaIdsInSectionOrder,
     areaLabels,
     linkedSlotsByArea = {},
+    slotBreakCoverageEnabled = {},
   } = input;
+
+  /** True if this (areaId, slotIndex) has "needs break coverage" enabled. */
+  const slotNeedsCoverage = (areaId: string, slotIndex: number): boolean => {
+    const areaSlots = slots[areaId] ?? [];
+    const slotId = areaSlots[slotIndex]?.id;
+    return !!slotId && !!slotBreakCoverageEnabled[areaId]?.[slotId];
+  };
 
   if (floatSlots.length === 0) {
     return { floatSchedule: {}, areaCoverage: {}, coverageSummary: [] };
@@ -116,19 +126,20 @@ export function computeFloatCoverage(input: ComputeFloatCoverageInput): FloatCov
       }
 
       // Find a supported area with someone on break this rotation that is NOT already
-      // covered by a previously-processed float. Rotate starting point by rotation so
-      // later areas (e.g., BMB Install) are not always deprioritized.
-      // Track which slot index within the area is being covered for display (e.g. "Covering 300s/400s").
+      // covered. Prefer slots that have "needs break coverage" enabled.
       let foundArea: string | null = null;
       let foundSlotIndex = 0;
       const startIdx = supportedAreaIds.length > 0 ? ((rot - 1) % supportedAreaIds.length) : 0;
+
+      // First pass: only consider slots that have "needs break coverage" enabled.
       for (let i = 0; i < supportedAreaIds.length; i++) {
         const areaId = supportedAreaIds[(startIdx + i) % supportedAreaIds.length];
-        if (coveredByRotation[rot].has(areaId)) continue; // already covered
+        if (coveredByRotation[rot].has(areaId)) continue;
         const areaBreaks = breakSchedules[areaId];
         if (!areaBreaks) continue;
         const areaSlots = slots[areaId] ?? [];
         for (let si = 0; si < areaSlots.length; si++) {
+          if (!slotNeedsCoverage(areaId, si)) continue;
           const personId = areaSlots[si].personId;
           if (!personId) continue;
           const entry = areaBreaks[personId];
@@ -139,6 +150,28 @@ export function computeFloatCoverage(input: ComputeFloatCoverageInput): FloatCov
           }
         }
         if (foundArea) break;
+      }
+
+      // Second pass: if no slot with "needs break coverage" found, use any slot on break.
+      if (!foundArea) {
+        for (let i = 0; i < supportedAreaIds.length; i++) {
+          const areaId = supportedAreaIds[(startIdx + i) % supportedAreaIds.length];
+          if (coveredByRotation[rot].has(areaId)) continue;
+          const areaBreaks = breakSchedules[areaId];
+          if (!areaBreaks) continue;
+          const areaSlots = slots[areaId] ?? [];
+          for (let si = 0; si < areaSlots.length; si++) {
+            const personId = areaSlots[si].personId;
+            if (!personId) continue;
+            const entry = areaBreaks[personId];
+            if (entry?.breakRotation === rot) {
+              foundArea = areaId;
+              foundSlotIndex = si;
+              break;
+            }
+          }
+          if (foundArea) break;
+        }
       }
 
       if (foundArea) {

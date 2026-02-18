@@ -1709,6 +1709,7 @@ export default function App() {
           floatSlots={presentationFloatSlots}
           linkedSlotsByArea={presentationLinkedSlots}
           areaBreakCoverageEnabled={areaBreakCoverageEnabled}
+          slotBreakCoverageEnabled={slotBreakCoverageEnabled}
         />
       </>
     );
