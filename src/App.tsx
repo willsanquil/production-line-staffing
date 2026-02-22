@@ -353,6 +353,7 @@ export default function App() {
       const lineId = cloudLineId;
       const password = cloudPasswordRef.current;
       if (lineId && password) {
+        if (cloudSaveInProgressRef.current) return; // avoid duplicate in-flight save → spurious 409
         cloudSaveInProgressRef.current = true;
         setLineState(lineId, password, payload, lastCloudUpdatedAtRef.current ?? undefined)
           .then((res) => {
@@ -396,29 +397,31 @@ export default function App() {
       const lineId = cloudLineId;
       const password = cloudPasswordRef.current;
       if (lineId && password) {
-        cloudSaveInProgressRef.current = true;
-        setLineState(lineId, password, payload, lastCloudUpdatedAtRef.current ?? undefined)
-          .then((res) => {
-            if (res?.updatedAt) lastCloudUpdatedAtRef.current = res.updatedAt;
-          })
-          .catch((e) => {
-            if (e instanceof CloudConflictError) {
-              getLineState(lineId, password!)
-                .then(({ rootState: fresh, updatedAt }) => {
-                  lastCloudUpdatedAtRef.current = updatedAt || null;
-                  setRootState(fresh);
-                  setLineStateReloadKey((k) => k + 1);
-                  setCloudConflictBanner(true);
-                  setTimeout(() => setCloudConflictBanner(false), 6000);
-                })
-                .catch(() => {});
-            } else {
-              console.error('Cloud save failed:', e);
-            }
-          })
-          .finally(() => {
-            cloudSaveInProgressRef.current = false;
-          });
+        if (!cloudSaveInProgressRef.current) {
+          cloudSaveInProgressRef.current = true;
+          setLineState(lineId, password, payload, lastCloudUpdatedAtRef.current ?? undefined)
+            .then((res) => {
+              if (res?.updatedAt) lastCloudUpdatedAtRef.current = res.updatedAt;
+            })
+            .catch((e) => {
+              if (e instanceof CloudConflictError) {
+                getLineState(lineId, password!)
+                  .then(({ rootState: fresh, updatedAt }) => {
+                    lastCloudUpdatedAtRef.current = updatedAt || null;
+                    setRootState(fresh);
+                    setLineStateReloadKey((k) => k + 1);
+                    setCloudConflictBanner(true);
+                    setTimeout(() => setCloudConflictBanner(false), 6000);
+                  })
+                  .catch(() => {});
+              } else {
+                console.error('Cloud save failed:', e);
+              }
+            })
+            .finally(() => {
+              cloudSaveInProgressRef.current = false;
+            });
+        }
       } else {
         saveRootState(payload);
         clearHydrateCache();
@@ -443,29 +446,31 @@ export default function App() {
       const lineId = cloudLineId;
       const password = cloudPasswordRef.current;
       if (lineId && password) {
-        cloudSaveInProgressRef.current = true;
-        setLineState(lineId, password, payload, lastCloudUpdatedAtRef.current ?? undefined)
-          .then((res) => {
-            if (res?.updatedAt) lastCloudUpdatedAtRef.current = res.updatedAt;
-          })
-          .catch((e) => {
-            if (e instanceof CloudConflictError) {
-              getLineState(lineId, password!)
-                .then(({ rootState: fresh, updatedAt }) => {
-                  lastCloudUpdatedAtRef.current = updatedAt || null;
-                  setRootState(fresh);
-                  setLineStateReloadKey((k) => k + 1);
-                  setCloudConflictBanner(true);
-                  setTimeout(() => setCloudConflictBanner(false), 6000);
-                })
-                .catch(() => {});
-            } else {
-              console.error('Cloud save failed:', e);
-            }
-          })
-          .finally(() => {
-            cloudSaveInProgressRef.current = false;
-          });
+        if (!cloudSaveInProgressRef.current) {
+          cloudSaveInProgressRef.current = true;
+          setLineState(lineId, password, payload, lastCloudUpdatedAtRef.current ?? undefined)
+            .then((res) => {
+              if (res?.updatedAt) lastCloudUpdatedAtRef.current = res.updatedAt;
+            })
+            .catch((e) => {
+              if (e instanceof CloudConflictError) {
+                getLineState(lineId, password!)
+                  .then(({ rootState: fresh, updatedAt }) => {
+                    lastCloudUpdatedAtRef.current = updatedAt || null;
+                    setRootState(fresh);
+                    setLineStateReloadKey((k) => k + 1);
+                    setCloudConflictBanner(true);
+                    setTimeout(() => setCloudConflictBanner(false), 6000);
+                  })
+                  .catch(() => {});
+              } else {
+                console.error('Cloud save failed:', e);
+              }
+            })
+            .finally(() => {
+              cloudSaveInProgressRef.current = false;
+            });
+        }
       } else {
         saveRootState(payload);
         clearHydrateCache();
