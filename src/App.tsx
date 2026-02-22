@@ -80,7 +80,7 @@ import { generateBreakSchedules, optimizeFloatBreakRotations } from './lib/break
 import { clearAreaAssignments } from './lib/slots';
 import { saveRootState, loadSavedDays, addSavedDay, removeSavedDay, exportStateToJson, importStateFromJson } from './lib/persist';
 import { saveToFile, overwriteFile, openFromFile, isSaveToFileSupported } from './lib/fileStorage';
-import { getLineState, setLineState, createCloudLine, deleteCloudLine, listCloudLines } from './lib/cloudLines';
+import { getLineState, setLineState, createCloudLine, deleteCloudLine, listCloudLines, CloudConflictError } from './lib/cloudLines';
 import { getCloudSession, setCloudSession, clearCloudSession, EntryScreen } from './components/EntryScreen';
 import { LineManager } from './components/LineManager';
 import { BuildLineWizard } from './components/BuildLineWizard';
@@ -280,6 +280,9 @@ export default function App() {
   }, []);
   const lastLocalChangeRef = useRef(0);
   const cloudSaveInProgressRef = useRef(false);
+  /** Server updated_at from last successful getLineState; sent with setLineState for optimistic locking. */
+  const lastCloudUpdatedAtRef = useRef<string | null>(null);
+  const [cloudConflictBanner, setCloudConflictBanner] = useState(false);
   /** Counter incremented when the entire line state should be reloaded from rootState
    * (e.g. cloud poll received new data, or initial cloud load). Prevents roster-only
    * updates (like break preference) from clobbering local slot/lead state. */
@@ -293,8 +296,9 @@ export default function App() {
       return;
     }
     getLineState(session.lineId, session.password)
-      .then((root) => {
+      .then(({ rootState: root, updatedAt }) => {
         setRootState(root);
+        lastCloudUpdatedAtRef.current = updatedAt || null;
         setCloudLineId(session.lineId);
         cloudPasswordRef.current = session.password;
         setLineStateReloadKey((k) => k + 1);
@@ -350,8 +354,25 @@ export default function App() {
       const password = cloudPasswordRef.current;
       if (lineId && password) {
         cloudSaveInProgressRef.current = true;
-        setLineState(lineId, password, payload)
-          .catch((e) => console.error('Cloud save failed:', e))
+        setLineState(lineId, password, payload, lastCloudUpdatedAtRef.current ?? undefined)
+          .then((res) => {
+            if (res?.updatedAt) lastCloudUpdatedAtRef.current = res.updatedAt;
+          })
+          .catch((e) => {
+            if (e instanceof CloudConflictError) {
+              getLineState(lineId, password!)
+                .then(({ rootState: fresh, updatedAt }) => {
+                  lastCloudUpdatedAtRef.current = updatedAt || null;
+                  setRootState(fresh);
+                  setLineStateReloadKey((k) => k + 1);
+                  setCloudConflictBanner(true);
+                  setTimeout(() => setCloudConflictBanner(false), 6000);
+                })
+                .catch(() => {});
+            } else {
+              console.error('Cloud save failed:', e);
+            }
+          })
           .finally(() => {
             cloudSaveInProgressRef.current = false;
           });
@@ -376,9 +397,24 @@ export default function App() {
       const password = cloudPasswordRef.current;
       if (lineId && password) {
         cloudSaveInProgressRef.current = true;
-        setLineState(lineId, password, payload)
+        setLineState(lineId, password, payload, lastCloudUpdatedAtRef.current ?? undefined)
+          .then((res) => {
+            if (res?.updatedAt) lastCloudUpdatedAtRef.current = res.updatedAt;
+          })
           .catch((e) => {
-            console.error('Cloud save failed:', e);
+            if (e instanceof CloudConflictError) {
+              getLineState(lineId, password!)
+                .then(({ rootState: fresh, updatedAt }) => {
+                  lastCloudUpdatedAtRef.current = updatedAt || null;
+                  setRootState(fresh);
+                  setLineStateReloadKey((k) => k + 1);
+                  setCloudConflictBanner(true);
+                  setTimeout(() => setCloudConflictBanner(false), 6000);
+                })
+                .catch(() => {});
+            } else {
+              console.error('Cloud save failed:', e);
+            }
           })
           .finally(() => {
             cloudSaveInProgressRef.current = false;
@@ -408,8 +444,25 @@ export default function App() {
       const password = cloudPasswordRef.current;
       if (lineId && password) {
         cloudSaveInProgressRef.current = true;
-        setLineState(lineId, password, payload)
-          .catch((e) => console.error('Cloud save failed:', e))
+        setLineState(lineId, password, payload, lastCloudUpdatedAtRef.current ?? undefined)
+          .then((res) => {
+            if (res?.updatedAt) lastCloudUpdatedAtRef.current = res.updatedAt;
+          })
+          .catch((e) => {
+            if (e instanceof CloudConflictError) {
+              getLineState(lineId, password!)
+                .then(({ rootState: fresh, updatedAt }) => {
+                  lastCloudUpdatedAtRef.current = updatedAt || null;
+                  setRootState(fresh);
+                  setLineStateReloadKey((k) => k + 1);
+                  setCloudConflictBanner(true);
+                  setTimeout(() => setCloudConflictBanner(false), 6000);
+                })
+                .catch(() => {});
+            } else {
+              console.error('Cloud save failed:', e);
+            }
+          })
           .finally(() => {
             cloudSaveInProgressRef.current = false;
           });
@@ -445,8 +498,9 @@ export default function App() {
       if (Date.now() - lastLocalChangeRef.current < CLOUD_POLL_SKIP_AFTER_LOCAL_CHANGE_MS) return;
       if (cloudSaveInProgressRef.current) return;
       getLineState(cloudLineId, password)
-        .then((root) => {
+        .then(({ rootState: root, updatedAt }) => {
           if (cloudSaveInProgressRef.current) return;
+          lastCloudUpdatedAtRef.current = updatedAt || null;
           setRootState(root);
           setLineStateReloadKey((k) => k + 1);
         })
@@ -1389,7 +1443,7 @@ export default function App() {
     setImportError(null);
     setImportLoading(true);
     getLineState(importLineId, importPassword.trim())
-      .then((importedRoot) => {
+      .then(({ rootState: importedRoot }) => {
         const importedLineState = importedRoot.lineStates[importedRoot.currentLineId];
         const importedRoster = importedLineState?.roster ?? [];
         const importedLineConfig = importedRoot.lines.find((l) => l.id === importedRoot.currentLineId);
@@ -1452,7 +1506,8 @@ export default function App() {
     setDirectLinkError(null);
     setDirectLinkLoading(true);
     getLineState(cloudLineFromUrl, directLinkPassword.trim())
-      .then((root) => {
+      .then(({ rootState: root, updatedAt }) => {
+        lastCloudUpdatedAtRef.current = updatedAt || null;
         setRootState(root);
         setCloudLineId(cloudLineFromUrl);
         cloudPasswordRef.current = directLinkPassword.trim();
@@ -1750,6 +1805,21 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {cloudConflictBanner && (
+        <div
+          role="alert"
+          style={{
+            background: 'var(--color-accent-primary-light)',
+            color: 'var(--color-text-primary)',
+            padding: '12px 16px',
+            textAlign: 'center',
+            borderBottom: '1px solid var(--color-border-default)',
+          }}
+        >
+          Someone else saved changes to this line. Your view has been updated.
+        </div>
+      )}
 
       <RosterGrid
         roster={roster}

@@ -11,8 +11,9 @@ Deno.serve(async (req) => {
       lineId?: string;
       password?: string;
       rootState?: unknown;
+      expectedUpdatedAt?: string;
     };
-    const { lineId, password, rootState } = body;
+    const { lineId, password, rootState, expectedUpdatedAt } = body;
     if (!lineId || typeof lineId !== 'string' || !password || typeof password !== 'string') {
       return new Response(
         JSON.stringify({ error: 'lineId and password required' }),
@@ -47,19 +48,33 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { error: errUpdate } = await supabase
+    const newUpdatedAt = new Date().toISOString();
+    let query = supabase
       .from('cloud_line_data')
-      .update({ state: rootState, updated_at: new Date().toISOString() })
+      .update({ state: rootState, updated_at: newUpdatedAt })
       .eq('line_id', lineId);
+    if (expectedUpdatedAt != null && typeof expectedUpdatedAt === 'string') {
+      query = query.eq('updated_at', expectedUpdatedAt);
+    }
+    const { data: updatedRows, error: errUpdate } = await query.select('line_id');
     if (errUpdate) {
       return new Response(
         JSON.stringify({ error: errUpdate.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    if (expectedUpdatedAt != null && (!updatedRows || updatedRows.length === 0)) {
+      return new Response(
+        JSON.stringify({
+          error: 'Someone else saved changes to this line. Your view has been updated.',
+          code: 'CONFLICT',
+        }),
+        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     return new Response(
-      JSON.stringify({ ok: true }),
+      JSON.stringify({ ok: true, updatedAt: newUpdatedAt }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (e) {

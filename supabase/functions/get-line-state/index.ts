@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
 
     const { data: row, error: errData } = await supabase
       .from('cloud_line_data')
-      .select('state')
+      .select('state, updated_at')
       .eq('line_id', lineId)
       .single();
     if (errData || !row) {
@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ rootState: row.state }),
+      JSON.stringify({ rootState: row.state, updatedAt: row.updated_at }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (e) {

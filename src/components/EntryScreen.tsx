@@ -175,7 +175,7 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
     setLoading(true);
     setError(null);
     getLineState(joinLineId, joinPassword)
-      .then((rootState) => {
+      .then(({ rootState }) => {
         setCloudSession(joinLineId, joinPassword);
         onJoinGroup(rootState, joinLineId, joinPassword);
       })
@@ -195,7 +195,7 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
     setLoading(true);
     setError(null);
     getLineState(joinLineId, joinPassword)
-      .then((rootState) => {
+      .then(({ rootState }) => {
         setCloudSession(joinLineId, joinPassword);
         onJoinGroupPresentation(rootState, joinLineId, joinPassword);
       })
@@ -213,7 +213,7 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
     setLoading(true);
     setError(null);
     getLineState(joinLineId, password)
-      .then((rootState) => {
+      .then(({ rootState }) => {
         setCloudSession(joinLineId, password);
         if (onJoinGroupPresentation) {
           onJoinGroupPresentation(rootState, joinLineId, password);
@@ -238,7 +238,7 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
     setError(null);
     try {
       // 1. Fetch source line state to get its config
-      const sourceState = await getLineState(cloneSourceLineId, cloneSourcePassword);
+      const { rootState: sourceState } = await getLineState(cloneSourceLineId, cloneSourcePassword);
       const sourceConfig = sourceState.lines?.[0];
       if (!sourceConfig) {
         throw new Error('Could not read source line configuration');

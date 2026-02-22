@@ -87,14 +87,20 @@ export async function createCloudLine(
   };
 }
 
-/** Get a cloud line's full state (password-protected). */
+export interface GetLineStateResult {
+  rootState: RootState;
+  updatedAt: string;
+}
+
+/** Get a cloud line's full state (password-protected). Returns state and server updated_at for optimistic locking. */
 export async function getLineState(
   lineId: string,
   password: string
-): Promise<RootState> {
+): Promise<GetLineStateResult> {
   const supabase = getClient();
   const { data, error } = await supabase.functions.invoke<{
     rootState?: RootState;
+    updatedAt?: string;
     error?: string;
   }>('get-line-state', {
     body: { lineId, password },
@@ -105,7 +111,10 @@ export async function getLineState(
   }
   if (data?.error) throw new Error(data.error);
   if (!data?.rootState) throw new Error('Invalid response from get-line-state');
-  return data.rootState as RootState;
+  return {
+    rootState: data.rootState as RootState,
+    updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : '',
+  };
 }
 
 /** Delete a cloud line (password-protected). Use for admin/testing. */
@@ -122,20 +131,47 @@ export async function deleteCloudLine(lineId: string, password: string): Promise
   if (data?.error) throw new Error(data.error);
 }
 
-/** Save a cloud line's state (password-protected). */
+/** Thrown when save is rejected because someone else saved first (409). Refetch and reload. */
+export class CloudConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CloudConflictError';
+  }
+}
+
+/** Save a cloud line's state (password-protected). Pass expectedUpdatedAt from last getLineState to avoid overwriting newer saves. */
 export async function setLineState(
   lineId: string,
   password: string,
-  rootState: RootState
-): Promise<void> {
+  rootState: RootState,
+  expectedUpdatedAt?: string
+): Promise<{ updatedAt: string } | void> {
   const supabase = getClient();
-  const { data, error } = await supabase.functions.invoke<{ ok?: boolean; error?: string }>(
-    'set-line-state',
-    { body: { lineId, password, rootState } }
-  );
+  const body = expectedUpdatedAt != null
+    ? { lineId, password, rootState, expectedUpdatedAt }
+    : { lineId, password, rootState };
+  const { data, error } = await supabase.functions.invoke<{
+    ok?: boolean;
+    updatedAt?: string;
+    error?: string;
+    code?: string;
+  }>('set-line-state', { body });
   if (error) {
+    const status = (error as { context?: { status?: number } })?.context?.status;
+    if (status === 409) {
+      const body = (error as { context?: { json?: () => Promise<{ error?: string }> } })?.context?.json;
+      const parsed: { error?: string } = body ? await body().catch(() => ({})) : {};
+      throw new CloudConflictError(parsed?.error ?? 'Someone else saved changes. Your view has been updated.');
+    }
     const message = await getFunctionErrorMessage(error, 'set-line-state');
+    if (message.includes('Someone else saved') || message.includes('409')) {
+      throw new CloudConflictError(message);
+    }
     throw new Error(message);
   }
-  if (data?.error) throw new Error(data.error);
+  if (data?.error) {
+    if (data?.code === 'CONFLICT') throw new CloudConflictError(data.error);
+    throw new Error(data.error);
+  }
+  if (data?.updatedAt) return { updatedAt: data.updatedAt };
 }
