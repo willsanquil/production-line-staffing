@@ -148,6 +148,15 @@ export const LEAD_SLOT_AREAS = ['area_end_of_line', 'area_courtyard', 'area_bond
 export type LeadSlotAreaId = string;
 export type LeadSlots = Record<string, string | null>;
 
+/** Saved snapshot of slot + lead assignments for "assignment views" (per-lead / supervisor). */
+export interface AssignmentViewSnapshot {
+  slots: SlotsByArea;
+  leadSlots: LeadSlots;
+}
+
+/** Key for the supervisor assignment view (distinct from lead slot keys). */
+export const ASSIGNMENT_VIEW_SUPERVISOR_KEY = 'supervisor';
+
 /** Per-area "juice" flag: when on, Default positions prioritizes that area with higher skill when filling remaining slots. */
 export type JuicedAreas = Partial<Record<AreaId, boolean>>;
 
@@ -206,6 +215,8 @@ export interface AppState {
   areaRequiresTrainedOrExpertOverrides?: Record<string, boolean>;
   /** Per-slot break coverage: areaId -> slotId -> true if that slot needs break coverage. */
   slotBreakCoverageEnabled?: Record<string, Record<string, boolean>>;
+  /** Per-lead and supervisor assignment views: key = lead slot key or ASSIGNMENT_VIEW_SUPERVISOR_KEY. */
+  assignmentViews?: Record<string, AssignmentViewSnapshot>;
 }
 
 /** Single area definition when building a line (name, capacity, optional default slot labels). */

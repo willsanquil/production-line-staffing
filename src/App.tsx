@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { AppState, AreaId, BreakPreference, FloatSlotConfig, RootState, RosterPerson, SavedDay, SlotsByArea } from './types';
+import { ASSIGNMENT_VIEW_SUPERVISOR_KEY } from './types';
 import type { SkillLevel } from './types';
 const SKILL_SCORE: Record<SkillLevel, number> = {
   no_experience: 0,
@@ -222,6 +223,15 @@ export default function App() {
   const leadSlotKeys = useMemo(
     () => (effectiveConfig ? getLeadSlotKeys(effectiveConfig) : []),
     [effectiveConfig]
+  );
+  /** Keys for assignment views: one per lead + supervisor. */
+  const assignmentViewKeys = useMemo(
+    () => [...leadSlotKeys, ASSIGNMENT_VIEW_SUPERVISOR_KEY],
+    [leadSlotKeys]
+  );
+  const assignmentViews = useMemo(
+    () => rootState.lineStates[rootState.currentLineId]?.assignmentViews ?? {},
+    [rootState.lineStates, rootState.currentLineId]
   );
   const effectiveCapacity = useMemo(
     () =>
@@ -1001,9 +1011,44 @@ export default function App() {
     );
   }, [effectiveConfig, areaIds, roster, leadSlots, leadBreakCoverage, areaBreakCoverageEnabled, slotBreakCoverageEnabled, slotLabelsByArea, areaLabels, leadSlotKeys]);
 
-  const handleRegenerateBreaks = useCallback(() => {
+  // Recalc breaks whenever slot or lead assignments change (no manual "Regenerate breaks" needed).
+  useEffect(() => {
+    if (appMode !== 'app' || !effectiveConfig || !getBreaksEnabled(effectiveConfig)) return;
     regenerateBreaksForSlots(slots);
-  }, [regenerateBreaksForSlots, slots]);
+  }, [appMode, effectiveConfig, slots, leadSlots, regenerateBreaksForSlots]);
+
+  const handleLoadAssignmentView = useCallback(
+    (key: string) => {
+      const view = assignmentViews[key];
+      if (!view) return;
+      setSlots(JSON.parse(JSON.stringify(view.slots)));
+      setLeadSlots(JSON.parse(JSON.stringify(view.leadSlots)));
+      schedulePersistForRootEdit();
+      regenerateBreaksForSlots(view.slots);
+    },
+    [assignmentViews, schedulePersistForRootEdit, regenerateBreaksForSlots]
+  );
+
+  const handleSaveAssignmentView = useCallback(
+    (key: string) => {
+      const lineId = rootState.currentLineId;
+      const current = rootState.lineStates[lineId];
+      if (!current) return;
+      const nextViews = {
+        ...(current.assignmentViews ?? {}),
+        [key]: { slots: JSON.parse(JSON.stringify(slots)), leadSlots: JSON.parse(JSON.stringify(leadSlots)) },
+      };
+      setRootState((prev) => ({
+        ...prev,
+        lineStates: {
+          ...prev.lineStates,
+          [lineId]: { ...prev.lineStates[lineId], assignmentViews: nextViews },
+        },
+      }));
+      schedulePersistForRootEdit();
+    },
+    [rootState.currentLineId, rootState.lineStates, slots, leadSlots, schedulePersistForRootEdit]
+  );
 
   const handleSaveDay = useCallback((date: string, name?: string) => {
     const state = stateRef.current;
@@ -1929,12 +1974,43 @@ export default function App() {
         <button type="button" onClick={handleStretch} title="Push team outside comfort zone; prefer areas they want to learn">STRETCH</button>
         */}
         <button type="button" className="btn-danger" onClick={handleClearLine}>Clear line</button>
-        {effectiveConfig && getBreaksEnabled(effectiveConfig) && (
-          <button type="button" className="btn-primary" onClick={handleRegenerateBreaks} title="Regenerate break schedule from current assignments and preferences">
-            Regenerate breaks
-          </button>
-        )}
       </div>
+
+      {effectiveConfig && (
+        <div className="save-load-section" style={{ marginBottom: 16 }}>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '1rem' }}>Assignment views</h3>
+          <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 8px 0' }}>
+            Load a saved view to switch to that lead’s or supervisor’s staffing. Save current to store it under a button.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            {assignmentViewKeys.map((key) => {
+              const label = key === ASSIGNMENT_VIEW_SUPERVISOR_KEY ? 'Supervisor' : (effectiveConfig ? getLeadSlotLabel(effectiveConfig, key, areaLabels) : key);
+              const hasSaved = !!assignmentViews[key];
+              return (
+                <span key={key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => handleLoadAssignmentView(key)}
+                    disabled={!hasSaved}
+                    title={hasSaved ? `Load ${label}’s assignment` : `Save current first to load ${label}`}
+                  >
+                    {label}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    onClick={() => handleSaveAssignmentView(key)}
+                    title={`Save current slots and leads as ${label}`}
+                  >
+                    Save here
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {currentConfig && (
         <div style={{ marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
@@ -2369,7 +2445,7 @@ export default function App() {
               <div className="section-card" style={{ marginBottom: 16 }}>
                 <h3 style={{ margin: '0 0 8px 0', fontWeight: 700, fontSize: '1.05rem' }}>Float break schedule</h3>
                 <p style={{ color: '#555', fontSize: '0.9rem', marginBottom: 12 }}>
-                  Floats cover their areas when others are on break. Each float gets a break rotation; assign someone and click Regenerate breaks to update.
+                  Floats cover their areas when others are on break. Each float gets a break rotation; assignments update automatically when you change the line.
                 </p>
                 {floatSlots.map((f) => {
                   const assignments = breakSchedules?.[f.id];
@@ -2411,8 +2487,8 @@ export default function App() {
                       </span>
                       <div style={{ marginTop: 6 }}>
                         {assignedName
-                          ? `Assigned: ${assignedName}. Click "Regenerate breaks" above to set their break rotation.`
-                          : `Assign someone to this float position above, then click "Regenerate breaks" to set their break rotation.`}
+                          ? `Assigned: ${assignedName}. Break rotation updates when you change assignments.`
+                          : `Assign someone to this float position above; their break rotation will update automatically.`}
                       </div>
                     </div>
                   );
@@ -2445,7 +2521,7 @@ export default function App() {
               <div className="section-card" style={{ marginTop: 16 }}>
                 <h3 style={{ margin: '0 0 8px 0', fontWeight: 700, fontSize: '1.05rem' }}>Lead break coverage</h3>
                 <p style={{ color: '#555', fontSize: '0.9rem', marginBottom: 12 }}>
-                  These leads cover stations during all break rotations and manage their own breaks outside the normal schedule. Regenerate breaks to see their coverage in the presentation view.
+                  These leads cover stations during all break rotations and manage their own breaks outside the normal schedule. Coverage appears in the presentation view when assignments change.
                 </p>
                 {leadSlotKeys.map((key) => {
                   if (!leadBreakCoverage[key] || !leadSlots[key]) return null;

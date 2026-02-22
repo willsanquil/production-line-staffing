@@ -181,6 +181,7 @@ export function getEmptyLineState(config: LineConfig): LineState {
     slotLabelsByArea: {},
     areaRequiresTrainedOrExpertOverrides: {},
     slotBreakCoverageEnabled: {},
+    assignmentViews: {},
   };
 }
 export function createEmptyTask(text = '') {
