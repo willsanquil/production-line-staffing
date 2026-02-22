@@ -217,6 +217,8 @@ export interface AppState {
   slotBreakCoverageEnabled?: Record<string, Record<string, boolean>>;
   /** Per-lead and supervisor assignment views: key = lead slot key or ASSIGNMENT_VIEW_SUPERVISOR_KEY. */
   assignmentViews?: Record<string, AssignmentViewSnapshot>;
+  /** Which assignment view is currently shown (supervisor vs each lead). Default supervisor. */
+  currentAssignmentViewKey?: string;
 }
 
 /** Single area definition when building a line (name, capacity, optional default slot labels). */

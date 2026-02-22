@@ -229,8 +229,8 @@ export default function App() {
     () => [...leadSlotKeys, ASSIGNMENT_VIEW_SUPERVISOR_KEY],
     [leadSlotKeys]
   );
-  const assignmentViews = useMemo(
-    () => rootState.lineStates[rootState.currentLineId]?.assignmentViews ?? {},
+  const currentAssignmentViewKey = useMemo(
+    () => rootState.lineStates[rootState.currentLineId]?.currentAssignmentViewKey ?? ASSIGNMENT_VIEW_SUPERVISOR_KEY,
     [rootState.lineStates, rootState.currentLineId]
   );
   const effectiveCapacity = useMemo(
@@ -1017,37 +1017,47 @@ export default function App() {
     regenerateBreaksForSlots(slots);
   }, [appMode, effectiveConfig, slots, leadSlots, regenerateBreaksForSlots]);
 
-  const handleLoadAssignmentView = useCallback(
+  const handleSwitchAssignmentView = useCallback(
     (key: string) => {
-      const view = assignmentViews[key];
-      if (!view) return;
-      setSlots(JSON.parse(JSON.stringify(view.slots)));
-      setLeadSlots(JSON.parse(JSON.stringify(view.leadSlots)));
-      schedulePersistForRootEdit();
-      regenerateBreaksForSlots(view.slots);
-    },
-    [assignmentViews, schedulePersistForRootEdit, regenerateBreaksForSlots]
-  );
-
-  const handleSaveAssignmentView = useCallback(
-    (key: string) => {
+      if (key === currentAssignmentViewKey) return;
       const lineId = rootState.currentLineId;
-      const current = rootState.lineStates[lineId];
-      if (!current) return;
-      const nextViews = {
-        ...(current.assignmentViews ?? {}),
-        [key]: { slots: JSON.parse(JSON.stringify(slots)), leadSlots: JSON.parse(JSON.stringify(leadSlots)) },
+      const currentLine = rootState.lineStates[lineId];
+      if (!currentLine) return;
+
+      const currentSlots = JSON.parse(JSON.stringify(slots));
+      const currentLeadSlots = JSON.parse(JSON.stringify(leadSlots));
+
+      // Save current state into the view we're leaving
+      const viewsAfterSave = {
+        ...(currentLine.assignmentViews ?? {}),
+        [currentAssignmentViewKey]: { slots: currentSlots, leadSlots: currentLeadSlots },
       };
+
+      // If the view we're switching to has no saved state, copy current into it so we're comparing from the same starting point
+      const targetView = viewsAfterSave[key];
+      const finalViews = targetView
+        ? viewsAfterSave
+        : { ...viewsAfterSave, [key]: { slots: currentSlots, leadSlots: currentLeadSlots } };
+
+      const toLoad = finalViews[key]!;
+
       setRootState((prev) => ({
         ...prev,
         lineStates: {
           ...prev.lineStates,
-          [lineId]: { ...prev.lineStates[lineId], assignmentViews: nextViews },
+          [lineId]: {
+            ...prev.lineStates[lineId],
+            assignmentViews: finalViews,
+            currentAssignmentViewKey: key,
+          },
         },
       }));
+      setSlots(JSON.parse(JSON.stringify(toLoad.slots)));
+      setLeadSlots(JSON.parse(JSON.stringify(toLoad.leadSlots)));
       schedulePersistForRootEdit();
+      regenerateBreaksForSlots(toLoad.slots);
     },
-    [rootState.currentLineId, rootState.lineStates, slots, leadSlots, schedulePersistForRootEdit]
+    [rootState.currentLineId, rootState.lineStates, currentAssignmentViewKey, slots, leadSlots, schedulePersistForRootEdit, regenerateBreaksForSlots]
   );
 
   const handleSaveDay = useCallback((date: string, name?: string) => {
@@ -1980,32 +1990,23 @@ export default function App() {
         <div className="save-load-section" style={{ marginBottom: 16 }}>
           <h3 style={{ margin: '0 0 8px 0', fontSize: '1rem' }}>Assignment views</h3>
           <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 8px 0' }}>
-            Load a saved view to switch to that lead’s or supervisor’s staffing. Save current to store it under a button.
+            Switch between the supervisor’s and each lead’s version of the line. Edits are saved to the current view when you switch. Compare how each person would staff the line.
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
             {assignmentViewKeys.map((key) => {
               const label = key === ASSIGNMENT_VIEW_SUPERVISOR_KEY ? 'Supervisor' : (effectiveConfig ? getLeadSlotLabel(effectiveConfig, key, areaLabels) : key);
-              const hasSaved = !!assignmentViews[key];
+              const isActive = key === currentAssignmentViewKey;
               return (
-                <span key={key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={() => handleLoadAssignmentView(key)}
-                    disabled={!hasSaved}
-                    title={hasSaved ? `Load ${label}’s assignment` : `Save current first to load ${label}`}
-                  >
-                    {label}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost"
-                    onClick={() => handleSaveAssignmentView(key)}
-                    title={`Save current slots and leads as ${label}`}
-                  >
-                    Save here
-                  </button>
-                </span>
+                <button
+                  key={key}
+                  type="button"
+                  className={isActive ? 'btn-primary' : 'btn-ghost'}
+                  onClick={() => handleSwitchAssignmentView(key)}
+                  title={isActive ? `Showing ${label}’s line` : `Switch to ${label}’s version`}
+                  aria-pressed={isActive}
+                >
+                  {label}
+                </button>
               );
             })}
           </div>

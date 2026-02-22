@@ -1,6 +1,6 @@
 import type { AppState, AreaId, AreaCapacityOverrides, LeadSlots, LineConfig, LineState, RosterPerson, ScheduleHour, SlotsByArea, TaskItem, TasksByArea } from '../types';
 import type { SkillLevel } from '../types';
-import { AREA_IDS, LEAD_SLOT_AREAS } from '../types';
+import { AREA_IDS, ASSIGNMENT_VIEW_SUPERVISOR_KEY, LEAD_SLOT_AREAS } from '../types';
 import { getEffectiveCapacity } from '../lib/areaConfig';
 import { getEffectiveCapacityForLine, getLeadSlotKeys } from '../lib/lineConfig';
 import { buildSeedRoster } from './seedRoster';
@@ -182,6 +182,7 @@ export function getEmptyLineState(config: LineConfig): LineState {
     areaRequiresTrainedOrExpertOverrides: {},
     slotBreakCoverageEnabled: {},
     assignmentViews: {},
+    currentAssignmentViewKey: ASSIGNMENT_VIEW_SUPERVISOR_KEY,
   };
 }
 export function createEmptyTask(text = '') {
