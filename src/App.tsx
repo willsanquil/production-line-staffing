@@ -635,11 +635,6 @@ export default function App() {
     setLeadBreakCoverage((prev) => ({ ...prev, [key]: enabled }));
   }, []);
 
-  const handleToggleAreaBreakCoverage = useCallback((areaId: string, enabled: boolean) => {
-    lastLocalChangeRef.current = Date.now();
-    setAreaBreakCoverageEnabled((prev) => ({ ...prev, [areaId]: enabled }));
-  }, []);
-
   const handleToggleSlotBreakCoverage = useCallback((areaId: string, slotId: string, enabled: boolean) => {
     lastLocalChangeRef.current = Date.now();
     setSlotBreakCoverageEnabled((prev) => ({
@@ -797,9 +792,10 @@ export default function App() {
   );
 
   const handleAreaRequiresTrainedOrExpertChange = useCallback((areaId: string, value: boolean) => {
+    setAreaRequiresTrainedOrExpertOverrides((prev) => ({ ...prev, [areaId]: value }));
     const line = rootState.lines.find((l) => l.id === rootState.currentLineId);
     const areaIndex = line?.areas?.findIndex((a) => a.id === areaId) ?? -1;
-    if (areaIndex >= 0 && line) {
+    if (areaIndex >= 0 && line && line.id !== 'ic' && line.id !== 'nic') {
       setRootState((prev) => {
         const lineIndex = prev.lines.findIndex((l) => l.id === prev.currentLineId);
         if (lineIndex === -1) return prev;
@@ -810,10 +806,8 @@ export default function App() {
         lines[lineIndex] = { ...ln, areas };
         return { ...prev, lines };
       });
-      schedulePersistForRootEdit();
-    } else {
-      setAreaRequiresTrainedOrExpertOverrides((prev) => ({ ...prev, [areaId]: value }));
     }
+    schedulePersistForRootEdit();
   }, [schedulePersistForRootEdit, rootState.lines, rootState.currentLineId]);
 
   const handleAddStation = useCallback(
@@ -971,19 +965,13 @@ export default function App() {
       floatSlotIndicesByArea[f.id] = [0];
     }
 
-    // Collect area IDs that have break coverage enabled (area-level or any slot in area) — float/lead coverage applies only to these.
+    // Collect area IDs that have any slot with break coverage enabled — float/lead coverage applies only to these.
     const scope = getBreaksScope(effectiveConfig);
     const coverageEnabledAreaIds = areaIds.filter((id) => {
-      if (areaBreakCoverageEnabled[id]) return true;
       const slotMap = slotBreakCoverageEnabled[id];
       return slotMap && Object.values(slotMap).some(Boolean);
     });
-    const floatSupportedAreaIds = new Set<string>();
-    for (const f of floatSlots) {
-      for (const areaId of f.supportedAreaIds) {
-        if (areaBreakCoverageEnabled[areaId]) floatSupportedAreaIds.add(areaId);
-      }
-    }
+    const floatSupportedAreaIds = new Set<string>(coverageEnabledAreaIds);
     if (scope === 'station') {
       for (const key of leadSlotKeys) {
         if (leadBreakCoverage[key] && leadSlots[key]) {
@@ -1009,7 +997,7 @@ export default function App() {
     setBreakSchedules(
       optimizeFloatBreakRotations(rawSchedules, floatSlots, nextSlots, rotationCount)
     );
-  }, [effectiveConfig, areaIds, roster, leadSlots, leadBreakCoverage, areaBreakCoverageEnabled, slotBreakCoverageEnabled, slotLabelsByArea, areaLabels, leadSlotKeys]);
+  }, [effectiveConfig, areaIds, roster, leadSlots, leadBreakCoverage, slotBreakCoverageEnabled, slotLabelsByArea, areaLabels, leadSlotKeys]);
 
   // Recalc breaks whenever slot or lead assignments change (no manual "Regenerate breaks" needed).
   useEffect(() => {
@@ -2326,9 +2314,6 @@ export default function App() {
                 requiresTrainedOrExpertB={areaRequiresTrainedOrExpert(idB)}
                 onRequiresTrainedOrExpertChangeA={(value) => handleAreaRequiresTrainedOrExpertChange(idA, value)}
                 onRequiresTrainedOrExpertChangeB={(value) => handleAreaRequiresTrainedOrExpertChange(idB, value)}
-                breakCoverageEnabledA={!!areaBreakCoverageEnabled[idA]}
-                breakCoverageEnabledB={!!areaBreakCoverageEnabled[idB]}
-                onToggleBreakCoverage={handleToggleAreaBreakCoverage}
                 showBreakCoverageToggle={!!effectiveConfig && getBreaksEnabled(effectiveConfig)}
                 slotBreakCoverageEnabled={slotBreakCoverageEnabled}
                 onToggleSlotBreakCoverage={handleToggleSlotBreakCoverage}
@@ -2362,8 +2347,6 @@ export default function App() {
               onAssign={setSlotAssignment}
               requiresTrainedOrExpert={areaRequiresTrainedOrExpert(areaId)}
               onRequiresTrainedOrExpertChange={(value) => handleAreaRequiresTrainedOrExpertChange(areaId, value)}
-              breakCoverageEnabled={!!areaBreakCoverageEnabled[areaId]}
-              onToggleBreakCoverage={handleToggleAreaBreakCoverage}
               showBreakCoverageToggle={!!effectiveConfig && getBreaksEnabled(effectiveConfig)}
               slotBreakCoverageEnabled={slotBreakCoverageEnabled[areaId] ?? {}}
               onToggleSlotBreakCoverage={handleToggleSlotBreakCoverage}
@@ -2405,6 +2388,7 @@ export default function App() {
                 supportedAreaIds={f.supportedAreaIds}
                 breakSchedules={getBreaksEnabled(effectiveConfig) ? breakSchedules : undefined}
                 rotationCount={getBreaksEnabled(effectiveConfig) ? getBreakRotations(effectiveConfig) : undefined}
+                showBreakCoverageToggle={!!effectiveConfig && getBreaksEnabled(effectiveConfig)}
                 slotBreakCoverageEnabled={slotBreakCoverageEnabled[f.id] ?? {}}
                 onToggleSlotBreakCoverage={handleToggleSlotBreakCoverage}
                 compactView={!configureMode}

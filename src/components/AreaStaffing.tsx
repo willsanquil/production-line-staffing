@@ -53,11 +53,7 @@ interface AreaStaffingProps {
   /** When provided (e.g. for float positions), show break rotation under the slot. */
   breakSchedules?: BreakSchedulesByArea;
   rotationCount?: number;
-  /** Whether break coverage is enabled for this area. */
-  breakCoverageEnabled?: boolean;
-  /** Called when user toggles break coverage for this area. */
-  onToggleBreakCoverage?: (areaId: AreaId, enabled: boolean) => void;
-  /** Whether to show the break coverage toggle (only when breaks are enabled for the line). */
+  /** Whether to show the per-slot break coverage toggle (only when breaks are enabled for the line). */
   showBreakCoverageToggle?: boolean;
   /** Per-slot break coverage for this area: slotId -> true if that slot needs break coverage. */
   slotBreakCoverageEnabled?: Record<string, boolean>;
@@ -89,8 +85,6 @@ function AreaStaffingInner({
   onRequiresTrainedOrExpertChange,
   breakSchedules,
   rotationCount,
-  breakCoverageEnabled = false,
-  onToggleBreakCoverage,
   showBreakCoverageToggle = false,
   slotBreakCoverageEnabled = {},
   onToggleSlotBreakCoverage,
@@ -155,6 +149,17 @@ function AreaStaffingInner({
             return (
               <div key={slot.id} className="slot-block slot-block--compact" style={{ opacity: isDisabled ? 0.65 : 1 }}>
                 <span className="slot-block-name slot-block-name--readonly" style={{ marginBottom: 6 }}>{displayLabel || `Slot ${idx + 1}`}</span>
+                {showBreakCoverageToggle && onToggleSlotBreakCoverage && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', cursor: 'pointer', marginBottom: 6 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!slotBreakCoverageEnabled[slot.id]}
+                      onChange={(e) => onToggleSlotBreakCoverage(areaId, slot.id, e.target.checked)}
+                      aria-label="Slot needs break coverage"
+                    />
+                    Break cov.
+                  </label>
+                )}
                 {isDisabled ? (
                   <span className="slot-block-status slot-block-status--muted">— Off —</span>
                 ) : (
@@ -198,17 +203,6 @@ function AreaStaffingInner({
                 aria-label={`${areaLabel} needs experience (at least one Trained or Expert)`}
               />
               Needs experience
-            </label>
-          )}
-          {showBreakCoverageToggle && onToggleBreakCoverage && (
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.9rem', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={breakCoverageEnabled}
-                onChange={(e) => onToggleBreakCoverage(areaId, e.target.checked)}
-                aria-label={`${areaLabel} needs break coverage`}
-              />
-              Needs break coverage
             </label>
           )}
         </div>
@@ -329,6 +323,17 @@ function AreaStaffingInner({
                   className="slot-block-name"
                   aria-label={`Slot ${idx + 1} name`}
                 />
+                {showBreakCoverageToggle && onToggleSlotBreakCoverage && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', cursor: 'pointer', marginLeft: 'auto' }}>
+                    <input
+                      type="checkbox"
+                      checked={!!slotBreakCoverageEnabled[slot.id]}
+                      onChange={(e) => onToggleSlotBreakCoverage(areaId, slot.id, e.target.checked)}
+                      aria-label={`Slot needs break coverage`}
+                    />
+                    Break cov.
+                  </label>
+                )}
               </div>
               {isDisabled ? (
                 <span className="slot-block-status slot-block-status--muted">— Disabled —</span>
@@ -345,17 +350,6 @@ function AreaStaffingInner({
                     supportedAreaIds={supportedAreaIds}
                     onAssign={handleAssign}
                   />
-                  {showBreakCoverageToggle && onToggleSlotBreakCoverage && (
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', marginTop: 6, cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={!!slotBreakCoverageEnabled[slot.id]}
-                        onChange={(e) => onToggleSlotBreakCoverage(areaId, slot.id, e.target.checked)}
-                        aria-label={`Slot needs break coverage`}
-                      />
-                      Needs break coverage
-                    </label>
-                  )}
                   {breakSchedules && rotationCount != null && slot.personId && (() => {
                     const areaBreaks = breakSchedules[areaId];
                     const rot = areaBreaks?.[slot.personId]?.breakRotation;
