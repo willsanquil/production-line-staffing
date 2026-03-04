@@ -13,7 +13,7 @@ import type { FloatCoverageResult } from '../lib/floatCoverage';
 const BAR_HEIGHT = 18;
 const BAR_HEIGHT_COMPACT = 10;
 
-const BREAK_SLOT_LABELS = ['First Slot', 'Second Slot', 'Third Slot', 'Fourth Slot', 'Fifth Slot', 'Sixth Slot'] as const;
+const BREAK_SLOT_LABELS = ['First Break', 'Second Break', 'Third Break', 'Fourth Break', 'Fifth Break', 'Sixth Break'] as const;
 const ROLE_PA = 'PA';
 
 function useCompactPresentation() {
@@ -349,17 +349,19 @@ function LineViewInner({
                       const coveringHere = activity?.type === 'covering' && activity.areaId === areaId;
                       const onBreak = activity?.type === 'on_break';
                       const coveringElsewhere = activity?.type === 'covering' && activity.areaId !== areaId;
-                      const slotLabel = activity?.type === 'covering' && 'slotIndex' in activity && activity.slotIndex !== undefined
-                        ? getLabel(activity.areaId, activity.slotIndex)
+                      const coveredPersonId = activity?.type === 'covering' && 'slotIndex' in activity && activity.slotIndex !== undefined
+                        ? slots[activity.areaId]?.[activity.slotIndex]?.personId ?? null
                         : null;
+                      const coveredName = coveredPersonId ? getName(coveredPersonId) : null;
+                      const coveringLabel = coveredName ? `Covering ${coveredName}` : (activity?.type === 'covering' ? `At ${areaLabels[activity.areaId] ?? activity.areaId}` : null);
                       return (
                         <td key={i} style={{ textAlign: 'center' }} className={compact ? `${tdClassName} presentation-td-break` : 'presentation-td-break'}>
                           {coveringHere
-                            ? <span style={{ fontWeight: 700, fontSize: compact ? undefined : '0.85rem', color: '#1976d2' }}>{slotLabel ? `Covering ${slotLabel}` : 'Covering'}</span>
+                            ? <span style={{ fontWeight: 700, fontSize: compact ? undefined : '0.85rem', color: '#1976d2' }}>{coveringLabel ?? 'Covering'}</span>
                             : onBreak
                               ? <span style={{ color: '#888', fontSize: compact ? undefined : '0.85rem' }}>On break</span>
                               : coveringElsewhere
-                                ? <span style={{ color: '#bbb', fontSize: compact ? undefined : '0.85rem' }}>{slotLabel ? `Covering ${slotLabel}` : `At ${areaLabels[activity.areaId] ?? activity.areaId}`}</span>
+                                ? <span style={{ color: '#bbb', fontSize: compact ? undefined : '0.85rem' }}>{coveringLabel ?? '—'}</span>
                                 : <span style={{ color: '#ccc' }}>&mdash;</span>}
                         </td>
                       );
@@ -508,7 +510,12 @@ function LineViewInner({
                         const activity = fSchedule[rot];
                         const isBreak = activity?.type === 'on_break';
                         const covering = activity?.type === 'covering'
-                          ? ('slotIndex' in activity && activity.slotIndex !== undefined ? getLabel(activity.areaId, activity.slotIndex) : (areaLabels[activity.areaId] ?? activity.areaId))
+                          ? ('slotIndex' in activity && activity.slotIndex !== undefined
+                              ? (() => {
+                                  const pid = slots[activity.areaId]?.[activity.slotIndex]?.personId;
+                                  return pid ? `Covering ${getName(pid)}` : (areaLabels[activity.areaId] ?? activity.areaId);
+                                })()
+                              : (areaLabels[activity.areaId] ?? activity.areaId))
                           : null;
                         return (
                           <span key={i} style={{ fontWeight: isBreak ? 700 : undefined }}>
@@ -548,12 +555,20 @@ function LineViewInner({
                         {breakSlotLabels.map((_, i) => {
                           const rot = i + 1;
                           const activity = fSchedule[rot];
+                          const coveringDisplay = activity?.type === 'covering'
+                            ? ('slotIndex' in activity && activity.slotIndex !== undefined
+                                ? (() => {
+                                    const pid = slots[activity.areaId]?.[activity.slotIndex]?.personId;
+                                    return pid ? `Covering ${getName(pid)}` : (areaLabels[activity.areaId] ?? activity.areaId);
+                                  })()
+                                : (areaLabels[activity.areaId] ?? activity.areaId))
+                            : null;
                           return (
                             <td key={i}>
                               {activity?.type === 'on_break'
                                 ? <span style={{ fontWeight: 700, color: '#1976d2' }}>On break</span>
                                 : activity?.type === 'covering'
-                                  ? <span style={{ fontWeight: 700 }}>{'slotIndex' in activity && activity.slotIndex !== undefined ? getLabel(activity.areaId, activity.slotIndex) : (areaLabels[activity.areaId] ?? activity.areaId)}</span>
+                                  ? <span style={{ fontWeight: 700 }}>{coveringDisplay}</span>
                                   : '—'}
                             </td>
                           );
@@ -652,7 +667,12 @@ function LineViewInner({
                             const activity = fSchedule[rot];
                             const isBreak = activity?.type === 'on_break';
                             const covering = activity?.type === 'covering'
-                              ? ('slotIndex' in activity && activity.slotIndex !== undefined ? getLabel(activity.areaId, activity.slotIndex) : (areaLabels[activity.areaId] ?? activity.areaId))
+                              ? ('slotIndex' in activity && activity.slotIndex !== undefined
+                                  ? (() => {
+                                      const pid = slots[activity.areaId]?.[activity.slotIndex]?.personId;
+                                      return pid ? `Covering ${getName(pid)}` : (areaLabels[activity.areaId] ?? activity.areaId);
+                                    })()
+                                  : (areaLabels[activity.areaId] ?? activity.areaId))
                               : null;
                             return (
                               <span key={i} style={{ fontWeight: isBreak ? 700 : undefined }}>
@@ -739,12 +759,20 @@ function LineViewInner({
                             {breakSlotLabels.map((_, i) => {
                               const rot = i + 1;
                               const activity = fSchedule[rot];
+                              const coveringDisplay = activity?.type === 'covering'
+                                ? ('slotIndex' in activity && activity.slotIndex !== undefined
+                                    ? (() => {
+                                        const pid = slots[activity.areaId]?.[activity.slotIndex]?.personId;
+                                        return pid ? `Covering ${getName(pid)}` : (areaLabels[activity.areaId] ?? activity.areaId);
+                                      })()
+                                    : (areaLabels[activity.areaId] ?? activity.areaId))
+                                : null;
                               return (
                                 <td key={i}>
                                   {activity?.type === 'on_break'
                                     ? <span style={{ fontWeight: 700, color: '#1976d2' }}>On break</span>
                                     : activity?.type === 'covering'
-                                      ? <span style={{ fontWeight: 700 }}>{'slotIndex' in activity && activity.slotIndex !== undefined ? getLabel(activity.areaId, activity.slotIndex) : (areaLabels[activity.areaId] ?? activity.areaId)}</span>
+                                      ? <span style={{ fontWeight: 700 }}>{coveringDisplay}</span>
                                       : '—'}
                                 </td>
                               );

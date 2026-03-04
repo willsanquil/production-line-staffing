@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import type { BreakRotation, LunchRotation } from '../types';
 
-const SLOT_LABELS = ['First Slot', 'Second Slot', 'Third Slot', 'Fourth Slot', 'Fifth Slot', 'Sixth Slot'] as const;
+const SLOT_LABELS = ['First Break', 'Second Break', 'Third Break', 'Fourth Break', 'Fifth Break', 'Sixth Break'] as const;
 
 interface Person {
   id: string;
