@@ -113,7 +113,7 @@ describe('assignment fallback matching', () => {
       {},
       new Set(),
       {},
-      { area_a: { min: 1, max: 1 }, area_b: { min: 1, max: 1 } } as any,
+      { area_a: { min: 1, max: 1 }, area_b: { min: 1, max: 1 } },
       ['area_a', 'area_b'],
       (areaId: string) => areaId === 'area_b'
     );
@@ -143,7 +143,7 @@ describe('assignment fallback matching', () => {
       {},
       new Set(),
       {},
-      { area_a: { min: 1, max: 1 }, area_b: { min: 1, max: 1 } } as any,
+      { area_a: { min: 1, max: 1 }, area_b: { min: 1, max: 1 } },
       ['area_a', 'area_b'],
       (areaId: string) => areaId === 'area_b'
     );

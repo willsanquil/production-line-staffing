@@ -26,7 +26,7 @@ npx supabase link --project-ref YOUR_PROJECT_REF
 
 When prompted, choose your project or enter the ref.
 
-## 3. Deploy the three functions
+## 3. Deploy the four functions
 
 From the **project root** (where `supabase/functions/` lives):
 
@@ -34,6 +34,7 @@ From the **project root** (where `supabase/functions/` lives):
 npx supabase functions deploy create-line
 npx supabase functions deploy get-line-state
 npx supabase functions deploy set-line-state
+npx supabase functions deploy delete-line
 ```
 
 Wait until each command reports success.
@@ -45,6 +46,7 @@ Supabase Dashboard → **Edge Functions**. You should see:
 - create-line  
 - get-line-state  
 - set-line-state  
+- delete-line  
 
 ## 5. Same project as the app
 

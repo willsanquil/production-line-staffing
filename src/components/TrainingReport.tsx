@@ -65,7 +65,7 @@ function PresentationTrainingLine({
 
 /** Report: under minimum / disabled slots; all assignments with No experience / Training; who is in an area they wanted to learn. */
 function TrainingReportInner({ roster, slots, areaLabels, presentationMode = false, areaIds: areaIdsProp }: TrainingReportProps) {
-  const areaIds = areaIdsProp ?? [...AREA_IDS];
+  const areaIds = useMemo(() => areaIdsProp ?? [...AREA_IDS], [areaIdsProp]);
   const allAssignments = useMemo(() => {
     const list: { personId: string; personName: string; areaId: AreaId; areaLabel: string; skill: SkillLevel; wantToLearn: boolean }[] = [];
     for (const areaId of areaIds) {

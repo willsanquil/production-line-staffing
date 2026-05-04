@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AreaId, BreakPreference, LineConfig, LineState, RosterPerson, SkillLevel } from '../types';
 import { AREA_IDS, AREA_LABELS } from '../types';
 import { getAreaIds, getBaseAreaLabels } from '../lib/lineConfig';
@@ -83,6 +83,17 @@ export function PersonProfileModal({
     return { areaLabels: labels, stationAreaIds: station };
   }, [selectedLine]);
 
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
   if (!person) {
     return null;
   }
@@ -90,7 +101,7 @@ export function PersonProfileModal({
   const breakPref = person.breakPreference ?? 'no_preference';
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="person-profile-title" onClick={onClose}>
       <div
         className="modal-dialog"
         style={{ maxWidth: 840, width: '100%', maxHeight: '90vh', overflow: 'auto' }}
@@ -98,15 +109,15 @@ export function PersonProfileModal({
       >
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div>
-            <h2 style={{ margin: 0 }}>{person.name}</h2>
+            <h2 id="person-profile-title" style={{ margin: 0 }}>{person.name}</h2>
             <div style={{ fontSize: '0.9rem', color: '#555' }}>Profile & preferences</div>
           </div>
-          <button type="button" onClick={onClose}>
+          <button ref={closeButtonRef} type="button" onClick={onClose}>
             Close
           </button>
         </header>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.1fr) minmax(0, 1.2fr)', gap: 24, alignItems: 'flex-start' }}>
+        <div className="person-profile-grid">
           {/* Left: day status & break preference */}
           <section>
             <h3 style={{ margin: '0 0 8px 0', fontSize: '1rem' }}>Day status</h3>

@@ -1,12 +1,7 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { AppState, AreaId, BreakPreference, FloatSlotConfig, RootState, RosterPerson, SavedDay, SlotsByArea } from './types';
 import type { SkillLevel } from './types';
-const SKILL_SCORE: Record<SkillLevel, number> = {
-  no_experience: 0,
-  training: 1,
-  trained: 2,
-  expert: 3,
-};
+import { SKILL_SCORE } from './lib/skill';
 
 /** Overall line health: average knowledge (0–3) of everyone on the line in their assigned role. */
 function getLineHealthScore(
@@ -41,7 +36,7 @@ function getLineHealthScore(
   }
   return count > 0 ? sum / count : null;
 }
-import { getHydratedRootState, clearHydrateCache } from './lib/initialState';
+import { getHydratedRootState } from './lib/initialState';
 import { getRosterForLine, getFlexedInPersonIds } from './lib/personLabel';
 import { sortByFirstName } from './lib/rosterSort';
 import { getSlotLabel as getSlotLabelIC } from './lib/areaConfig';
@@ -72,23 +67,28 @@ import { RosterGrid } from './components/RosterGrid';
 import { LeadSlotsSection } from './components/LeadSlotsSection';
 import { AreaStaffing } from './components/AreaStaffing';
 import { CombinedAreaStaffing } from './components/CombinedAreaStaffing';
-import { LineView } from './components/LineView';
 import { UnslottedBank } from './components/UnslottedBank';
 import { DayBank } from './components/DayBank';
 import { randomizeAssignments, applyDefaultPositionsThenSpread, fillRemainingAssignments } from './lib/automation';
 import { generateBreakSchedules, optimizeFloatBreakRotations } from './lib/breakSchedules';
 import { clearAreaAssignments } from './lib/slots';
-import { saveRootState, loadSavedDays, addSavedDay, removeSavedDay, exportStateToJson, importStateFromJson } from './lib/persist';
+import { loadSavedDays, addSavedDay, removeSavedDay, exportStateToJson, importStateFromJson } from './lib/persist';
 import { saveToFile, overwriteFile, openFromFile, isSaveToFileSupported } from './lib/fileStorage';
-import { getLineState, setLineState, createCloudLine, deleteCloudLine, listCloudLines, CloudConflictError } from './lib/cloudLines';
-import { getCloudSession, setCloudSession, clearCloudSession, EntryScreen } from './components/EntryScreen';
-import { LineManager } from './components/LineManager';
-import { BuildLineWizard } from './components/BuildLineWizard';
+import { getLineState, createCloudLine, deleteCloudLine, listCloudLines } from './lib/cloudLines';
+import { getCloudSession, setCloudSession, clearCloudSession } from './lib/cloudSession';
 import { BreakTable } from './components/BreakTable';
 import { PersonProfileModal } from './components/PersonProfileModal';
-import { StaffTheLineWizard } from './components/StaffTheLineWizard';
+import { TrainingReport } from './components/TrainingReport';
+import { useCloudLineSync } from './hooks/useCloudLineSync';
+import { buildPersistedRootState, extractLineDraftState } from './lib/lineDraftState';
 
 const PERSIST_DEBOUNCE_MS = 300;
+
+const LineManager = lazy(() => import('./components/LineManager').then((mod) => ({ default: mod.LineManager })));
+const EntryScreen = lazy(() => import('./components/EntryScreen').then((mod) => ({ default: mod.EntryScreen })));
+const BuildLineWizard = lazy(() => import('./components/BuildLineWizard').then((mod) => ({ default: mod.BuildLineWizard })));
+const LineView = lazy(() => import('./components/LineView').then((mod) => ({ default: mod.LineView })));
+const StaffTheLineWizard = lazy(() => import('./components/StaffTheLineWizard').then((mod) => ({ default: mod.StaffTheLineWizard })));
 
 function getAssignedPersonIds(slots: SlotsByArea, areaIds: string[]): Set<string> {
   const set = new Set<string>();
@@ -187,6 +187,12 @@ export default function App() {
   const [slotBreakCoverageEnabled, setSlotBreakCoverageEnabled] = useState(firstLineState.slotBreakCoverageEnabled ?? {});
   const [profilePersonId, setProfilePersonId] = useState<string | null>(null);
   const [showStaffTheLineWizard, setShowStaffTheLineWizard] = useState(false);
+  const [undoSnapshot, setUndoSnapshot] = useState<{
+    label: string;
+    slots: SlotsByArea;
+    leadSlots: Record<string, string | null>;
+    breakSchedules: NonNullable<AppState['breakSchedules']>;
+  } | null>(null);
   /** When false, area cards show only slot names + assignee (simple view). When true, full configure UI. */
   const [configureMode, setConfigureMode] = useState(false);
 
@@ -268,47 +274,35 @@ export default function App() {
     [rootState.currentLineId, rootState.lineStates]
   );
 
-  const stateRef = useRef({ slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, leadBreakCoverage, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea, areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled });
+  const stateRef = useRef(extractLineDraftState(firstLineState));
   stateRef.current = { slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, leadBreakCoverage, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea, areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled };
   const rootStateRef = useRef(rootState);
   rootStateRef.current = rootState;
 
-  /** After roster or line-config edits: block cloud poll and persist once React has applied state (so refs are up to date). */
-  const schedulePersistForRootEdit = useCallback(() => {
-    lastLocalChangeRef.current = Date.now();
-    setTimeout(() => persistFlushRef.current?.(), 0);
-  }, []);
-  const lastLocalChangeRef = useRef(0);
-  const cloudSaveInProgressRef = useRef(false);
-  /** Server updated_at from last successful getLineState; sent with setLineState for optimistic locking. */
-  const lastCloudUpdatedAtRef = useRef<string | null>(null);
-  const [cloudConflictBanner, setCloudConflictBanner] = useState(false);
   /** Counter incremented when the entire line state should be reloaded from rootState
    * (e.g. cloud poll received new data, or initial cloud load). Prevents roster-only
    * updates (like break preference) from clobbering local slot/lead state. */
   const [lineStateReloadKey, setLineStateReloadKey] = useState(0);
+  const reloadLineState = useCallback(() => setLineStateReloadKey((k) => k + 1), []);
 
-  useEffect(() => {
-    if (appMode !== 'loading-cloud') return;
-    const session = getCloudSession();
-    if (!session) {
-      setAppMode('entry');
-      return;
-    }
-    getLineState(session.lineId, session.password)
-      .then(({ rootState: root, updatedAt }) => {
-        setRootState(root);
-        lastCloudUpdatedAtRef.current = updatedAt || null;
-        setCloudLineId(session.lineId);
-        cloudPasswordRef.current = session.password;
-        setLineStateReloadKey((k) => k + 1);
-        setAppMode('app');
-      })
-      .catch(() => {
-        clearCloudSession();
-        setAppMode('entry');
-      });
-  }, [appMode]);
+  const {
+    cloudConflictBanner,
+    markLocalChange,
+    schedulePersistForRootEdit,
+    setCloudUpdatedAt,
+  } = useCloudLineSync({
+    appMode,
+    setAppMode,
+    cloudLineId,
+    setCloudLineId,
+    cloudPasswordRef,
+    rootStateRef,
+    draftStateRef: stateRef,
+    setRootState,
+    reloadLineState,
+    persistDebounceMs: PERSIST_DEBOUNCE_MS,
+    persistDeps: [slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea, areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled],
+  });
 
   useEffect(() => {
     const lineState = rootState.lineStates[rootState.currentLineId];
@@ -331,188 +325,6 @@ export default function App() {
     setSlotBreakCoverageEnabled(lineState.slotBreakCoverageEnabled ?? {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rootState.currentLineId, lineStateReloadKey]);
-
-  const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const persistFlushRef = useRef<(() => void) | null>(null);
-
-  useEffect(() => {
-    if (appMode !== 'app') return;
-    const flush = () => {
-      if (persistTimeoutRef.current) {
-        clearTimeout(persistTimeoutRef.current);
-        persistTimeoutRef.current = null;
-      }
-      const root = rootStateRef.current;
-      const payload = {
-        ...root,
-        lineStates: {
-          ...root.lineStates,
-          [root.currentLineId]: { ...root.lineStates[root.currentLineId], ...stateRef.current } as AppState,
-        },
-      };
-      const lineId = cloudLineId;
-      const password = cloudPasswordRef.current;
-      if (lineId && password) {
-        if (cloudSaveInProgressRef.current) return; // avoid duplicate in-flight save → spurious 409
-        cloudSaveInProgressRef.current = true;
-        setLineState(lineId, password, payload, lastCloudUpdatedAtRef.current ?? undefined)
-          .then((res) => {
-            if (res?.updatedAt) lastCloudUpdatedAtRef.current = res.updatedAt;
-          })
-          .catch((e) => {
-            if (e instanceof CloudConflictError) {
-              getLineState(lineId, password!)
-                .then(({ rootState: fresh, updatedAt }) => {
-                  lastCloudUpdatedAtRef.current = updatedAt || null;
-                  setRootState(fresh);
-                  setLineStateReloadKey((k) => k + 1);
-                  setCloudConflictBanner(true);
-                  setTimeout(() => setCloudConflictBanner(false), 6000);
-                })
-                .catch(() => {});
-            } else {
-              console.error('Cloud save failed:', e);
-            }
-          })
-          .finally(() => {
-            cloudSaveInProgressRef.current = false;
-          });
-      } else {
-        saveRootState(payload);
-        clearHydrateCache();
-      }
-    };
-    persistFlushRef.current = flush;
-
-    const id = setTimeout(() => {
-      const root = rootStateRef.current;
-      const payload = {
-        ...root,
-        lineStates: {
-          ...root.lineStates,
-          [root.currentLineId]: { ...root.lineStates[root.currentLineId], ...stateRef.current } as AppState,
-        },
-      };
-      // Only persist — do not setRootState(payload) here; refs can be stale and would overwrite recent roster/line edits
-      const lineId = cloudLineId;
-      const password = cloudPasswordRef.current;
-      if (lineId && password) {
-        if (!cloudSaveInProgressRef.current) {
-          cloudSaveInProgressRef.current = true;
-          setLineState(lineId, password, payload, lastCloudUpdatedAtRef.current ?? undefined)
-            .then((res) => {
-              if (res?.updatedAt) lastCloudUpdatedAtRef.current = res.updatedAt;
-            })
-            .catch((e) => {
-              if (e instanceof CloudConflictError) {
-                getLineState(lineId, password!)
-                  .then(({ rootState: fresh, updatedAt }) => {
-                    lastCloudUpdatedAtRef.current = updatedAt || null;
-                    setRootState(fresh);
-                    setLineStateReloadKey((k) => k + 1);
-                    setCloudConflictBanner(true);
-                    setTimeout(() => setCloudConflictBanner(false), 6000);
-                  })
-                  .catch(() => {});
-              } else {
-                console.error('Cloud save failed:', e);
-              }
-            })
-            .finally(() => {
-              cloudSaveInProgressRef.current = false;
-            });
-        }
-      } else {
-        saveRootState(payload);
-        clearHydrateCache();
-      }
-      persistTimeoutRef.current = null;
-    }, PERSIST_DEBOUNCE_MS);
-    persistTimeoutRef.current = id;
-    return () => {
-      if (persistTimeoutRef.current) {
-        clearTimeout(persistTimeoutRef.current);
-        persistTimeoutRef.current = null;
-      }
-      const root = rootStateRef.current;
-      const payload = {
-        ...root,
-        lineStates: {
-          ...root.lineStates,
-          [root.currentLineId]: { ...root.lineStates[root.currentLineId], ...stateRef.current } as AppState,
-        },
-      };
-      // Only persist on cleanup — do not setRootState to avoid overwriting in-flight roster/line edits
-      const lineId = cloudLineId;
-      const password = cloudPasswordRef.current;
-      if (lineId && password) {
-        if (!cloudSaveInProgressRef.current) {
-          cloudSaveInProgressRef.current = true;
-          setLineState(lineId, password, payload, lastCloudUpdatedAtRef.current ?? undefined)
-            .then((res) => {
-              if (res?.updatedAt) lastCloudUpdatedAtRef.current = res.updatedAt;
-            })
-            .catch((e) => {
-              if (e instanceof CloudConflictError) {
-                getLineState(lineId, password!)
-                  .then(({ rootState: fresh, updatedAt }) => {
-                    lastCloudUpdatedAtRef.current = updatedAt || null;
-                    setRootState(fresh);
-                    setLineStateReloadKey((k) => k + 1);
-                    setCloudConflictBanner(true);
-                    setTimeout(() => setCloudConflictBanner(false), 6000);
-                  })
-                  .catch(() => {});
-              } else {
-                console.error('Cloud save failed:', e);
-              }
-            })
-            .finally(() => {
-              cloudSaveInProgressRef.current = false;
-            });
-        }
-      } else {
-        saveRootState(payload);
-        clearHydrateCache();
-      }
-    };
-  }, [appMode, cloudLineId, slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea, areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled]);
-
-  useEffect(() => {
-    function onLeave() {
-      persistFlushRef.current?.();
-    }
-    window.addEventListener('pagehide', onLeave);
-    window.addEventListener('beforeunload', onLeave);
-    return () => {
-      window.removeEventListener('pagehide', onLeave);
-      window.removeEventListener('beforeunload', onLeave);
-    };
-  }, []);
-
-  // When in cloud mode, poll for updates so other users' changes show up (live-ish updates).
-  // Skip applying poll for a while after any local slot/lead change so we don't overwrite the user's
-  // edit with stale server state before the debounced save has completed.
-  const CLOUD_POLL_MS = 4000;
-  const CLOUD_POLL_SKIP_AFTER_LOCAL_CHANGE_MS = 12000;
-  useEffect(() => {
-    if (appMode !== 'app' || !cloudLineId) return;
-    const password = cloudPasswordRef.current;
-    if (!password) return;
-    const intervalId = setInterval(() => {
-      if (Date.now() - lastLocalChangeRef.current < CLOUD_POLL_SKIP_AFTER_LOCAL_CHANGE_MS) return;
-      if (cloudSaveInProgressRef.current) return;
-      getLineState(cloudLineId, password)
-        .then(({ rootState: root, updatedAt }) => {
-          if (cloudSaveInProgressRef.current) return;
-          lastCloudUpdatedAtRef.current = updatedAt || null;
-          setRootState(root);
-          setLineStateReloadKey((k) => k + 1);
-        })
-        .catch(() => { /* ignore poll errors (e.g. network) */ });
-    }, CLOUD_POLL_MS);
-    return () => clearInterval(intervalId);
-  }, [appMode, cloudLineId]);
 
   const allAssignedPersonIds = useMemo(() => getAssignedPersonIds(slots, areaIds), [slots, areaIds]);
   const leadAssignedPersonIds = useMemo(() => {
@@ -590,23 +402,42 @@ export default function App() {
     return result;
   }, [effectiveConfig, slots, slotLabelsByArea]);
 
+  const captureUndoSnapshot = useCallback((label: string) => {
+    const state = stateRef.current;
+    setUndoSnapshot({
+      label,
+      slots: JSON.parse(JSON.stringify(state.slots)) as SlotsByArea,
+      leadSlots: JSON.parse(JSON.stringify(state.leadSlots)) as Record<string, string | null>,
+      breakSchedules: JSON.parse(JSON.stringify(state.breakSchedules ?? {})) as NonNullable<AppState['breakSchedules']>,
+    });
+  }, []);
+
+  const handleUndoLastAction = useCallback(() => {
+    if (!undoSnapshot) return;
+    markLocalChange();
+    setSlots(undoSnapshot.slots);
+    setLeadSlots(undoSnapshot.leadSlots);
+    setBreakSchedules(undoSnapshot.breakSchedules);
+    setUndoSnapshot(null);
+  }, [markLocalChange, undoSnapshot]);
+
   const setSlotAssignment = useCallback((areaId: AreaId, slotId: string, personId: string | null) => {
-    lastLocalChangeRef.current = Date.now();
+    markLocalChange();
     setSlots((prev) => ({
       ...prev,
       [areaId]: prev[areaId].map((s) =>
         s.id === slotId ? { ...s, personId } : s
       ),
     }));
-  }, []);
+  }, [markLocalChange]);
 
   const setSlotsForArea = useCallback((areaId: AreaId, newSlots: SlotsByArea[AreaId]) => {
-    lastLocalChangeRef.current = Date.now();
+    markLocalChange();
     setSlots((prev) => ({ ...prev, [areaId]: newSlots }));
-  }, []);
+  }, [markLocalChange]);
 
   const setLeadSlot = useCallback((areaId: string, personId: string | null) => {
-    lastLocalChangeRef.current = Date.now();
+    markLocalChange();
     setLeadSlots((prev) => ({ ...prev, [areaId]: personId }));
     if (personId) {
       setSlots((prev) => {
@@ -618,20 +449,20 @@ export default function App() {
         return { ...prev, ...next };
       });
     }
-  }, [areaIds]);
+  }, [areaIds, markLocalChange]);
 
   const handleToggleLeadBreakCoverage = useCallback((key: string, enabled: boolean) => {
-    lastLocalChangeRef.current = Date.now();
+    markLocalChange();
     setLeadBreakCoverage((prev) => ({ ...prev, [key]: enabled }));
-  }, []);
+  }, [markLocalChange]);
 
   const handleToggleSlotBreakCoverage = useCallback((areaId: string, slotId: string, enabled: boolean) => {
-    lastLocalChangeRef.current = Date.now();
+    markLocalChange();
     setSlotBreakCoverageEnabled((prev) => ({
       ...prev,
       [areaId]: { ...(prev[areaId] ?? {}), [slotId]: enabled },
     }));
-  }, []);
+  }, [markLocalChange]);
 
   const handleNameChange = useCallback((personId: string, name: string) => {
     setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, name: name.trim() || p.name })));
@@ -863,7 +694,7 @@ export default function App() {
       const lineState = prev.lineStates[prev.currentLineId];
       if (!lineState) return { ...prev, lines };
       // Ensure each float has a slot in line state (for newly added floats)
-      let newSlots = { ...lineState.slots };
+      const newSlots = { ...lineState.slots };
       let changed = false;
       for (const f of nextFloatSlots) {
         if (!newSlots[f.id] || newSlots[f.id].length === 0) {
@@ -882,7 +713,7 @@ export default function App() {
   const handleAreaCapacityChange = useCallback((areaId: AreaId, payload: { min?: number; max?: number }) => {
     const base = effectiveCapacity[areaId];
     if (!base) return;
-    lastLocalChangeRef.current = Date.now();
+    markLocalChange();
     const nextMin = payload.min != null && !Number.isNaN(payload.min) ? Math.max(1, Math.round(payload.min)) : undefined;
     const nextMax = payload.max != null && !Number.isNaN(payload.max) ? Math.max(1, Math.round(payload.max)) : undefined;
     const cap = {
@@ -903,7 +734,7 @@ export default function App() {
       }
       return { ...prev, [areaId]: nextList };
     });
-  }, [effectiveCapacity]);
+  }, [effectiveCapacity, markLocalChange]);
 
   const handleAreaNameChange = useCallback((areaId: AreaId, name: string) => {
     setAreaNameOverrides((prev) => ({ ...prev, [areaId]: name.trim() || undefined }));
@@ -920,6 +751,7 @@ export default function App() {
   }, []);
 
   const handleClearLine = useCallback(() => {
+    captureUndoSnapshot('Clear line');
     setSlots((prev) => {
       let next = prev;
       for (const areaId of areaIds) {
@@ -928,12 +760,12 @@ export default function App() {
       return next;
     });
     setBreakSchedules({});
-  }, [areaIds]);
+  }, [areaIds, captureUndoSnapshot]);
 
   const handleClearArea = useCallback((areaId: AreaId) => {
-    lastLocalChangeRef.current = Date.now();
+    markLocalChange();
     setSlots((prev) => clearAreaAssignments(prev, areaId));
-  }, []);
+  }, [markLocalChange]);
 
   const regenerateBreaksForSlots = useCallback((nextSlots: SlotsByArea) => {
     if (!effectiveConfig || !getBreaksEnabled(effectiveConfig)) {
@@ -987,7 +819,7 @@ export default function App() {
     setBreakSchedules(
       optimizeFloatBreakRotations(rawSchedules, floatSlots, nextSlots, rotationCount)
     );
-  }, [effectiveConfig, areaIds, roster, leadSlots, leadBreakCoverage, slotBreakCoverageEnabled, slotLabelsByArea, areaLabels, leadSlotKeys]);
+  }, [effectiveConfig, areaIds, roster, leadSlots, leadBreakCoverage, slotBreakCoverageEnabled, slotLabelsByArea, leadSlotKeys]);
 
   // Recalc breaks whenever slot or lead assignments change (no manual "Regenerate breaks" needed).
   useEffect(() => {
@@ -1076,15 +908,17 @@ export default function App() {
     setSlotBreakCoverageEnabled(lineStateForDay.slotBreakCoverageEnabled ?? {});
     // Force a reload so the useEffect at line 276 re-syncs all local state from rootState
     setLineStateReloadKey((k) => k + 1);
-  }, [areaCapacityOverrides, areaNameOverrides, leadSlotKeys, rootState.currentLineId, rootState.lineStates, slotLabelsByArea]);
+  }, [areaCapacityOverrides, areaNameOverrides, leadSlotKeys, rootState.currentLineId, rootState.lines, rootState.lineStates, slotLabelsByArea]);
 
   const handleRandomize = useCallback(() => {
+    captureUndoSnapshot('Randomize');
     const nextSlots = randomizeAssignments(roster, slots, leadAssignedPersonIds, areaIds, areaRequiresTrainedOrExpert);
     setSlots(nextSlots);
     regenerateBreaksForSlots(nextSlots);
-  }, [roster, slots, leadAssignedPersonIds, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
+  }, [captureUndoSnapshot, roster, slots, leadAssignedPersonIds, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
 
   const handleDefaultPositions = useCallback(() => {
+    captureUndoSnapshot('Default positions');
     // Fill empty lead slots with people configured as lead (by default leads go into lead slots)
     const newLeadSlots = { ...leadSlots };
     const usedLeadIds = new Set<string>();
@@ -1110,13 +944,14 @@ export default function App() {
     const nextSlots = applyDefaultPositionsThenSpread(roster, slots, juicedAreas, newLeadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
     setSlots(nextSlots);
     regenerateBreaksForSlots(nextSlots);
-  }, [roster, slots, juicedAreas, deJuicedAreas, leadSlots, leadSlotKeys, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
+  }, [captureUndoSnapshot, roster, slots, juicedAreas, deJuicedAreas, leadSlots, leadSlotKeys, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
 
   const handleFillRemaining = useCallback(() => {
+    captureUndoSnapshot('Fill remaining');
     const nextSlots = fillRemainingAssignments(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
     setSlots(nextSlots);
     regenerateBreaksForSlots(nextSlots);
-  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
+  }, [captureUndoSnapshot, roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
 
   const handleRemoveDay = useCallback((id: string) => {
     removeSavedDay(id);
@@ -1177,7 +1012,8 @@ export default function App() {
     if (rootState.currentLineId === lineId) {
       setView('staffing');
     }
-  }, [rootState.lines, rootState.currentLineId]);
+    schedulePersistForRootEdit();
+  }, [rootState.lines, rootState.currentLineId, schedulePersistForRootEdit]);
 
   const importFileRef = useRef<HTMLInputElement>(null);
   const addToRosterFileRef = useRef<HTMLInputElement>(null);
@@ -1228,7 +1064,7 @@ export default function App() {
   }, [effectiveConfig, leadSlotKeys]);
 
   const handleSaveToFile = useCallback(async () => {
-    const root = rootStateRef.current;
+    const root = buildPersistedRootState(rootStateRef.current, stateRef.current);
     const rosterForLine = getRosterForLine(root.currentLineId, root.lineStates);
     const state: AppState = { ...stateRef.current, roster: rosterForLine };
     try {
@@ -1332,11 +1168,12 @@ export default function App() {
             },
           };
         });
+        schedulePersistForRootEdit();
       };
       reader.readAsText(file);
       e.target.value = '';
     },
-    [areaIds]
+    [areaIds, schedulePersistForRootEdit]
   );
 
   const handleAddToRoster = useCallback(() => {
@@ -1380,18 +1217,20 @@ export default function App() {
       lineStates: { [lineId]: lineState },
     };
     createCloudLine(shareName.trim(), sharePassword, shareRootState)
-      .then(({ lineId: newCloudLineId }) => {
+      .then(({ lineId: newCloudLineId, rootState: normalizedRootState, updatedAt, version }) => {
         setCloudSession(newCloudLineId, sharePassword);
         setCloudLineId(newCloudLineId);
         cloudPasswordRef.current = sharePassword;
-        setRootState(shareRootState);
+        setCloudUpdatedAt(updatedAt ?? null, version);
+        setRootState(normalizedRootState);
+        reloadLineState();
         setShowShareModal(false);
         setShareName('');
         setSharePassword('');
       })
       .catch((e) => setShareError(e instanceof Error ? e.message : String(e)))
       .finally(() => setShareLoading(false));
-  }, [shareName, sharePassword]);
+  }, [reloadLineState, setCloudUpdatedAt, shareName, sharePassword]);
 
   const handleDeleteCloudLine = useCallback(() => {
     const password = cloudPasswordRef.current;
@@ -1501,13 +1340,13 @@ export default function App() {
     setDirectLinkError(null);
     setDirectLinkLoading(true);
     getLineState(cloudLineFromUrl, directLinkPassword.trim())
-      .then(({ rootState: root, updatedAt }) => {
-        lastCloudUpdatedAtRef.current = updatedAt || null;
+      .then(({ rootState: root, updatedAt, version }) => {
+        setCloudUpdatedAt(updatedAt || null, version);
         setRootState(root);
         setCloudLineId(cloudLineFromUrl);
         cloudPasswordRef.current = directLinkPassword.trim();
         setCloudSession(cloudLineFromUrl, directLinkPassword.trim());
-        setLineStateReloadKey((k) => k + 1);
+        reloadLineState();
         setAdminVisible(false);
         setAppMode('app');
         if (typeof window !== 'undefined' && window.history.replaceState) {
@@ -1518,7 +1357,7 @@ export default function App() {
       })
       .catch((e) => setDirectLinkError(e instanceof Error ? e.message : String(e)))
       .finally(() => setDirectLinkLoading(false));
-  }, [cloudLineFromUrl, directLinkPassword]);
+  }, [cloudLineFromUrl, directLinkPassword, reloadLineState, setCloudUpdatedAt]);
 
   if (appMode === 'entry') {
     if (cloudLineFromUrl) {
@@ -1563,25 +1402,29 @@ export default function App() {
     }
     const entryExistingAreaIds = new Set(rootState.lines.flatMap((l) => l.areas.map((a) => a.id)));
     return (
-      <EntryScreen
-        existingAreaIds={entryExistingAreaIds}
-        onSelectLocal={() => setAppMode('app')}
-        onJoinGroup={(root, lineId, password) => {
-          setRootState(root);
-          setCloudLineId(lineId);
-          cloudPasswordRef.current = password;
-          setLineStateReloadKey((k) => k + 1);
-          setAppMode('app');
-        }}
-        onJoinGroupPresentation={(root, lineId, password) => {
-          setRootState(root);
-          setCloudLineId(lineId);
-          cloudPasswordRef.current = password;
-          setLineStateReloadKey((k) => k + 1);
-          setAdminVisible(false);
-          setAppMode('app');
-        }}
-      />
+      <Suspense fallback={<div style={{ padding: 48, textAlign: 'center' }}>Loading…</div>}>
+        <EntryScreen
+          existingAreaIds={entryExistingAreaIds}
+          onSelectLocal={() => setAppMode('app')}
+          onJoinGroup={(root, lineId, password, cursor) => {
+            setRootState(root);
+            setCloudLineId(lineId);
+            cloudPasswordRef.current = password;
+            setCloudUpdatedAt(cursor?.updatedAt ?? null, cursor?.version);
+            reloadLineState();
+            setAppMode('app');
+          }}
+          onJoinGroupPresentation={(root, lineId, password, cursor) => {
+            setRootState(root);
+            setCloudLineId(lineId);
+            cloudPasswordRef.current = password;
+            setCloudUpdatedAt(cursor?.updatedAt ?? null, cursor?.version);
+            reloadLineState();
+            setAdminVisible(false);
+            setAppMode('app');
+          }}
+        />
+      </Suspense>
     );
   }
 
@@ -1602,30 +1445,35 @@ export default function App() {
             Home
           </button>
         </header>
-        <LineManager
-          rootState={rootState}
-          canShare={!cloudLineId}
-          onShareClick={() => {
-            setShareName(currentConfig?.name ?? '');
-            setSharePassword('');
-            setShareError(null);
-            setShowShareModal(true);
-          }}
-          onOpenLine={handleOpenLine}
-          onBuildNew={handleBuildNewLine}
-          onDeleteLine={handleDeleteLine}
-          onBack={() => setView('staffing')}
-        />
+        <Suspense fallback={<div style={{ padding: 24 }}>Loading lines…</div>}>
+          <LineManager
+            rootState={rootState}
+            canShare={!cloudLineId}
+            onShareClick={() => {
+              setShareName(currentConfig?.name ?? '');
+              setSharePassword('');
+              setShareError(null);
+              setShowShareModal(true);
+            }}
+            onOpenLine={handleOpenLine}
+            onBuildNew={handleBuildNewLine}
+            onDeleteLine={handleDeleteLine}
+            onBack={() => setView('staffing')}
+          />
+        </Suspense>
         {showShareModal && (
           <div
             className="modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="share-line-title"
             onClick={() => !shareLoading && setShowShareModal(false)}
           >
             <div
               className="modal-dialog"
               onClick={(e) => e.stopPropagation()}
             >
-              <h2 style={{ marginTop: 0, marginBottom: 16 }}>Share line to cloud</h2>
+              <h2 id="share-line-title" style={{ marginTop: 0, marginBottom: 16 }}>Share line to cloud</h2>
               {shareError && (
                 <div style={{ background: '#fee', padding: 10, borderRadius: 8, marginBottom: 12 }}>{shareError}</div>
               )}
@@ -1670,11 +1518,13 @@ export default function App() {
             Home
           </button>
         </header>
-        <BuildLineWizard
-          existingAreaIds={existingAreaIds}
-          onComplete={handleBuildLineComplete}
-          onCancel={handleBuildLineCancel}
-        />
+        <Suspense fallback={<div style={{ padding: 24 }}>Loading builder…</div>}>
+          <BuildLineWizard
+            existingAreaIds={existingAreaIds}
+            onComplete={handleBuildLineComplete}
+            onCancel={handleBuildLineCancel}
+          />
+        </Suspense>
       </>
     );
   }
@@ -1718,8 +1568,8 @@ export default function App() {
               <button
                 type="button"
                 className="btn-danger"
-                disabled
-                title="Disabled to prevent accidental deletion"
+                onClick={handleDeleteCloudLine}
+                title="Delete this shared line after confirmation"
               >
                 Delete line from cloud
               </button>
@@ -1737,30 +1587,32 @@ export default function App() {
             </button>
           </div>
         </header>
-        <LineView
-          slots={presentationSlots}
-          roster={roster}
-          leadSlots={leadSlots}
-          areaLabels={areaLabels}
-          slotLabelsByArea={slotLabelsByArea}
-          effectiveCapacity={effectiveCapacity}
-          totalOnLine={grandTotal}
-          fullStaff={fullStaff}
-          staffingPct={grandTotalPct}
-          lineHealthScore={lineHealthScore}
-          lineSections={[...lineSections]}
-          leadSlotKeys={leadSlotKeys}
-          getLeadSlotLabel={(key) => getLeadSlotLabel(effectiveConfig!, key, areaLabels)}
-          getSlotLabel={getSlotLabel}
-          areaRequiresTrainedOrExpert={areaRequiresTrainedOrExpert}
-          breakSchedules={presentationBreakData?.breakSchedules}
-          rotationCount={presentationBreakData?.rotationCount}
-          breaksScope={presentationBreakData?.breaksScope}
-          floatSlots={presentationFloatSlots}
-          linkedSlotsByArea={presentationLinkedSlots}
-          areaBreakCoverageEnabled={areaBreakCoverageEnabled}
-          slotBreakCoverageEnabled={slotBreakCoverageEnabled}
-        />
+        <Suspense fallback={<div style={{ padding: 24 }}>Loading staffing view…</div>}>
+          <LineView
+            slots={presentationSlots}
+            roster={roster}
+            leadSlots={leadSlots}
+            areaLabels={areaLabels}
+            slotLabelsByArea={slotLabelsByArea}
+            effectiveCapacity={effectiveCapacity}
+            totalOnLine={grandTotal}
+            fullStaff={fullStaff}
+            staffingPct={grandTotalPct}
+            lineHealthScore={lineHealthScore}
+            lineSections={[...lineSections]}
+            leadSlotKeys={leadSlotKeys}
+            getLeadSlotLabel={(key) => getLeadSlotLabel(effectiveConfig!, key, areaLabels)}
+            getSlotLabel={getSlotLabel}
+            areaRequiresTrainedOrExpert={areaRequiresTrainedOrExpert}
+            breakSchedules={presentationBreakData?.breakSchedules}
+            rotationCount={presentationBreakData?.rotationCount}
+            breaksScope={presentationBreakData?.breaksScope}
+            floatSlots={presentationFloatSlots}
+            linkedSlotsByArea={presentationLinkedSlots}
+            areaBreakCoverageEnabled={areaBreakCoverageEnabled}
+            slotBreakCoverageEnabled={slotBreakCoverageEnabled}
+          />
+        </Suspense>
       </>
     );
   }
@@ -1781,8 +1633,8 @@ export default function App() {
               <button
                 type="button"
                 className="btn-danger"
-                disabled
-                title="Disabled to prevent accidental deletion"
+                onClick={handleDeleteCloudLine}
+                title="Delete this shared line after confirmation"
               >
                 Delete line from cloud
               </button>
@@ -1915,6 +1767,9 @@ export default function App() {
         <button type="button" className="btn-primary" onClick={handleDefaultPositions}>Default positions</button>
         <button type="button" className="btn-primary" onClick={handleFillRemaining}>Fill remaining</button>
         <button type="button" className="btn-primary" onClick={handleRandomize}>Randomize</button>
+        <button type="button" className="btn-ghost" onClick={handleUndoLastAction} disabled={!undoSnapshot}>
+          Undo{undoSnapshot ? ` ${undoSnapshot.label}` : ''}
+        </button>
         {/* STRETCH temporarily disabled
         <button type="button" onClick={handleStretch} title="Push team outside comfort zone; prefer areas they want to learn">STRETCH</button>
         */}
@@ -2032,6 +1887,9 @@ export default function App() {
       {showFloatSupportModal && floatSupportDraft !== null && currentConfig && (
         <div
           className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="float-support-title"
           onClick={() => {
             setShowFloatSupportModal(false);
             setFloatSupportDraft(null);
@@ -2042,7 +1900,7 @@ export default function App() {
             style={{ maxHeight: '85vh', overflow: 'auto' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '1.1rem' }}>Float support</h3>
+            <h3 id="float-support-title" style={{ margin: '0 0 16px 0', fontSize: '1.1rem' }}>Float support</h3>
             <p style={{ color: '#555', fontSize: '0.9rem', marginBottom: 16 }}>
               {floatSupportDraft.length === 0
                 ? 'Add float positions so people can support multiple areas and cover breaks when needed.'
@@ -2160,18 +2018,20 @@ export default function App() {
       )}
 
       {showStaffTheLineWizard && currentConfig && (
-        <StaffTheLineWizard
-          roster={roster}
-          lineSections={[...lineSections]}
-          slots={slots}
-          areaLabels={areaLabels}
-          getSlotLabel={getSlotLabel}
-          onMarkAbsent={handleToggleAbsent}
-          onToggleOTHereToday={handleToggleOTHereToday}
-          onSetSlotsForArea={setSlotsForArea}
-          onClose={() => setShowStaffTheLineWizard(false)}
-          onStaffComplete={handleDefaultPositions}
-        />
+        <Suspense fallback={null}>
+          <StaffTheLineWizard
+            roster={roster}
+            lineSections={[...lineSections]}
+            slots={slots}
+            areaLabels={areaLabels}
+            getSlotLabel={getSlotLabel}
+            onMarkAbsent={handleToggleAbsent}
+            onToggleOTHereToday={handleToggleOTHereToday}
+            onSetSlotsForArea={setSlotsForArea}
+            onClose={() => setShowStaffTheLineWizard(false)}
+            onStaffComplete={handleDefaultPositions}
+          />
+        </Suspense>
       )}
 
       {profilePersonId && (
@@ -2323,6 +2183,13 @@ export default function App() {
       />
       </div>
 
+      <TrainingReport
+        roster={roster}
+        slots={slots}
+        areaLabels={areaLabels}
+        effectiveCapacity={effectiveCapacity}
+        areaIds={areaIds}
+      />
 
       {effectiveConfig && getBreaksEnabled(effectiveConfig) && (() => {
         const rotationCount = getBreakRotations(effectiveConfig);
@@ -2492,13 +2359,16 @@ export default function App() {
       {showImportModal && (
         <div
           className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="import-cloud-title"
           onClick={() => !importLoading && setShowImportModal(false)}
         >
           <div
             className="modal-dialog"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 style={{ marginTop: 0, marginBottom: 16 }}>Import from another cloud line</h2>
+            <h2 id="import-cloud-title" style={{ marginTop: 0, marginBottom: 16 }}>Import from another cloud line</h2>
             <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: 16 }}>
               Import people from another cloud line. People with matching names will have their skills merged.
             </p>

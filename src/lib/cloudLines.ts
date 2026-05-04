@@ -63,7 +63,7 @@ export async function createCloudLine(
   name: string,
   password: string,
   rootState?: RootState
-): Promise<{ lineId: string; name: string; rootState: RootState }> {
+): Promise<{ lineId: string; name: string; rootState: RootState; updatedAt?: string; version?: number }> {
   const supabase = getClient();
   const body = rootState
     ? { name: name.trim(), password, rootState }
@@ -72,6 +72,8 @@ export async function createCloudLine(
     lineId: string;
     name: string;
     rootState: RootState;
+    updatedAt?: string;
+    version?: number;
     error?: string;
   }>('create-line', { body });
   if (error) {
@@ -84,12 +86,15 @@ export async function createCloudLine(
     lineId: data.lineId,
     name: data.name ?? name.trim(),
     rootState: data.rootState as RootState,
+    updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : undefined,
+    version: typeof data.version === 'number' ? data.version : undefined,
   };
 }
 
 export interface GetLineStateResult {
   rootState: RootState;
   updatedAt: string;
+  version?: number;
 }
 
 /** Get a cloud line's full state (password-protected). Returns state and server updated_at for optimistic locking. */
@@ -101,6 +106,7 @@ export async function getLineState(
   const { data, error } = await supabase.functions.invoke<{
     rootState?: RootState;
     updatedAt?: string;
+    version?: number;
     error?: string;
   }>('get-line-state', {
     body: { lineId, password },
@@ -114,6 +120,7 @@ export async function getLineState(
   return {
     rootState: data.rootState as RootState,
     updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : '',
+    version: typeof data.version === 'number' ? data.version : undefined,
   };
 }
 
@@ -144,15 +151,19 @@ export async function setLineState(
   lineId: string,
   password: string,
   rootState: RootState,
-  expectedUpdatedAt?: string
-): Promise<{ updatedAt: string } | void> {
+  expected?: string | { updatedAt?: string; version?: number }
+): Promise<{ updatedAt: string; version?: number } | void> {
   const supabase = getClient();
-  const body = expectedUpdatedAt != null
-    ? { lineId, password, rootState, expectedUpdatedAt }
-    : { lineId, password, rootState };
+  const expectedUpdatedAt = typeof expected === 'string' ? expected : expected?.updatedAt;
+  const expectedVersion = typeof expected === 'object' ? expected.version : undefined;
+  const body =
+    expectedUpdatedAt != null || expectedVersion != null
+      ? { lineId, password, rootState, expectedUpdatedAt, expectedVersion }
+      : { lineId, password, rootState };
   const { data, error } = await supabase.functions.invoke<{
     ok?: boolean;
     updatedAt?: string;
+    version?: number;
     error?: string;
     code?: string;
   }>('set-line-state', { body });
@@ -173,5 +184,5 @@ export async function setLineState(
     if (data?.code === 'CONFLICT') throw new CloudConflictError(data.error);
     throw new Error(data.error);
   }
-  if (data?.updatedAt) return { updatedAt: data.updatedAt };
+  if (data?.updatedAt) return { updatedAt: data.updatedAt, version: data.version };
 }

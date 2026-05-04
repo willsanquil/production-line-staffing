@@ -1,8 +1,9 @@
 import { createAdminClient } from '../_shared/supabaseAdmin.ts';
 import { verifyPassword } from '../_shared/password.ts';
-import { corsHeaders } from '../_shared/cors.ts';
+import { corsHeadersFor } from '../_shared/cors.ts';
 
 Deno.serve(async (req) => {
+  const corsHeaders = corsHeadersFor(req);
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -39,7 +40,7 @@ Deno.serve(async (req) => {
     const { error: errData } = await supabase.from('cloud_line_data').delete().eq('line_id', lineId);
     if (errData) {
       return new Response(
-        JSON.stringify({ error: errData.message }),
+        JSON.stringify({ error: 'Could not delete line data' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -47,7 +48,7 @@ Deno.serve(async (req) => {
     const { error: errLineDelete } = await supabase.from('cloud_lines').delete().eq('id', lineId);
     if (errLineDelete) {
       return new Response(
-        JSON.stringify({ error: errLineDelete.message }),
+        JSON.stringify({ error: 'Could not delete line' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -57,8 +58,9 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (e) {
+    console.error('delete-line failed', e);
     return new Response(
-      JSON.stringify({ error: String(e) }),
+      JSON.stringify({ error: 'Unexpected server error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

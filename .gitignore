@@ -16,5 +16,8 @@ Thumbs.db
 .env.local
 .env.*.local
 
+# Supabase local CLI cache
+supabase/.temp/
+
 # TypeScript build info
 *.tsbuildinfo

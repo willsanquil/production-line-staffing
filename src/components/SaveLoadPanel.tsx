@@ -33,7 +33,7 @@ export function SaveLoadPanel({
     try {
       onImportConfig(importText);
       setImportText('');
-    } catch (err) {
+    } catch {
       alert('Invalid JSON. Could not import.');
     }
   }

@@ -1,6 +1,7 @@
 import { createAdminClient } from '../_shared/supabaseAdmin.ts';
 import { hashPassword } from '../_shared/password.ts';
-import { corsHeaders } from '../_shared/cors.ts';
+import { corsHeadersFor } from '../_shared/cors.ts';
+import { normalizeRootStateForCloudLine, validateRootStatePayload } from '../_shared/rootStateValidation.ts';
 
 function nanoid(): string {
   return Math.random().toString(36).slice(2, 11);
@@ -54,6 +55,7 @@ function buildDefaultRootState(lineId: string, lineName: string) {
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = corsHeadersFor(req);
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -71,8 +73,19 @@ Deno.serve(async (req) => {
     const passwordHash = await hashPassword(password);
     const rootState =
       providedState && typeof providedState === 'object' && providedState !== null
-        ? (providedState as { currentLineId: string; lines: unknown[]; lineStates: Record<string, unknown> })
+        ? normalizeRootStateForCloudLine(
+            providedState as { currentLineId: string; lines: unknown[]; lineStates: Record<string, unknown> },
+            lineId,
+            name
+          )
         : buildDefaultRootState(lineId, name);
+    const validation = validateRootStatePayload(rootState);
+    if (!validation.ok) {
+      return new Response(
+        JSON.stringify({ error: validation.error ?? 'Invalid rootState' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     const { error: errLine } = await supabase.from('cloud_lines').insert({
       id: lineId,
@@ -81,7 +94,7 @@ Deno.serve(async (req) => {
     });
     if (errLine) {
       return new Response(
-        JSON.stringify({ error: errLine.message }),
+        JSON.stringify({ error: 'Could not create line' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -93,18 +106,19 @@ Deno.serve(async (req) => {
     if (errData) {
       await supabase.from('cloud_lines').delete().eq('id', lineId);
       return new Response(
-        JSON.stringify({ error: errData.message }),
+        JSON.stringify({ error: 'Could not initialize line data' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     return new Response(
-      JSON.stringify({ lineId, name: name.trim() || 'New Line', rootState }),
+      JSON.stringify({ lineId, name: name.trim() || 'New Line', rootState, version: 1 }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (e) {
+    console.error('create-line failed', e);
     return new Response(
-      JSON.stringify({ error: String(e) }),
+      JSON.stringify({ error: 'Unexpected server error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

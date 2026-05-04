@@ -644,6 +644,27 @@ textarea {
   animation: slideUp var(--transition-normal);
 }
 
+.person-profile-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.2fr);
+  gap: 24px;
+  align-items: flex-start;
+}
+
+@media (max-width: 720px) {
+  .person-profile-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay,
+  .modal-dialog {
+    animation: none;
+    backdrop-filter: none;
+  }
+}
+
 /* Staff the line wizard: stepped flow, clear hierarchy */
 .staff-the-line-wizard {
   background: var(--surface-0);

@@ -6,6 +6,7 @@ Single-page app for managing production line staffing: roster with skill depth, 
 
 ```bash
 npm install
+npm run ci
 npm run dev
 ```
 
@@ -70,12 +71,13 @@ The app supports **Local / Demo** (data in browser only) and **Group** (shared l
 
 ### 2. Edge Functions
 
-Deploy the Edge Functions (create-line, get-line-state, set-line-state):
+Deploy the Edge Functions (create-line, get-line-state, set-line-state, delete-line):
 
 ```bash
 npx supabase functions deploy create-line
 npx supabase functions deploy get-line-state
 npx supabase functions deploy set-line-state
+npx supabase functions deploy delete-line
 ```
 
 ### 3. Environment variables
@@ -83,8 +85,10 @@ npx supabase functions deploy set-line-state
 - **Vercel** (or your host) → project → **Settings → Environment Variables**:
   - `VITE_SUPABASE_URL` – Supabase project URL
   - `VITE_SUPABASE_ANON_KEY` – Supabase anon/public key
+  - Copy `.env.example` to `.env.local` for local development and fill in the same public values.
 
 - **Supabase** → Project Settings → Edge Functions: ensure the project has the default `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (set automatically).
+- Set `ALLOWED_ORIGINS` for Edge Functions to a comma-separated list of app origins, for example `https://your-app.vercel.app,http://localhost:5173`.
 
 ### 4. App flow
 
@@ -93,6 +97,6 @@ npx supabase functions deploy set-line-state
 
 ### 5. Troubleshooting "Edge Function returned a non-2xx status code"
 
-- **Deploy the functions** if you haven’t: `npx supabase login`, then `npx supabase link --project-ref YOUR_REF`, then deploy `create-line`, `get-line-state`, `set-line-state`.
+- **Deploy the functions** if you haven’t: `npx supabase login`, then `npx supabase link --project-ref YOUR_REF`, then deploy `create-line`, `get-line-state`, `set-line-state`, `delete-line`.
 - **Check Edge Function logs**: Supabase Dashboard → **Edge Functions** → select `create-line` → **Logs**. The real error (e.g. missing env, database error) appears there.
 - After the next deploy, the app will show the function’s error message in the red banner when create/join fails.

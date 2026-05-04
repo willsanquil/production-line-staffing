@@ -30,7 +30,8 @@ export function saveState(state: AppState): void {
 }
 
 function normalizeRosterPerson(p: RosterPerson): RosterPerson {
-  const { defaultLineId: _d, ...rest } = p as RosterPerson & { defaultLineId?: string };
+  const { defaultLineId: _defaultLineId, ...rest } = p as RosterPerson & { defaultLineId?: string };
+  void _defaultLineId;
   return {
     ...rest,
     flexedToLineId: p.flexedToLineId ?? null,

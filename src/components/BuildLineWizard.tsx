@@ -42,7 +42,7 @@ export function BuildLineWizard({ existingAreaIds, existingLineId, initialLineNa
     const name = `Section ${sections.length + 1}`;
     const id = areaIdFromName(name, existingIds);
     setSections((prev) => [...prev, { id, name, minSlots: 2, maxSlots: 5 }]);
-  }, [sections.length, existingAreaIds]);
+  }, [sections, existingAreaIds]);
 
   const updateSection = useCallback((index: number, updates: Partial<SectionDraft>) => {
     setSections((prev) => prev.map((s, i) => (i === index ? { ...s, ...updates } : s)));

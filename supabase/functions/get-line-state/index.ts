@@ -1,8 +1,9 @@
 import { createAdminClient } from '../_shared/supabaseAdmin.ts';
 import { verifyPassword } from '../_shared/password.ts';
-import { corsHeaders } from '../_shared/cors.ts';
+import { corsHeadersFor } from '../_shared/cors.ts';
 
 Deno.serve(async (req) => {
+  const corsHeaders = corsHeadersFor(req);
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -38,7 +39,7 @@ Deno.serve(async (req) => {
 
     const { data: row, error: errData } = await supabase
       .from('cloud_line_data')
-      .select('state, updated_at')
+      .select('state, updated_at, version')
       .eq('line_id', lineId)
       .single();
     if (errData || !row) {
@@ -49,12 +50,13 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ rootState: row.state, updatedAt: row.updated_at }),
+      JSON.stringify({ rootState: row.state, updatedAt: row.updated_at, version: row.version ?? 1 }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (e) {
+    console.error('get-line-state failed', e);
     return new Response(
-      JSON.stringify({ error: String(e) }),
+      JSON.stringify({ error: 'Unexpected server error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

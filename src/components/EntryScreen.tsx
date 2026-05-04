@@ -9,45 +9,19 @@ import {
   getLineState,
   setLineState,
 } from '../lib/cloudLines';
+import { setCloudSession } from '../lib/cloudSession';
 import { getEmptyLineState } from '../data/initialState';
 import { BuildLineWizard } from './BuildLineWizard';
 
-const CLOUD_LINE_ID = 'staffing-cloud-line-id';
-const CLOUD_PASSWORD = 'staffing-cloud-password';
-
-export function getCloudSession(): { lineId: string; password: string } | null {
-  try {
-    const lineId = sessionStorage.getItem(CLOUD_LINE_ID);
-    const password = sessionStorage.getItem(CLOUD_PASSWORD);
-    if (lineId && password) return { lineId, password };
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
-export function setCloudSession(lineId: string, password: string): void {
-  try {
-    sessionStorage.setItem(CLOUD_LINE_ID, lineId);
-    sessionStorage.setItem(CLOUD_PASSWORD, password);
-  } catch {
-    // ignore
-  }
-}
-
-export function clearCloudSession(): void {
-  try {
-    sessionStorage.removeItem(CLOUD_LINE_ID);
-    sessionStorage.removeItem(CLOUD_PASSWORD);
-  } catch {
-    // ignore
-  }
+interface CloudLineCursor {
+  updatedAt?: string;
+  version?: number;
 }
 
 interface EntryScreenProps {
   onSelectLocal: () => void;
-  onJoinGroup: (rootState: RootState, lineId: string, password: string) => void;
-  onJoinGroupPresentation?: (rootState: RootState, lineId: string, password: string) => void;
+  onJoinGroup: (rootState: RootState, lineId: string, password: string, cursor?: CloudLineCursor) => void;
+  onJoinGroupPresentation?: (rootState: RootState, lineId: string, password: string, cursor?: CloudLineCursor) => void;
   /** Existing area IDs from app (for wizard when configuring new cloud line). */
   existingAreaIds?: Set<string>;
 }
@@ -126,7 +100,7 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
-  }, [step, cloudAvailable]);
+  }, [step, cloudAvailable, quickJoinName]);
 
   const handleCreate = () => {
     if (!createName.trim() || !createPassword) {
@@ -159,9 +133,9 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
     setLoading(true);
     setError(null);
     setLineState(lineId, configurePassword, newRootState)
-      .then(() => {
+      .then((res) => {
         setCloudSession(lineId, configurePassword);
-        onJoinGroup(newRootState, lineId, configurePassword);
+        onJoinGroup(newRootState, lineId, configurePassword, res ?? undefined);
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
@@ -175,9 +149,9 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
     setLoading(true);
     setError(null);
     getLineState(joinLineId, joinPassword)
-      .then(({ rootState }) => {
+      .then(({ rootState, updatedAt, version }) => {
         setCloudSession(joinLineId, joinPassword);
-        onJoinGroup(rootState, joinLineId, joinPassword);
+        onJoinGroup(rootState, joinLineId, joinPassword, { updatedAt, version });
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
@@ -195,9 +169,9 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
     setLoading(true);
     setError(null);
     getLineState(joinLineId, joinPassword)
-      .then(({ rootState }) => {
+      .then(({ rootState, updatedAt, version }) => {
         setCloudSession(joinLineId, joinPassword);
-        onJoinGroupPresentation(rootState, joinLineId, joinPassword);
+        onJoinGroupPresentation(rootState, joinLineId, joinPassword, { updatedAt, version });
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
@@ -213,12 +187,12 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
     setLoading(true);
     setError(null);
     getLineState(joinLineId, password)
-      .then(({ rootState }) => {
+      .then(({ rootState, updatedAt, version }) => {
         setCloudSession(joinLineId, password);
         if (onJoinGroupPresentation) {
-          onJoinGroupPresentation(rootState, joinLineId, password);
+          onJoinGroupPresentation(rootState, joinLineId, password, { updatedAt, version });
         } else {
-          onJoinGroup(rootState, joinLineId, password);
+          onJoinGroup(rootState, joinLineId, password, { updatedAt, version });
         }
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
@@ -255,9 +229,9 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
         lineStates: { [newLineId]: emptyState },
       };
       // 5. Save and join new line
-      await setLineState(newLineId, cloneNewPassword, newRootState);
+      const res = await setLineState(newLineId, cloneNewPassword, newRootState);
       setCloudSession(newLineId, cloneNewPassword);
-      onJoinGroup(newRootState, newLineId, cloneNewPassword);
+      onJoinGroup(newRootState, newLineId, cloneNewPassword, res ?? undefined);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
