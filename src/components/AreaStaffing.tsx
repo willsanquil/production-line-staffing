@@ -44,6 +44,10 @@ interface AreaStaffingProps {
   onClearArea?: (areaId: AreaId) => void;
   /** Optional: when provided, render a "Delete area" button (configure mode only). */
   onDeleteArea?: (areaId: AreaId) => void;
+  /** Optional: move this section one step earlier in the line. When undefined, button is hidden / disabled. */
+  onMoveLeft?: (areaId: AreaId) => void;
+  /** Optional: move this section one step later in the line. */
+  onMoveRight?: (areaId: AreaId) => void;
   sectionTasks?: unknown[];
   onSlotsChange: (areaId: AreaId, slots: Slot[]) => void;
   onSectionTasksChange?: (areaId: AreaId, tasks: unknown[]) => void;
@@ -82,6 +86,8 @@ function AreaStaffingInner({
   onSlotLabelChange,
   onClearArea,
   onDeleteArea,
+  onMoveLeft,
+  onMoveRight,
   onSlotsChange,
   onAssign,
   requiresTrainedOrExpert = false,
@@ -187,15 +193,43 @@ function AreaStaffingInner({
   return (
     <section className="section-card area-card">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 4 }}>
-        <input
-          type="text"
-          value={areaLabel}
-          onChange={(e) => onAreaNameChange(areaId, e.target.value)}
-          style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, padding: '2px 6px', border: '1px solid transparent', borderRadius: 4, background: 'transparent', minWidth: 80 }}
-          onFocus={(e) => (e.target.style.borderColor = '#999')}
-          onBlur={(e) => (e.target.style.borderColor = 'transparent')}
-          aria-label="Area name"
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+          {(onMoveLeft || onMoveRight) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => onMoveLeft?.(areaId)}
+                disabled={!onMoveLeft}
+                title={onMoveLeft ? `Move ${areaLabel} left` : `${areaLabel} is already first`}
+                aria-label={`Move ${areaLabel} left`}
+                style={{ padding: '2px 8px', fontSize: '1rem', lineHeight: 1, opacity: onMoveLeft ? 1 : 0.4, cursor: onMoveLeft ? 'pointer' : 'not-allowed' }}
+              >
+                ◀
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => onMoveRight?.(areaId)}
+                disabled={!onMoveRight}
+                title={onMoveRight ? `Move ${areaLabel} right` : `${areaLabel} is already last`}
+                aria-label={`Move ${areaLabel} right`}
+                style={{ padding: '2px 8px', fontSize: '1rem', lineHeight: 1, opacity: onMoveRight ? 1 : 0.4, cursor: onMoveRight ? 'pointer' : 'not-allowed' }}
+              >
+                ▶
+              </button>
+            </div>
+          )}
+          <input
+            type="text"
+            value={areaLabel}
+            onChange={(e) => onAreaNameChange(areaId, e.target.value)}
+            style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, padding: '2px 6px', border: '1px solid transparent', borderRadius: 4, background: 'transparent', minWidth: 80 }}
+            onFocus={(e) => (e.target.style.borderColor = '#999')}
+            onBlur={(e) => (e.target.style.borderColor = 'transparent')}
+            aria-label="Area name"
+          />
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           {onRequiresTrainedOrExpertChange != null && (
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.9rem', cursor: 'pointer' }}>

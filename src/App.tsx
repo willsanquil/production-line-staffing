@@ -743,6 +743,43 @@ export default function App() {
     schedulePersistForRootEdit();
   }, [schedulePersistForRootEdit]);
 
+  /** Move the section containing areaId one step left (-1) or right (+1) in display order.
+   * Operates on the section list (so a combined section moves as a unit) and rebuilds
+   * line.areas so the underlying ordering matches. No-op at boundaries. */
+  const handleMoveStation = useCallback((areaId: string, direction: -1 | 1) => {
+    setRootState((prev) => {
+      const lineIndex = prev.lines.findIndex((l) => l.id === prev.currentLineId);
+      if (lineIndex === -1) return prev;
+      const line = prev.lines[lineIndex];
+      const sections = getLineSections(line);
+      const sectionIndex = sections.findIndex((s) =>
+        Array.isArray(s) ? s.includes(areaId) : s === areaId
+      );
+      if (sectionIndex === -1) return prev;
+      const targetIndex = sectionIndex + direction;
+      if (targetIndex < 0 || targetIndex >= sections.length) return prev;
+      const newSections = sections.slice();
+      [newSections[sectionIndex], newSections[targetIndex]] = [newSections[targetIndex], newSections[sectionIndex]];
+      const orderedIds: string[] = [];
+      for (const s of newSections) {
+        if (Array.isArray(s)) orderedIds.push(s[0], s[1]);
+        else orderedIds.push(s as string);
+      }
+      const byId = new Map(line.areas.map((a) => [a.id, a]));
+      const reorderedAreas = orderedIds
+        .map((id) => byId.get(id))
+        .filter((a): a is NonNullable<typeof a> => a != null);
+      // Defensive: append any areas missing from sections (shouldn't happen) so we never lose data.
+      for (const a of line.areas) {
+        if (!orderedIds.includes(a.id)) reorderedAreas.push(a);
+      }
+      const lines = prev.lines.slice();
+      lines[lineIndex] = { ...line, areas: reorderedAreas };
+      return { ...prev, lines };
+    });
+    schedulePersistForRootEdit();
+  }, [schedulePersistForRootEdit]);
+
   const handleUpdateFloatSlots = useCallback((nextFloatSlots: FloatSlotConfig[]) => {
     setRootState((prev) => {
       const lineIndex = prev.lines.findIndex((l) => l.id === prev.currentLineId);
@@ -2112,8 +2149,10 @@ export default function App() {
 
       <div className="areas-with-bank">
       <div className="areas-grid">
-        {lineSections.map((section) => {
+        {lineSections.map((section, sectionIdx) => {
           const isCombined = Array.isArray(section);
+          const isFirst = sectionIdx === 0;
+          const isLast = sectionIdx === lineSections.length - 1;
           if (isCombined) {
             const [idA, idB] = section as [string, string];
             return (
@@ -2147,6 +2186,9 @@ export default function App() {
                 onSlotLabelChange={handleSlotLabelChange}
                 onClearArea={handleClearArea}
                 onDeleteArea={configureMode ? handleRemoveStation : undefined}
+                onMoveLeft={configureMode && !isFirst ? () => handleMoveStation(idA, -1) : undefined}
+                onMoveRight={configureMode && !isLast ? () => handleMoveStation(idA, 1) : undefined}
+                moveLabel={`${areaLabels[idA] ?? idA} & ${areaLabels[idB] ?? idB}`}
                 onSlotsChange={setSlotsForArea}
                 onAssign={setSlotAssignment}
                 requiresTrainedOrExpertA={areaRequiresTrainedOrExpert(idA)}
@@ -2182,6 +2224,8 @@ export default function App() {
               onSlotLabelChange={handleSlotLabelChange}
               onClearArea={handleClearArea}
               onDeleteArea={configureMode ? handleRemoveStation : undefined}
+              onMoveLeft={configureMode && !isFirst ? (id) => handleMoveStation(id, -1) : undefined}
+              onMoveRight={configureMode && !isLast ? (id) => handleMoveStation(id, 1) : undefined}
               sectionTasks={sectionTasks[areaId] ?? []}
               onSlotsChange={setSlotsForArea}
               onAssign={setSlotAssignment}

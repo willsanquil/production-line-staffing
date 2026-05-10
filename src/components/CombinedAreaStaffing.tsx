@@ -56,6 +56,12 @@ interface CombinedAreaStaffingProps {
   onClearArea?: (areaId: AreaId) => void;
   /** Optional: when provided, render a "Delete area" button per sub-area (configure mode only). */
   onDeleteArea?: (areaId: AreaId) => void;
+  /** Move the whole combined section one step earlier in the line. */
+  onMoveLeft?: () => void;
+  /** Move the whole combined section one step later in the line. */
+  onMoveRight?: () => void;
+  /** Label used for tooltips on the section move buttons (e.g. "14.5 & Flip"). */
+  moveLabel?: string;
   onSlotsChange: (areaId: AreaId, slots: Slot[]) => void;
   onSectionTasksChange?: (areaId: AreaId, tasks: unknown[]) => void;
   onAssign: (areaId: AreaId, slotId: string, personId: string | null) => void;
@@ -91,6 +97,9 @@ function CombinedAreaStaffingInner({
   onSlotLabelChange,
   onClearArea,
   onDeleteArea,
+  onMoveLeft,
+  onMoveRight,
+  moveLabel,
   onSlotsChange,
   onAssign,
   requiresTrainedOrExpertA = false,
@@ -370,10 +379,39 @@ function CombinedAreaStaffingInner({
     );
   }
 
+  const sectionLabel = moveLabel ?? combinedLabel;
   return (
     <section className={`section-card area-card${compactView ? ' area-card--compact' : ''}`}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-        <span style={{ fontSize: compactView ? '1.1rem' : '1.25rem', fontWeight: 700 }}>{combinedLabel}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+          {(onMoveLeft || onMoveRight) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => onMoveLeft?.()}
+                disabled={!onMoveLeft}
+                title={onMoveLeft ? `Move ${sectionLabel} left` : `${sectionLabel} is already first`}
+                aria-label={`Move ${sectionLabel} left`}
+                style={{ padding: '2px 8px', fontSize: '1rem', lineHeight: 1, opacity: onMoveLeft ? 1 : 0.4, cursor: onMoveLeft ? 'pointer' : 'not-allowed' }}
+              >
+                ◀
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => onMoveRight?.()}
+                disabled={!onMoveRight}
+                title={onMoveRight ? `Move ${sectionLabel} right` : `${sectionLabel} is already last`}
+                aria-label={`Move ${sectionLabel} right`}
+                style={{ padding: '2px 8px', fontSize: '1rem', lineHeight: 1, opacity: onMoveRight ? 1 : 0.4, cursor: onMoveRight ? 'pointer' : 'not-allowed' }}
+              >
+                ▶
+              </button>
+            </div>
+          )}
+          <span style={{ fontSize: compactView ? '1.1rem' : '1.25rem', fontWeight: 700 }}>{combinedLabel}</span>
+        </div>
       </div>
 
       {renderSubArea(areaIdA, areaLabelA, slotsA, minA, maxA, slotLabelsA, requiresTrainedOrExpertA, onRequiresTrainedOrExpertChangeA, slotBreakCoverageEnabled[areaIdA] ?? {})}
