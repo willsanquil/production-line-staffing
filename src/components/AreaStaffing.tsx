@@ -42,6 +42,8 @@ interface AreaStaffingProps {
   onCapacityChange: (areaId: AreaId, payload: { min?: number; max?: number }) => void;
   onSlotLabelChange: (areaId: AreaId, slotIndex: number, value: string) => void;
   onClearArea?: (areaId: AreaId) => void;
+  /** Optional: when provided, render a "Delete area" button (configure mode only). */
+  onDeleteArea?: (areaId: AreaId) => void;
   sectionTasks?: unknown[];
   onSlotsChange: (areaId: AreaId, slots: Slot[]) => void;
   onSectionTasksChange?: (areaId: AreaId, tasks: unknown[]) => void;
@@ -79,6 +81,7 @@ function AreaStaffingInner({
   onCapacityChange,
   onSlotLabelChange,
   onClearArea,
+  onDeleteArea,
   onSlotsChange,
   onAssign,
   requiresTrainedOrExpert = false,
@@ -245,6 +248,21 @@ function AreaStaffingInner({
             title={`Clear assigned people from ${areaLabel}`}
           >
             Clear area
+          </button>
+        )}
+        {onDeleteArea && (
+          <button
+            type="button"
+            className="btn-danger"
+            onClick={() => {
+              const ok = window.confirm(
+                `Delete "${areaLabel}"?\n\nSlot assignments, tasks, capacity overrides, and break-coverage settings for this area will be removed. People in the line roster keep their skill data so re-adding the same area later restores it.`
+              );
+              if (ok) onDeleteArea(areaId);
+            }}
+            title={`Delete the ${areaLabel} category from this line`}
+          >
+            Delete area
           </button>
         )}
       </div>

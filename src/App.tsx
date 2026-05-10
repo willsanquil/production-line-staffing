@@ -49,7 +49,6 @@ import {
   getSlotLabelForLine,
   areaRequiresTrainedOrExpertFromConfig,
   getDefaultICLineConfig,
-  getDefaultNICLineConfig,
   getBreaksEnabled,
   getBreaksScope,
   getBreakRotations,
@@ -200,19 +199,9 @@ export default function App() {
     () => rootState.lines.find((l) => l.id === rootState.currentLineId),
     [rootState.lines, rootState.currentLineId]
   );
-  /** For IC/NIC, always use full default areas/sections so display never breaks; keep user floatSlots. */
-  const effectiveConfig = useMemo(() => {
-    if (!currentConfig) return null;
-    if (currentConfig.id === 'ic') {
-      const def = getDefaultICLineConfig();
-      return { ...def, floatSlots: currentConfig.floatSlots ?? def.floatSlots };
-    }
-    if (currentConfig.id === 'nic') {
-      const def = getDefaultNICLineConfig();
-      return { ...def, floatSlots: currentConfig.floatSlots ?? def.floatSlots };
-    }
-    return currentConfig;
-  }, [currentConfig]);
+  /** Effective config for the current line. IC/NIC are no longer special-cased — any line
+   * (including the seeds) is fully editable: areas/floats/leads can be added, edited, or deleted. */
+  const effectiveConfig = useMemo(() => currentConfig ?? null, [currentConfig]);
   const areaIds = useMemo(
     () => (effectiveConfig ? getAreaIds(effectiveConfig) : []),
     [effectiveConfig]
@@ -616,7 +605,7 @@ export default function App() {
     setAreaRequiresTrainedOrExpertOverrides((prev) => ({ ...prev, [areaId]: value }));
     const line = rootState.lines.find((l) => l.id === rootState.currentLineId);
     const areaIndex = line?.areas?.findIndex((a) => a.id === areaId) ?? -1;
-    if (areaIndex >= 0 && line && line.id !== 'ic' && line.id !== 'nic') {
+    if (areaIndex >= 0 && line) {
       setRootState((prev) => {
         const lineIndex = prev.lines.findIndex((l) => l.id === prev.currentLineId);
         if (lineIndex === -1) return prev;
@@ -642,7 +631,6 @@ export default function App() {
         const lineIndex = prev.lines.findIndex((l) => l.id === prev.currentLineId);
         if (lineIndex === -1) return prev;
         const line = prev.lines[lineIndex];
-        if (line.id === 'ic') return prev;
         const existingIds = new Set(prev.lines.flatMap((l) => l.areas.map((a) => a.id)));
         const areaId = areaIdFromName(trimmedName, existingIds);
         const newArea = {
@@ -683,6 +671,77 @@ export default function App() {
     },
     [schedulePersistForRootEdit]
   );
+
+  /** Delete an area (category) from the current line. Scrubs the area id from line config,
+   * line state, all per-area override maps, break schedules, and any roster defaults. The
+   * area's skill column on roster.skills[areaId] is intentionally left in place so re-adding
+   * an area with the same id later preserves prior skill data. */
+  const handleRemoveStation = useCallback((areaId: string) => {
+    setRootState((prev) => {
+      const lineIndex = prev.lines.findIndex((l) => l.id === prev.currentLineId);
+      if (lineIndex === -1) return prev;
+      const line = prev.lines[lineIndex];
+      if (!line.areas.some((a) => a.id === areaId)) return prev;
+      const areas = line.areas.filter((a) => a.id !== areaId);
+      const combinedSections = (line.combinedSections ?? []).filter(
+        ([a, b]) => a !== areaId && b !== areaId
+      );
+      const leadAreaIds = (line.leadAreaIds ?? []).filter((id) => id !== areaId);
+      const floatSlots = line.floatSlots?.map((f) => ({
+        ...f,
+        supportedAreaIds: f.supportedAreaIds.filter((id) => id !== areaId),
+      }));
+      const lines = prev.lines.slice();
+      lines[lineIndex] = {
+        ...line,
+        areas,
+        combinedSections,
+        leadAreaIds,
+        floatSlots,
+      };
+
+      const lineState = prev.lineStates[prev.currentLineId];
+      if (!lineState) return { ...prev, lines };
+
+      const dropKey = <T extends Record<string, unknown>>(obj: T | undefined): T | undefined => {
+        if (!obj || !(areaId in obj)) return obj;
+        const next = { ...obj } as Record<string, unknown>;
+        delete next[areaId];
+        return next as T;
+      };
+
+      const nextSlots = { ...lineState.slots };
+      delete nextSlots[areaId];
+      const nextSectionTasks = { ...lineState.sectionTasks };
+      delete (nextSectionTasks as Record<string, unknown>)[areaId];
+      const nextLeadSlots = { ...lineState.leadSlots };
+      delete nextLeadSlots[areaId];
+
+      const roster = (lineState.roster ?? []).map((p) =>
+        p.defaultAreaId === areaId ? { ...p, defaultAreaId: null, defaultSlotIndex: null } : p
+      );
+
+      const newLineState = {
+        ...lineState,
+        slots: nextSlots,
+        sectionTasks: nextSectionTasks,
+        leadSlots: nextLeadSlots,
+        roster,
+        juicedAreas: dropKey(lineState.juicedAreas) ?? {},
+        deJuicedAreas: dropKey(lineState.deJuicedAreas) ?? {},
+        breakSchedules: dropKey(lineState.breakSchedules) ?? {},
+        areaBreakCoverageEnabled: dropKey(lineState.areaBreakCoverageEnabled),
+        areaCapacityOverrides: dropKey(lineState.areaCapacityOverrides),
+        areaNameOverrides: dropKey(lineState.areaNameOverrides),
+        slotLabelsByArea: dropKey(lineState.slotLabelsByArea),
+        areaRequiresTrainedOrExpertOverrides: dropKey(lineState.areaRequiresTrainedOrExpertOverrides),
+        slotBreakCoverageEnabled: dropKey(lineState.slotBreakCoverageEnabled),
+      };
+      const lineStates = { ...prev.lineStates, [prev.currentLineId]: newLineState };
+      return { ...prev, lines, lineStates };
+    });
+    schedulePersistForRootEdit();
+  }, [schedulePersistForRootEdit]);
 
   const handleUpdateFloatSlots = useCallback((nextFloatSlots: FloatSlotConfig[]) => {
     setRootState((prev) => {
@@ -841,10 +900,9 @@ export default function App() {
   const handleLoadDay = useCallback((day: SavedDay) => {
     const targetLineId = day.lineId ?? rootState.currentLineId;
     const targetConfig = rootState.lines.find((l) => l.id === targetLineId);
-    const normalizedSlots =
-      targetConfig && targetConfig.id !== 'ic'
-        ? normalizeSlotsToLineCapacity(day.slots, targetConfig, areaCapacityOverrides)
-        : normalizeSlotsToCapacity(day.slots, areaCapacityOverrides);
+    const normalizedSlots = targetConfig
+      ? normalizeSlotsToLineCapacity(day.slots, targetConfig, areaCapacityOverrides)
+      : normalizeSlotsToCapacity(day.slots, areaCapacityOverrides);
     const lineStateForDay = {
       roster: rootState.lineStates[targetLineId]?.roster ?? [],
       slots: normalizedSlots,
@@ -1798,7 +1856,7 @@ export default function App() {
           >
             {configureMode ? 'Simple view' : 'Configure mode'}
           </button>
-          {currentConfig.id !== 'ic' && !showAddStationForm ? (
+          {!showAddStationForm ? (
             <button
               type="button"
               className="btn-primary"
@@ -1807,7 +1865,7 @@ export default function App() {
               + Add station
             </button>
           ) : null}
-          {currentConfig.id !== 'ic' && showAddStationForm ? (
+          {showAddStationForm ? (
             <div
               style={{
                 background: '#f8f9fa',
@@ -2088,6 +2146,7 @@ export default function App() {
                 onCapacityChange={handleAreaCapacityChange}
                 onSlotLabelChange={handleSlotLabelChange}
                 onClearArea={handleClearArea}
+                onDeleteArea={configureMode ? handleRemoveStation : undefined}
                 onSlotsChange={setSlotsForArea}
                 onAssign={setSlotAssignment}
                 requiresTrainedOrExpertA={areaRequiresTrainedOrExpert(idA)}
@@ -2122,6 +2181,7 @@ export default function App() {
               onCapacityChange={handleAreaCapacityChange}
               onSlotLabelChange={handleSlotLabelChange}
               onClearArea={handleClearArea}
+              onDeleteArea={configureMode ? handleRemoveStation : undefined}
               sectionTasks={sectionTasks[areaId] ?? []}
               onSlotsChange={setSlotsForArea}
               onAssign={setSlotAssignment}

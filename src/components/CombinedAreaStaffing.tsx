@@ -54,6 +54,8 @@ interface CombinedAreaStaffingProps {
   onCapacityChange: (areaId: AreaId, payload: { min?: number; max?: number }) => void;
   onSlotLabelChange: (areaId: AreaId, slotIndex: number, value: string) => void;
   onClearArea?: (areaId: AreaId) => void;
+  /** Optional: when provided, render a "Delete area" button per sub-area (configure mode only). */
+  onDeleteArea?: (areaId: AreaId) => void;
   onSlotsChange: (areaId: AreaId, slots: Slot[]) => void;
   onSectionTasksChange?: (areaId: AreaId, tasks: unknown[]) => void;
   onAssign: (areaId: AreaId, slotId: string, personId: string | null) => void;
@@ -88,6 +90,7 @@ function CombinedAreaStaffingInner({
   onCapacityChange,
   onSlotLabelChange,
   onClearArea,
+  onDeleteArea,
   onSlotsChange,
   onAssign,
   requiresTrainedOrExpertA = false,
@@ -224,6 +227,21 @@ function CombinedAreaStaffingInner({
               title={`Clear assigned people from ${areaLabel}`}
             >
               Clear area
+            </button>
+          )}
+          {onDeleteArea && (
+            <button
+              type="button"
+              className="btn-danger"
+              onClick={() => {
+                const ok = window.confirm(
+                  `Delete "${areaLabel}"?\n\nSlot assignments, tasks, capacity overrides, and break-coverage settings for this area will be removed.`
+                );
+                if (ok) onDeleteArea(areaId);
+              }}
+              title={`Delete the ${areaLabel} category from this line`}
+            >
+              Delete area
             </button>
           )}
         </div>

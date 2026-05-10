@@ -3,25 +3,54 @@ import type { LineConfig, FloatSlotConfig, AreaCapacityOverrides, AreaNameOverri
 export const DEFAULT_IC_LINE_ID = 'ic';
 export const DEFAULT_NIC_LINE_ID = 'nic';
 
-/** Shared area layout for IC/NIC (both halves of MIC). */
+/** Shared area layout for IC/NIC (both halves of MIC).
+ * Flip is intentionally NOT a station here — it lives as 2 float slots that cover
+ * 14.5 + Testing breaks (see DEFAULT_LINE_FLOATS below). When Flip needs to "run"
+ * for a day, add a temporary Flip station via "Add station" and reassign people.
+ */
 const DEFAULT_LINE_AREAS: LineConfig['areas'] = [
-  { id: 'area_14_5', name: '14.5', minSlots: 3, maxSlots: 4, requiresTrainedOrExpert: false },
-  { id: 'area_courtyard', name: 'Courtyard', minSlots: 4, maxSlots: 7, requiresTrainedOrExpert: false },
-  { id: 'area_bonding', name: 'Bonding', minSlots: 11, maxSlots: 13, requiresTrainedOrExpert: false, defaultSlotLabels: ['Float', '100s', '100s/200s', '100s/200s', '200s/300s', '200s/300s', '300s/400s', '300s/400s', '400/s', 'Rework', 'Manual Review'] },
-  { id: 'area_testing', name: 'Testing', minSlots: 2, maxSlots: 3, requiresTrainedOrExpert: false },
-  { id: 'area_potting', name: 'Potting', minSlots: 3, maxSlots: 5, requiresTrainedOrExpert: false },
-  { id: 'area_end_of_line', name: 'End Of Line', minSlots: 4, maxSlots: 4, requiresTrainedOrExpert: false },
-  { id: 'area_flip', name: 'Flip', minSlots: 1, maxSlots: 2, requiresTrainedOrExpert: false },
+  { id: 'area_14_5', name: '14.5', minSlots: 2, maxSlots: 2, requiresTrainedOrExpert: true },
+  { id: 'area_courtyard', name: 'Courtyard', minSlots: 4, maxSlots: 5, requiresTrainedOrExpert: true },
+  {
+    id: 'area_bonding',
+    name: 'Bonding',
+    minSlots: 8,
+    maxSlots: 10,
+    requiresTrainedOrExpert: true,
+    defaultSlotLabels: [
+      '100s',
+      '100s/200s',
+      '100s/200s',
+      '200s/300s',
+      '200s/300s',
+      '300s/400s',
+      '300s/400s',
+      '400/s',
+      'Rework',
+      'Manual Review',
+    ],
+  },
+  { id: 'area_testing', name: 'Testing', minSlots: 1, maxSlots: 1, requiresTrainedOrExpert: true },
+  { id: 'area_potting', name: 'Potting', minSlots: 2, maxSlots: 3, requiresTrainedOrExpert: true },
+  { id: 'area_end_of_line', name: 'End Of Line', minSlots: 3, maxSlots: 3, requiresTrainedOrExpert: true },
 ];
 
-/** Built-in IC line (one half of MIC): same areas and layout as the original app. */
+/** Default Flip floats — 2 people who cover 14.5 + Testing break rotations.
+ * Each takes one of the 3 break rotations off; between them they cover the gaps. */
+const DEFAULT_LINE_FLOATS: FloatSlotConfig[] = [
+  { id: 'flip_1', name: 'Flip 1', supportedAreaIds: ['area_14_5', 'area_testing'] },
+  { id: 'flip_2', name: 'Flip 2', supportedAreaIds: ['area_14_5', 'area_testing'] },
+];
+
+/** Built-in IC line (one half of MIC). */
 export function getDefaultICLineConfig(): LineConfig {
   return {
     id: DEFAULT_IC_LINE_ID,
     name: 'IC',
-    areas: [...DEFAULT_LINE_AREAS],
+    areas: DEFAULT_LINE_AREAS.map((a) => ({ ...a })),
+    floatSlots: DEFAULT_LINE_FLOATS.map((f) => ({ ...f, supportedAreaIds: [...f.supportedAreaIds] })),
     leadAreaIds: ['area_end_of_line', 'area_courtyard', 'area_bonding'],
-    combinedSections: [['area_14_5', 'area_flip']],
+    combinedSections: [],
     breaksEnabled: true,
     breaksScope: 'station',
     breakRotations: 3,
@@ -33,9 +62,10 @@ export function getDefaultNICLineConfig(): LineConfig {
   return {
     id: DEFAULT_NIC_LINE_ID,
     name: 'NIC',
-    areas: [...DEFAULT_LINE_AREAS],
+    areas: DEFAULT_LINE_AREAS.map((a) => ({ ...a })),
+    floatSlots: DEFAULT_LINE_FLOATS.map((f) => ({ ...f, supportedAreaIds: [...f.supportedAreaIds] })),
     leadAreaIds: ['area_end_of_line', 'area_courtyard', 'area_bonding'],
-    combinedSections: [['area_14_5', 'area_flip']],
+    combinedSections: [],
     breaksEnabled: true,
     breaksScope: 'station',
     breakRotations: 3,
