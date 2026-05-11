@@ -2439,47 +2439,53 @@ export default function App() {
             />
           );
         })}
-        {effectiveConfig &&
-          getFloatSlots(effectiveConfig).map((f) => {
-            const supportsLabel =
-              f.supportedAreaIds.length > 0
-                ? f.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ')
-                : 'none';
-            return (
-              <AreaStaffing
-                key={f.id}
-                areaId={f.id}
-                areaLabel={`${f.name} — supports: ${supportsLabel}`}
-                minSlots={1}
-                maxSlots={1}
-                slotLabels={[f.name]}
-                slots={slots[f.id] ?? []}
-                roster={roster}
-                allAssignedPersonIds={allAssignedPersonIds}
-                leadAssignedPersonIds={leadAssignedPersonIds}
-                juiced={false}
-                deJuiced={false}
-                onToggleJuice={() => {}}
-                onToggleDeJuice={() => {}}
-                onAreaNameChange={() => {}}
-                onCapacityChange={() => {}}
-                onSlotLabelChange={() => {}}
-                onClearArea={handleClearArea}
-                sectionTasks={[]}
-                onSlotsChange={setSlotsForArea}
-                onSectionTasksChange={() => {}}
-                onAssign={setSlotAssignment}
-                requiresTrainedOrExpert={false}
-                supportedAreaIds={f.supportedAreaIds}
-                breakSchedules={getBreaksEnabled(effectiveConfig) ? breakSchedules : undefined}
-                rotationCount={getBreaksEnabled(effectiveConfig) ? getBreakRotations(effectiveConfig) : undefined}
-                showBreakCoverageToggle={!!effectiveConfig && getBreaksEnabled(effectiveConfig)}
-                slotBreakCoverageEnabled={slotBreakCoverageEnabled[f.id] ?? {}}
-                onToggleSlotBreakCoverage={handleToggleSlotBreakCoverage}
-                compactView={!configureMode}
-              />
-            );
-          })}
+        {effectiveConfig && getFloatSlots(effectiveConfig).length > 0 && (
+          // Wrap all floats in a single grid cell so they stack vertically as one column
+          // (like Bonding with many slots), instead of each float consuming its own column
+          // and wrapping awkwardly to a new row. Inner flex column preserves card spacing.
+          <div className="floats-column" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)', minWidth: 0 }}>
+            {getFloatSlots(effectiveConfig).map((f) => {
+              const supportsLabel =
+                f.supportedAreaIds.length > 0
+                  ? f.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ')
+                  : 'none';
+              return (
+                <AreaStaffing
+                  key={f.id}
+                  areaId={f.id}
+                  areaLabel={`${f.name} — supports: ${supportsLabel}`}
+                  minSlots={1}
+                  maxSlots={1}
+                  slotLabels={[f.name]}
+                  slots={slots[f.id] ?? []}
+                  roster={roster}
+                  allAssignedPersonIds={allAssignedPersonIds}
+                  leadAssignedPersonIds={leadAssignedPersonIds}
+                  juiced={false}
+                  deJuiced={false}
+                  onToggleJuice={() => {}}
+                  onToggleDeJuice={() => {}}
+                  onAreaNameChange={() => {}}
+                  onCapacityChange={() => {}}
+                  onSlotLabelChange={() => {}}
+                  onClearArea={handleClearArea}
+                  sectionTasks={[]}
+                  onSlotsChange={setSlotsForArea}
+                  onSectionTasksChange={() => {}}
+                  onAssign={setSlotAssignment}
+                  requiresTrainedOrExpert={false}
+                  supportedAreaIds={f.supportedAreaIds}
+                  breakSchedules={getBreaksEnabled(effectiveConfig) ? breakSchedules : undefined}
+                  rotationCount={getBreaksEnabled(effectiveConfig) ? getBreakRotations(effectiveConfig) : undefined}
+                  showBreakCoverageToggle={!!effectiveConfig && getBreaksEnabled(effectiveConfig)}
+                  slotBreakCoverageEnabled={slotBreakCoverageEnabled[f.id] ?? {}}
+                  onToggleSlotBreakCoverage={handleToggleSlotBreakCoverage}
+                  compactView={!configureMode}
+                />
+              );
+            })}
+          </div>
+        )}
       </div>
       <UnslottedBank
         roster={roster}
