@@ -18,6 +18,7 @@ export type LineDraftState = Pick<
   | 'slotLabelsByArea'
   | 'areaRequiresTrainedOrExpertOverrides'
   | 'slotBreakCoverageEnabled'
+  | 'areaCoversBreaksFor'
 >;
 
 export function extractLineDraftState(lineState: Partial<LineState>): LineDraftState {
@@ -38,6 +39,7 @@ export function extractLineDraftState(lineState: Partial<LineState>): LineDraftS
     slotLabelsByArea: lineState.slotLabelsByArea ?? {},
     areaRequiresTrainedOrExpertOverrides: lineState.areaRequiresTrainedOrExpertOverrides ?? {},
     slotBreakCoverageEnabled: lineState.slotBreakCoverageEnabled ?? {},
+    areaCoversBreaksFor: lineState.areaCoversBreaksFor ?? {},
   };
 }
 

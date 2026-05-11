@@ -191,6 +191,8 @@ export interface SavedDay {
   areaBreakCoverageEnabled?: Record<string, boolean>;
   areaRequiresTrainedOrExpertOverrides?: Record<string, boolean>;
   slotBreakCoverageEnabled?: Record<string, Record<string, boolean>>;
+  /** Which stations cover breaks for which other stations on this saved day. */
+  areaCoversBreaksFor?: Record<string, string[]>;
 }
 
 export interface AppState {
@@ -215,6 +217,11 @@ export interface AppState {
   areaRequiresTrainedOrExpertOverrides?: Record<string, boolean>;
   /** Per-slot break coverage: areaId -> slotId -> true if that slot needs break coverage. */
   slotBreakCoverageEnabled?: Record<string, Record<string, boolean>>;
+  /** Stations that cover breaks at other stations: stationAreaId -> list of supported area ids.
+   * People in a coverage station are scheduled to leave coverage gaps elsewhere (their break
+   * rotation is optimized just like a real float), and the staffing view shows Break Coverage
+   * rows on the supported stations. The coverage station still renders as a regular station. */
+  areaCoversBreaksFor?: Record<string, string[]>;
   /** Per-lead and supervisor assignment views: key = lead slot key or ASSIGNMENT_VIEW_SUPERVISOR_KEY. */
   assignmentViews?: Record<string, AssignmentViewSnapshot>;
   /** Which assignment view is currently shown (supervisor vs each lead). Default supervisor. */

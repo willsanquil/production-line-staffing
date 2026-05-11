@@ -58,6 +58,12 @@ interface CombinedAreaStaffingProps {
   onDeleteArea?: (areaId: AreaId) => void;
   /** Optional: when provided, render a "Convert to floats" button per sub-area (configure mode only). */
   onConvertToFloats?: (areaId: AreaId) => void;
+  /** Optional: when provided, render a "Covers breaks for…" button per sub-area (configure mode only). */
+  onEditCoversBreaksFor?: (areaId: AreaId) => void;
+  /** Per-sub-area: list of area ids this sub-area currently covers breaks for. */
+  coversBreaksForAreaIdsByArea?: Record<string, string[]>;
+  /** Map of area id -> display label for the coversBreaksForAreaIds summary. */
+  areaLabelsForCoverageSummary?: Record<string, string>;
   /** Move the whole combined section one step earlier in the line. */
   onMoveLeft?: () => void;
   /** Move the whole combined section one step later in the line. */
@@ -100,6 +106,9 @@ function CombinedAreaStaffingInner({
   onClearArea,
   onDeleteArea,
   onConvertToFloats,
+  onEditCoversBreaksFor,
+  coversBreaksForAreaIdsByArea,
+  areaLabelsForCoverageSummary,
   onMoveLeft,
   onMoveRight,
   moveLabel,
@@ -245,6 +254,23 @@ function CombinedAreaStaffingInner({
               title={`Convert ${areaLabel} into float positions that cover breaks elsewhere`}
             >
               Convert to floats
+            </button>
+          )}
+          {onEditCoversBreaksFor && (
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => onEditCoversBreaksFor(areaId)}
+              title={`Pick which stations ${areaLabel}'s people cover breaks at`}
+            >
+              Covers breaks for…
+              {(coversBreaksForAreaIdsByArea?.[areaId]?.length ?? 0) > 0 && (
+                <span style={{ marginLeft: 6, fontWeight: 600, color: '#1976d2' }}>
+                  {(coversBreaksForAreaIdsByArea?.[areaId] ?? [])
+                    .map((id) => areaLabelsForCoverageSummary?.[id] ?? id)
+                    .join(', ')}
+                </span>
+              )}
             </button>
           )}
           {onDeleteArea && (

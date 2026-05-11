@@ -70,6 +70,7 @@ import { UnslottedBank } from './components/UnslottedBank';
 import { DayBank } from './components/DayBank';
 import { randomizeAssignments, applyDefaultPositionsThenSpread, fillRemainingAssignments } from './lib/automation';
 import { generateBreakSchedules, optimizeFloatBreakRotations } from './lib/breakSchedules';
+import { synthesizeCoverageFloats, mirrorVirtualFloatBreaksToStations } from './lib/coverageStations';
 import { clearAreaAssignments } from './lib/slots';
 import { loadSavedDays, addSavedDay, removeSavedDay, exportStateToJson, importStateFromJson } from './lib/persist';
 import { saveToFile, overwriteFile, openFromFile, isSaveToFileSupported } from './lib/fileStorage';
@@ -177,6 +178,10 @@ export default function App() {
   const [floatSupportDraft, setFloatSupportDraft] = useState<FloatSlotConfig[] | null>(null);
   /** Modal draft for "Convert station to floats": which station + which areas the new floats should cover. */
   const [convertStationDraft, setConvertStationDraft] = useState<{ areaId: string; supportedAreaIds: string[] } | null>(null);
+  /** Modal draft for "Covers breaks for…": which station + which other areas its people cover.
+   * Unlike Convert to Floats this is non-destructive — the station still runs as a station,
+   * its people are just additionally scheduled to cover breaks at the listed areas. */
+  const [coverageDraft, setCoverageDraft] = useState<{ areaId: string; supportedAreaIds: string[] } | null>(null);
   const [addStationName, setAddStationName] = useState('');
   const [addStationMin, setAddStationMin] = useState(2);
   const [addStationMax, setAddStationMax] = useState(5);
@@ -186,6 +191,10 @@ export default function App() {
   const [slotLabelsByArea, setSlotLabelsByArea] = useState(firstLineState.slotLabelsByArea ?? {});
   const [areaRequiresTrainedOrExpertOverrides, setAreaRequiresTrainedOrExpertOverrides] = useState(firstLineState.areaRequiresTrainedOrExpertOverrides ?? {});
   const [slotBreakCoverageEnabled, setSlotBreakCoverageEnabled] = useState(firstLineState.slotBreakCoverageEnabled ?? {});
+  /** Maps a station areaId -> array of supported area ids it covers breaks for.
+   * The station still renders as a station; its people additionally get scheduled and
+   * displayed as float coverage on the supported areas. */
+  const [areaCoversBreaksFor, setAreaCoversBreaksFor] = useState<Record<string, string[]>>(firstLineState.areaCoversBreaksFor ?? {});
   const [profilePersonId, setProfilePersonId] = useState<string | null>(null);
   const [showStaffTheLineWizard, setShowStaffTheLineWizard] = useState(false);
   const [undoSnapshot, setUndoSnapshot] = useState<{
@@ -266,7 +275,7 @@ export default function App() {
   );
 
   const stateRef = useRef(extractLineDraftState(firstLineState));
-  stateRef.current = { slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, leadBreakCoverage, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea, areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled };
+  stateRef.current = { slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, leadBreakCoverage, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea, areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled, areaCoversBreaksFor };
   const rootStateRef = useRef(rootState);
   rootStateRef.current = rootState;
 
@@ -292,7 +301,7 @@ export default function App() {
     setRootState,
     reloadLineState,
     persistDebounceMs: PERSIST_DEBOUNCE_MS,
-    persistDeps: [slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea, areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled],
+    persistDeps: [slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea, areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled, areaCoversBreaksFor],
   });
 
   useEffect(() => {
@@ -314,6 +323,7 @@ export default function App() {
     setSlotLabelsByArea(lineState.slotLabelsByArea ?? {});
     setAreaRequiresTrainedOrExpertOverrides(lineState.areaRequiresTrainedOrExpertOverrides ?? {});
     setSlotBreakCoverageEnabled(lineState.slotBreakCoverageEnabled ?? {});
+    setAreaCoversBreaksFor(lineState.areaCoversBreaksFor ?? {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rootState.currentLineId, lineStateReloadKey]);
 
@@ -349,12 +359,22 @@ export default function App() {
     return { breakSchedules, rotationCount, breaksScope: scope };
   }, [effectiveConfig, breakSchedules]);
 
-  /** Float slots for presentation: real floats + synthetic lead floats (if coverage enabled). */
+  /** Coverage-station virtual floats derived from areaCoversBreaksFor. Memoized separately
+   * so the presentation float list and break scheduler stay in sync. */
+  const coverageStationSynthesis = useMemo(
+    () => synthesizeCoverageFloats(areaCoversBreaksFor, slots, areaLabels),
+    [areaCoversBreaksFor, slots, areaLabels]
+  );
+
+  /** Float slots for presentation: real floats + synthetic lead floats (if coverage enabled)
+   * + virtual floats synthesized from coverage stations. The latter is what makes
+   * Break Coverage rows show up on stations supported by a coverage station like Flip. */
   const presentationFloatSlots = useMemo(() => {
     if (!effectiveConfig) return [];
     const real = getFloatSlots(effectiveConfig);
     const scope = getBreaksScope(effectiveConfig);
-    if (scope !== 'station') return real;
+    const coverageVirtual = coverageStationSynthesis.virtualFloats;
+    if (scope !== 'station') return [...real, ...coverageVirtual];
     const synthetic: FloatSlotConfig[] = [];
     const stationAreaIds = effectiveConfig.areas.map((a) => a.id);
     for (const key of leadSlotKeys) {
@@ -362,15 +382,15 @@ export default function App() {
       const label = getLeadSlotLabel(effectiveConfig, key, areaLabels);
       synthetic.push({ id: `${LEAD_COVERAGE_PREFIX}${key}`, name: `Lead: ${label}`, supportedAreaIds: stationAreaIds });
     }
-    return [...real, ...synthetic];
-  }, [effectiveConfig, leadSlotKeys, leadBreakCoverage, leadSlots, areaLabels]);
+    return [...real, ...synthetic, ...coverageVirtual];
+  }, [effectiveConfig, leadSlotKeys, leadBreakCoverage, leadSlots, areaLabels, coverageStationSynthesis]);
 
-  /** Slots for presentation: real slots + synthetic lead float slots. */
+  /** Slots for presentation: real slots + synthetic lead float slots + coverage-station virtual slots. */
   const presentationSlots = useMemo(() => {
-    if (!effectiveConfig) return slots;
+    if (!effectiveConfig) return { ...slots, ...coverageStationSynthesis.virtualSlots };
     const scope = getBreaksScope(effectiveConfig);
-    if (scope !== 'station') return slots;
-    const augmented: SlotsByArea = { ...slots };
+    const augmented: SlotsByArea = { ...slots, ...coverageStationSynthesis.virtualSlots };
+    if (scope !== 'station') return augmented;
     for (const key of leadSlotKeys) {
       if (!leadBreakCoverage[key]) continue;
       const personId = leadSlots[key];
@@ -379,7 +399,7 @@ export default function App() {
       augmented[syntheticId] = [{ id: `${syntheticId}_s0`, personId }];
     }
     return augmented;
-  }, [effectiveConfig, slots, leadSlotKeys, leadBreakCoverage, leadSlots]);
+  }, [effectiveConfig, slots, leadSlotKeys, leadBreakCoverage, leadSlots, coverageStationSynthesis]);
 
   /** Linked slot groups for presentation: per area, groups of slot indices sharing a label. */
   const presentationLinkedSlots = useMemo(() => {
@@ -723,6 +743,16 @@ export default function App() {
         p.defaultAreaId === areaId ? { ...p, defaultAreaId: null, defaultSlotIndex: null } : p
       );
 
+      // Scrub the deleted area from areaCoversBreaksFor (both as a key — the deleted
+      // station can no longer cover anyone — and as a value in any other station's list).
+      const prevAreaCovers = lineState.areaCoversBreaksFor ?? {};
+      const nextAreaCovers: Record<string, string[]> = {};
+      for (const [stationId, supportedIds] of Object.entries(prevAreaCovers)) {
+        if (stationId === areaId) continue;
+        const filtered = supportedIds.filter((id) => id !== areaId);
+        if (filtered.length > 0) nextAreaCovers[stationId] = filtered;
+      }
+
       const newLineState = {
         ...lineState,
         slots: nextSlots,
@@ -738,6 +768,7 @@ export default function App() {
         slotLabelsByArea: dropKey(lineState.slotLabelsByArea),
         areaRequiresTrainedOrExpertOverrides: dropKey(lineState.areaRequiresTrainedOrExpertOverrides),
         slotBreakCoverageEnabled: dropKey(lineState.slotBreakCoverageEnabled),
+        areaCoversBreaksFor: nextAreaCovers,
       };
       const lineStates = { ...prev.lineStates, [prev.currentLineId]: newLineState };
       return { ...prev, lines, lineStates };
@@ -886,6 +917,23 @@ export default function App() {
     schedulePersistForRootEdit();
   }, [schedulePersistForRootEdit]);
 
+  /** Mark / unmark a station as covering breaks at other areas. Empty list clears it.
+   * People stay at the station; they're additionally scheduled like floats so their break
+   * rotations leave coverage in place at the supported areas. */
+  const handleSetCoversBreaksFor = useCallback((areaId: string, supportedAreaIds: string[]) => {
+    markLocalChange();
+    setAreaCoversBreaksFor((prev) => {
+      const next = { ...prev };
+      const cleaned = supportedAreaIds.filter((id) => id && id !== areaId);
+      if (cleaned.length === 0) {
+        delete next[areaId];
+      } else {
+        next[areaId] = cleaned;
+      }
+      return next;
+    });
+  }, [markLocalChange]);
+
   const handleUpdateFloatSlots = useCallback((nextFloatSlots: FloatSlotConfig[]) => {
     setRootState((prev) => {
       const lineIndex = prev.lines.findIndex((l) => l.id === prev.currentLineId);
@@ -1005,12 +1053,32 @@ export default function App() {
       }
     }
 
+    // Synthesize one virtual float per enabled, staffed slot in any "coverage station"
+    // (a station whose areaCoversBreaksFor[id] lists supported areas). Each virtual float
+    // mirrors a station slot's person so the existing float-break optimizer can pick a
+    // break rotation that leaves the supported areas covered. We then mirror the picked
+    // rotation back to the station's break schedule entry so the station table and the
+    // virtual float stay in sync.
+    const { virtualFloats, virtualSlots, links: coverageLinks } = synthesizeCoverageFloats(
+      areaCoversBreaksFor,
+      nextSlots,
+      areaLabels,
+    );
+    const slotsForScheduler: SlotsByArea = { ...nextSlots, ...virtualSlots };
+    for (const vf of virtualFloats) {
+      floatSlotIndicesByArea[vf.id] = [0];
+    }
+
     // Include float slot IDs so floats themselves get break rotations assigned.
     // Leads acting as coverage do NOT get break rotations — they break outside the schedule.
-    const areaIdsWithFloats = [...areaIds, ...floatSlots.map((f) => f.id)];
+    const areaIdsWithFloats = [
+      ...areaIds,
+      ...floatSlots.map((f) => f.id),
+      ...virtualFloats.map((f) => f.id),
+    ];
 
     const rotationCount = getBreakRotations(effectiveConfig);
-    const rawSchedules = generateBreakSchedules(roster, nextSlots, areaIdsWithFloats, {
+    const rawSchedules = generateBreakSchedules(roster, slotsForScheduler, areaIdsWithFloats, {
       rotationCount,
       scope,
       leadSlots,
@@ -1018,10 +1086,14 @@ export default function App() {
       floatSlotIndicesByArea,
       floatSupportedAreaIds,
     });
-    setBreakSchedules(
-      optimizeFloatBreakRotations(rawSchedules, floatSlots, nextSlots, rotationCount)
+    const optimized = optimizeFloatBreakRotations(
+      rawSchedules,
+      [...floatSlots, ...virtualFloats],
+      slotsForScheduler,
+      rotationCount,
     );
-  }, [effectiveConfig, areaIds, roster, leadSlots, leadBreakCoverage, slotBreakCoverageEnabled, slotLabelsByArea, leadSlotKeys]);
+    setBreakSchedules(mirrorVirtualFloatBreaksToStations(optimized, coverageLinks));
+  }, [effectiveConfig, areaIds, roster, leadSlots, leadBreakCoverage, slotBreakCoverageEnabled, slotLabelsByArea, leadSlotKeys, areaCoversBreaksFor, areaLabels]);
 
   // Recalc breaks whenever slot or lead assignments change (no manual "Regenerate breaks" needed).
   useEffect(() => {
@@ -1033,7 +1105,7 @@ export default function App() {
     const state = stateRef.current;
     addSavedDay(
       date,
-      { roster, slots: state.slots, leadSlots: state.leadSlots, juicedAreas: state.juicedAreas, deJuicedAreas: state.deJuicedAreas, sectionTasks: state.sectionTasks, schedule: state.schedule, dayNotes: state.dayNotes, documents: state.documents, breakSchedules: state.breakSchedules, leadBreakCoverage: state.leadBreakCoverage, areaBreakCoverageEnabled: state.areaBreakCoverageEnabled, areaRequiresTrainedOrExpertOverrides: state.areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled: state.slotBreakCoverageEnabled },
+      { roster, slots: state.slots, leadSlots: state.leadSlots, juicedAreas: state.juicedAreas, deJuicedAreas: state.deJuicedAreas, sectionTasks: state.sectionTasks, schedule: state.schedule, dayNotes: state.dayNotes, documents: state.documents, breakSchedules: state.breakSchedules, leadBreakCoverage: state.leadBreakCoverage, areaBreakCoverageEnabled: state.areaBreakCoverageEnabled, areaRequiresTrainedOrExpertOverrides: state.areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled: state.slotBreakCoverageEnabled, areaCoversBreaksFor: state.areaCoversBreaksFor },
       name,
       rootState.currentLineId
     );
@@ -1063,6 +1135,7 @@ export default function App() {
       areaBreakCoverageEnabled: day.areaBreakCoverageEnabled ?? {},
       areaRequiresTrainedOrExpertOverrides: day.areaRequiresTrainedOrExpertOverrides ?? {},
       slotBreakCoverageEnabled: day.slotBreakCoverageEnabled ?? {},
+      areaCoversBreaksFor: day.areaCoversBreaksFor ?? {},
       areaCapacityOverrides: areaCapacityOverrides ?? {},
       areaNameOverrides: areaNameOverrides ?? {},
       slotLabelsByArea: slotLabelsByArea ?? {},
@@ -1107,6 +1180,7 @@ export default function App() {
     setAreaBreakCoverageEnabled(lineStateForDay.areaBreakCoverageEnabled ?? {});
     setAreaRequiresTrainedOrExpertOverrides(lineStateForDay.areaRequiresTrainedOrExpertOverrides ?? {});
     setSlotBreakCoverageEnabled(lineStateForDay.slotBreakCoverageEnabled ?? {});
+    setAreaCoversBreaksFor(lineStateForDay.areaCoversBreaksFor ?? {});
     // Force a reload so the useEffect at line 276 re-syncs all local state from rootState
     setLineStateReloadKey((k) => k + 1);
   }, [areaCapacityOverrides, areaNameOverrides, leadSlotKeys, rootState.currentLineId, rootState.lines, rootState.lineStates, slotLabelsByArea]);
@@ -1258,6 +1332,7 @@ export default function App() {
     setAreaBreakCoverageEnabled(imported.areaBreakCoverageEnabled ?? {});
     setAreaRequiresTrainedOrExpertOverrides(imported.areaRequiresTrainedOrExpertOverrides ?? {});
     setSlotBreakCoverageEnabled(imported.slotBreakCoverageEnabled ?? {});
+    setAreaCoversBreaksFor(imported.areaCoversBreaksFor ?? {});
     setAreaCapacityOverrides(imported.areaCapacityOverrides ?? {});
     setAreaNameOverrides(imported.areaNameOverrides ?? {});
     setSlotLabelsByArea(imported.slotLabelsByArea ?? {});
@@ -2303,6 +2378,93 @@ export default function App() {
         );
       })()}
 
+      {coverageDraft && currentConfig && (() => {
+        const sourceArea = currentConfig.areas.find((a) => a.id === coverageDraft.areaId);
+        if (!sourceArea) return null;
+        const sourceLabel = areaLabels[sourceArea.id] ?? sourceArea.name;
+        const otherAreas = currentConfig.areas.filter((a) => a.id !== sourceArea.id);
+        const selected = coverageDraft.supportedAreaIds;
+        const enabledStaffed = (slots[sourceArea.id] ?? []).filter((s) => !s.disabled && s.personId).length;
+        return (
+          <div
+            className="modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="coverage-title"
+            onClick={() => setCoverageDraft(null)}
+          >
+            <div
+              className="modal-dialog"
+              style={{ maxHeight: '85vh', overflow: 'auto' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 id="coverage-title" style={{ margin: '0 0 8px 0', fontSize: '1.1rem' }}>
+                {sourceLabel} covers breaks for…
+              </h3>
+              <p style={{ color: '#555', fontSize: '0.9rem', marginBottom: 12 }}>
+                {sourceLabel} keeps running as a station. The {enabledStaffed}{' '}
+                {enabledStaffed === 1 ? 'person' : 'people'} working there will additionally be
+                scheduled to cover breaks at the stations you pick below — their own break
+                rotations will be placed where coverage isn't needed. The Staffing view will
+                show a "Break Coverage" row on the supported stations naming who is covering
+                whom in each rotation. Leave everything unchecked to clear this setting.
+              </p>
+              <div style={{ fontSize: '0.85rem', color: '#333', fontWeight: 600, marginBottom: 6 }}>
+                Cover breaks for:
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                {otherAreas.length === 0 && (
+                  <span style={{ color: '#888', fontSize: '0.85rem' }}>No other stations to cover.</span>
+                )}
+                {otherAreas.map((a) => {
+                  const checked = selected.includes(a.id);
+                  return (
+                    <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) =>
+                          setCoverageDraft((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  supportedAreaIds: e.target.checked
+                                    ? [...prev.supportedAreaIds, a.id]
+                                    : prev.supportedAreaIds.filter((id) => id !== a.id),
+                                }
+                              : null
+                          )
+                        }
+                      />
+                      <span>{areaLabels[a.id] ?? a.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => {
+                    handleSetCoversBreaksFor(sourceArea.id, selected);
+                    setCoverageDraft(null);
+                  }}
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={() => setCoverageDraft(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {showStaffTheLineWizard && currentConfig && (
         <Suspense fallback={null}>
           <StaffTheLineWizard
@@ -2378,6 +2540,9 @@ export default function App() {
                 onClearArea={handleClearArea}
                 onDeleteArea={configureMode ? handleRemoveStation : undefined}
                 onConvertToFloats={configureMode ? (id) => setConvertStationDraft({ areaId: id, supportedAreaIds: [] }) : undefined}
+                onEditCoversBreaksFor={configureMode ? (id) => setCoverageDraft({ areaId: id, supportedAreaIds: areaCoversBreaksFor[id] ?? [] }) : undefined}
+                coversBreaksForAreaIdsByArea={areaCoversBreaksFor}
+                areaLabelsForCoverageSummary={areaLabels}
                 onMoveLeft={configureMode && !isFirst ? () => handleMoveStation(idA, -1) : undefined}
                 onMoveRight={configureMode && !isLast ? () => handleMoveStation(idA, 1) : undefined}
                 moveLabel={`${areaLabels[idA] ?? idA} & ${areaLabels[idB] ?? idB}`}
@@ -2417,6 +2582,9 @@ export default function App() {
               onClearArea={handleClearArea}
               onDeleteArea={configureMode ? handleRemoveStation : undefined}
               onConvertToFloats={configureMode ? (id) => setConvertStationDraft({ areaId: id, supportedAreaIds: [] }) : undefined}
+              onEditCoversBreaksFor={configureMode ? (id) => setCoverageDraft({ areaId: id, supportedAreaIds: areaCoversBreaksFor[id] ?? [] }) : undefined}
+              coversBreaksForAreaIds={areaCoversBreaksFor[areaId] ?? []}
+              areaLabelsForCoverageSummary={areaLabels}
               onMoveLeft={configureMode && !isFirst ? (id) => handleMoveStation(id, -1) : undefined}
               onMoveRight={configureMode && !isLast ? (id) => handleMoveStation(id, 1) : undefined}
               sectionTasks={sectionTasks[areaId] ?? []}

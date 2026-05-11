@@ -48,6 +48,15 @@ interface AreaStaffingProps {
    * Clicking lets the user pick which areas the new floats should cover; on confirm the
    * station is replaced with one float per enabled slot. */
   onConvertToFloats?: (areaId: AreaId) => void;
+  /** Optional: when provided, render a "Covers breaks for…" button (configure mode only).
+   * Non-destructive alternative to Convert to Floats — the station keeps running but its
+   * people additionally cover breaks at the chosen supported areas. */
+  onEditCoversBreaksFor?: (areaId: AreaId) => void;
+  /** Areas this station currently covers breaks for. Shown as a small label so the user
+   * can see the current setting at a glance in Configure mode. */
+  coversBreaksForAreaIds?: string[];
+  /** Map of area id -> display label, used to render the coversBreaksForAreaIds summary. */
+  areaLabelsForCoverageSummary?: Record<string, string>;
   /** Optional: move this section one step earlier in the line. When undefined, button is hidden / disabled. */
   onMoveLeft?: (areaId: AreaId) => void;
   /** Optional: move this section one step later in the line. */
@@ -91,6 +100,9 @@ function AreaStaffingInner({
   onClearArea,
   onDeleteArea,
   onConvertToFloats,
+  onEditCoversBreaksFor,
+  coversBreaksForAreaIds,
+  areaLabelsForCoverageSummary,
   onMoveLeft,
   onMoveRight,
   onSlotsChange,
@@ -283,6 +295,23 @@ function AreaStaffingInner({
             title={`Convert ${areaLabel} into float positions that cover breaks elsewhere`}
           >
             Convert to floats
+          </button>
+        )}
+        {onEditCoversBreaksFor && (
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => onEditCoversBreaksFor(areaId)}
+            title={`Pick which stations ${areaLabel}'s people cover breaks at — they keep running ${areaLabel} but their break rotations are scheduled to leave coverage in place at the chosen stations`}
+          >
+            Covers breaks for…
+            {coversBreaksForAreaIds && coversBreaksForAreaIds.length > 0 && (
+              <span style={{ marginLeft: 6, fontWeight: 600, color: '#1976d2' }}>
+                {coversBreaksForAreaIds
+                  .map((id) => areaLabelsForCoverageSummary?.[id] ?? id)
+                  .join(', ')}
+              </span>
+            )}
           </button>
         )}
         {onDeleteArea && (
