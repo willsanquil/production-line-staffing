@@ -109,9 +109,6 @@ function CombinedAreaStaffingInner({
   requiresTrainedOrExpertB = false,
   onRequiresTrainedOrExpertChangeA,
   onRequiresTrainedOrExpertChangeB,
-  showBreakCoverageToggle = false,
-  slotBreakCoverageEnabled = {},
-  onToggleSlotBreakCoverage,
   compactView = false,
 }: CombinedAreaStaffingProps) {
   function renderSubArea(
@@ -123,7 +120,6 @@ function CombinedAreaStaffingInner({
     slotLabels: string[],
     requiresTrainedOrExpert: boolean,
     onRequiresTrainedOrExpertChange?: (value: boolean) => void,
-    slotBreakCoverageForArea: Record<string, boolean> = {},
   ) {
     const enabledSlots = slots.filter((s) => !s.disabled);
     const filled = enabledSlots.filter((s) => s.personId).length;
@@ -348,17 +344,6 @@ function CombinedAreaStaffingInner({
                     className="slot-block-name"
                     aria-label={`Slot ${idx + 1} name`}
                   />
-                  {showBreakCoverageToggle && onToggleSlotBreakCoverage && (
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', cursor: 'pointer', marginLeft: 'auto' }}>
-                      <input
-                        type="checkbox"
-                        checked={!!slotBreakCoverageForArea[slot.id]}
-                        onChange={(e) => onToggleSlotBreakCoverage(areaId, slot.id, e.target.checked)}
-                        aria-label="Slot needs break coverage"
-                      />
-                      Break cov.
-                    </label>
-                  )}
                 </div>
                 {isDisabled ? (
                   <span className="slot-block-status slot-block-status--muted">— Disabled —</span>
@@ -427,8 +412,8 @@ function CombinedAreaStaffingInner({
         </div>
       </div>
 
-      {renderSubArea(areaIdA, areaLabelA, slotsA, minA, maxA, slotLabelsA, requiresTrainedOrExpertA, onRequiresTrainedOrExpertChangeA, slotBreakCoverageEnabled[areaIdA] ?? {})}
-      {renderSubArea(areaIdB, areaLabelB, slotsB, minB, maxB, slotLabelsB, requiresTrainedOrExpertB, onRequiresTrainedOrExpertChangeB, slotBreakCoverageEnabled[areaIdB] ?? {})}
+      {renderSubArea(areaIdA, areaLabelA, slotsA, minA, maxA, slotLabelsA, requiresTrainedOrExpertA, onRequiresTrainedOrExpertChangeA)}
+      {renderSubArea(areaIdB, areaLabelB, slotsB, minB, maxB, slotLabelsB, requiresTrainedOrExpertB, onRequiresTrainedOrExpertChangeB)}
     </section>
   );
 }

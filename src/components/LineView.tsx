@@ -89,9 +89,12 @@ interface LineViewProps {
   floatSlots?: FloatSlotConfig[];
   /** Per area: groups of slot indices sharing a label (linked slots self-cover each other). */
   linkedSlotsByArea?: Record<string, number[][]>;
-  /** When provided, Break Coverage row is only shown for areas where this is true. */
+  /** Legacy: ignored. Kept on the type so existing callers compile. Coverage is now
+   * controlled by each float's supportedAreaIds only. */
   areaBreakCoverageEnabled?: Record<string, boolean>;
-  /** Per-slot break coverage: areaId -> slotId -> true. Used to include areas in float support and prioritize which slot to cover. */
+  /** Per-slot break coverage: areaId -> slotId -> true. Still consumed by computeFloatCoverage
+   * to prioritize WHICH slot to cover when multiple breaks collide, but no longer required
+   * for an area to receive coverage at all. */
   slotBreakCoverageEnabled?: Record<string, Record<string, boolean>>;
 }
 
@@ -117,7 +120,6 @@ function LineViewInner({
   breaksScope = 'station',
   floatSlots = [],
   linkedSlotsByArea = {},
-  areaBreakCoverageEnabled,
   slotBreakCoverageEnabled = {},
 }: LineViewProps) {
   const isCompact = useCompactPresentation();
@@ -152,18 +154,12 @@ function LineViewInner({
     return out;
   })();
 
-  // Coverage: include area if area-level OR any per-slot "needs break coverage" is enabled.
-  const isAreaCoverageEnabled = (areaId: string) =>
-    areaBreakCoverageEnabled?.[areaId] === true ||
-    (slotBreakCoverageEnabled[areaId] && Object.values(slotBreakCoverageEnabled[areaId]).some(Boolean));
-
-  const floatSlotsForCoverage: FloatSlotConfig[] =
-    areaBreakCoverageEnabled != null || Object.keys(slotBreakCoverageEnabled).length > 0
-      ? floatSlots.map((f) => ({
-          ...f,
-          supportedAreaIds: f.supportedAreaIds.filter((id) => isAreaCoverageEnabled(id)),
-        }))
-      : floatSlots;
+  // Coverage is now controlled solely by each float's supportedAreaIds. The legacy
+  // per-area / per-slot "Break cov." checkboxes have been removed from the UI: a float
+  // declaring an area in supportedAreaIds is sufficient signal that the area should be
+  // covered. Old data with explicit flags set is intentionally ignored so behavior is
+  // predictable across configurations.
+  const floatSlotsForCoverage: FloatSlotConfig[] = floatSlots;
 
   const floatCoverage: FloatCoverageResult = computeFloatCoverage({
     floatSlots: floatSlotsForCoverage,
@@ -177,10 +173,7 @@ function LineViewInner({
   });
 
   const { floatSchedule, coverageSummary } = floatCoverage;
-  const coverageSummaryFiltered =
-    areaBreakCoverageEnabled != null || Object.keys(slotBreakCoverageEnabled).length > 0
-      ? coverageSummary.filter((row) => isAreaCoverageEnabled(row.areaId))
-      : coverageSummary;
+  const coverageSummaryFiltered = coverageSummary;
 
   /**
    * One combined table per area: Role (custom or "PA") | Name (skill-colored) | First Slot | Second Slot | ... with X for break assignment.

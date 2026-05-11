@@ -853,19 +853,11 @@ export default function App() {
       const nextLeadSlots = { ...lineState.leadSlots };
       delete nextLeadSlots[areaId];
 
-      // Pre-enable slot-level break coverage for every enabled slot in supportedAreaIds,
-      // so float coverage prioritizes covering those positions when their owners go on break.
+      // Coverage is determined by each float's supportedAreaIds, so no per-slot break
+      // coverage flags need to be set here. We just scrub any flags belonging to the
+      // dropped station so old data doesn't linger.
       const prevSlotBreakCoverageEnabled = lineState.slotBreakCoverageEnabled ?? {};
       const nextSlotBreakCoverageEnabled = { ...prevSlotBreakCoverageEnabled };
-      for (const supportedId of supportedAreaIds) {
-        const supportSlots = lineState.slots[supportedId] ?? [];
-        const perSlotMap = { ...(prevSlotBreakCoverageEnabled[supportedId] ?? {}) };
-        for (const s of supportSlots) {
-          if (!s.disabled) perSlotMap[s.id] = true;
-        }
-        nextSlotBreakCoverageEnabled[supportedId] = perSlotMap;
-      }
-      // The dropped area shouldn't keep its own per-slot coverage flags.
       delete nextSlotBreakCoverageEnabled[areaId];
 
       const roster = (lineState.roster ?? []).map((p) =>

@@ -99,9 +99,6 @@ function AreaStaffingInner({
   onRequiresTrainedOrExpertChange,
   breakSchedules,
   rotationCount,
-  showBreakCoverageToggle = false,
-  slotBreakCoverageEnabled = {},
-  onToggleSlotBreakCoverage,
   supportedAreaIds,
   compactView = false,
 }: AreaStaffingProps) {
@@ -163,17 +160,6 @@ function AreaStaffingInner({
             return (
               <div key={slot.id} className="slot-block slot-block--compact" style={{ opacity: isDisabled ? 0.65 : 1 }}>
                 <span className="slot-block-name slot-block-name--readonly" style={{ marginBottom: 6 }}>{displayLabel || `Slot ${idx + 1}`}</span>
-                {showBreakCoverageToggle && onToggleSlotBreakCoverage && (
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', cursor: 'pointer', marginBottom: 6 }}>
-                    <input
-                      type="checkbox"
-                      checked={!!slotBreakCoverageEnabled[slot.id]}
-                      onChange={(e) => onToggleSlotBreakCoverage(areaId, slot.id, e.target.checked)}
-                      aria-label="Slot needs break coverage"
-                    />
-                    Break cov.
-                  </label>
-                )}
                 {isDisabled ? (
                   <span className="slot-block-status slot-block-status--muted">— Off —</span>
                 ) : (
@@ -390,17 +376,6 @@ function AreaStaffingInner({
                   className="slot-block-name"
                   aria-label={`Slot ${idx + 1} name`}
                 />
-                {showBreakCoverageToggle && onToggleSlotBreakCoverage && (
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', cursor: 'pointer', marginLeft: 'auto' }}>
-                    <input
-                      type="checkbox"
-                      checked={!!slotBreakCoverageEnabled[slot.id]}
-                      onChange={(e) => onToggleSlotBreakCoverage(areaId, slot.id, e.target.checked)}
-                      aria-label={`Slot needs break coverage`}
-                    />
-                    Break cov.
-                  </label>
-                )}
               </div>
               {isDisabled ? (
                 <span className="slot-block-status slot-block-status--muted">— Disabled —</span>
