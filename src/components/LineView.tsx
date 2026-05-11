@@ -16,6 +16,10 @@ const BAR_HEIGHT_COMPACT = 10;
 const BREAK_SLOT_LABELS = ['First Break', 'Second Break', 'Third Break', 'Fourth Break', 'Fifth Break', 'Sixth Break'] as const;
 const ROLE_PA = 'PA';
 
+/** Teams / Outlook rich paste often drops class-based CSS but keeps `align` + inline `text-align`. */
+const breakColPasteProps = { align: 'center' as const };
+const breakColPasteStyle = { textAlign: 'center' as const };
+
 function useCompactPresentation() {
   const [compact, setCompact] = useState(typeof window !== 'undefined' && window.matchMedia('(max-width: 480px)').matches);
   useEffect(() => {
@@ -270,15 +274,16 @@ function LineViewInner({
                   return (
                     <th
                       key={i}
+                      {...breakColPasteProps}
                       style={{
-                        textAlign: 'center',
+                        ...breakColPasteStyle,
                         ...(isUncovered ? { color: '#c0392b', fontWeight: 700, background: 'rgba(192, 57, 43, 0.08)' } : {}),
                       }}
                       className={breakThClass}
                       title={isUncovered ? 'Uncovered break — no one in this area is off during this slot' : undefined}
                     >
                       {label}
-                      {isUncovered && <div style={{ fontSize: '0.7em', marginTop: 2 }}>Uncovered</div>}
+                      {isUncovered && <div style={{ fontSize: '0.7em', marginTop: 2, textAlign: 'center' }}>Uncovered</div>}
                     </th>
                   );
                 })}
@@ -311,7 +316,8 @@ function LineViewInner({
                       return (
                         <td
                           key={i}
-                          style={{ textAlign: 'center' }}
+                          {...breakColPasteProps}
+                          style={breakColPasteStyle}
                           className={breakTdClass}
                         >
                           {isOnBreak ? (
@@ -351,7 +357,7 @@ function LineViewInner({
                       const coveredName = coveredPersonId ? getName(coveredPersonId) : null;
                       const coveringLabel = coveredName ? `Covering ${coveredName}` : (activity?.type === 'covering' ? `At ${areaLabels[activity.areaId] ?? activity.areaId}` : null);
                       return (
-                        <td key={i} style={{ textAlign: 'center' }} className={breakTdClass}>
+                        <td key={i} {...breakColPasteProps} style={breakColPasteStyle} className={breakTdClass}>
                           {coveringHere
                             ? <span style={{ fontWeight: 700, fontSize: compact ? undefined : '0.85rem', color: '#1976d2' }}>{coveringLabel ?? 'Covering'}</span>
                             : onBreak
@@ -481,7 +487,9 @@ function LineViewInner({
                     <th>Float</th>
                     <th>Assigned</th>
                     {breakSlotLabels.map((label, i) => (
-                      <th key={i} className="presentation-col-break">{label}</th>
+                      <th key={i} className="presentation-col-break" {...breakColPasteProps} style={breakColPasteStyle}>
+                        {label}
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -505,7 +513,7 @@ function LineViewInner({
                                 : (areaLabels[activity.areaId] ?? activity.areaId))
                             : null;
                           return (
-                            <td key={i} className="presentation-col-break">
+                            <td key={i} className="presentation-col-break" {...breakColPasteProps} style={breakColPasteStyle}>
                               {activity?.type === 'on_break'
                                 ? <span style={{ fontWeight: 700, color: '#1976d2' }}>On break</span>
                                 : activity?.type === 'covering'
@@ -635,7 +643,9 @@ function LineViewInner({
                   <tr>
                     <th className="presentation-th-compact">Area</th>
                     {breakSlotLabels.map((label, i) => (
-                      <th key={i} className="presentation-th-compact presentation-col-break">{label}</th>
+                      <th key={i} className="presentation-th-compact presentation-col-break" {...breakColPasteProps} style={breakColPasteStyle}>
+                        {label}
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -645,14 +655,16 @@ function LineViewInner({
                       <td className="presentation-td-compact" style={{ fontWeight: 600 }}>{row.areaLabel}</td>
                       {row.slots.map((s, i) => {
                         if (s.peopleOnBreak === 0) {
-                          return <td key={i} className="presentation-td-compact presentation-col-break" style={{ color: '#bbb' }}>&mdash;</td>;
+                          return <td key={i} className="presentation-td-compact presentation-col-break" {...breakColPasteProps} style={{ ...breakColPasteStyle, color: '#bbb' }}>&mdash;</td>;
                         }
                         const floatPersonId = s.coveredByFloatId ? (slots[s.coveredByFloatId]?.[0]?.personId ?? null) : null;
                         return (
                           <td
                             key={i}
                             className="presentation-td-compact presentation-col-break"
+                            {...breakColPasteProps}
                             style={{
+                              ...breakColPasteStyle,
                               background: s.uncovered ? 'rgba(192, 57, 43, 0.10)' : 'rgba(39, 174, 96, 0.10)',
                               color: s.uncovered ? '#c0392b' : '#27ae60',
                               fontWeight: 600,
@@ -684,7 +696,9 @@ function LineViewInner({
                         <th>Float</th>
                         <th>Assigned</th>
                         {breakSlotLabels.map((label, i) => (
-                          <th key={i} className="presentation-col-break">{label}</th>
+                          <th key={i} className="presentation-col-break" {...breakColPasteProps} style={breakColPasteStyle}>
+                            {label}
+                          </th>
                         ))}
                       </tr>
                     </thead>
@@ -708,7 +722,7 @@ function LineViewInner({
                                     : (areaLabels[activity.areaId] ?? activity.areaId))
                                 : null;
                               return (
-                                <td key={i} className="presentation-col-break">
+                                <td key={i} className="presentation-col-break" {...breakColPasteProps} style={breakColPasteStyle}>
                                   {activity?.type === 'on_break'
                                     ? <span style={{ fontWeight: 700, color: '#1976d2' }}>On break</span>
                                     : activity?.type === 'covering'
@@ -732,7 +746,9 @@ function LineViewInner({
                   <tr>
                     <th>Area</th>
                     {breakSlotLabels.map((label, i) => (
-                      <th key={i} className="presentation-col-break">{label}</th>
+                      <th key={i} className="presentation-col-break" {...breakColPasteProps} style={breakColPasteStyle}>
+                        {label}
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -742,14 +758,16 @@ function LineViewInner({
                       <td style={{ fontWeight: 600 }}>{row.areaLabel}</td>
                       {row.slots.map((s, i) => {
                         if (s.peopleOnBreak === 0) {
-                          return <td key={i} className="presentation-col-break" style={{ color: '#bbb' }}>&mdash;</td>;
+                          return <td key={i} className="presentation-col-break" {...breakColPasteProps} style={{ ...breakColPasteStyle, color: '#bbb' }}>&mdash;</td>;
                         }
                         const floatPersonId = s.coveredByFloatId ? (slots[s.coveredByFloatId]?.[0]?.personId ?? null) : null;
                         return (
                           <td
                             key={i}
                             className="presentation-col-break"
+                            {...breakColPasteProps}
                             style={{
+                              ...breakColPasteStyle,
                               background: s.uncovered ? 'rgba(192, 57, 43, 0.10)' : 'rgba(39, 174, 96, 0.10)',
                               color: s.uncovered ? '#c0392b' : '#27ae60',
                               fontWeight: 600,
