@@ -305,6 +305,7 @@ function LineViewInner({
                 let prevRole = '';
                 return allSlots.map((slot, idx) => {
                 if (slot.disabled) return null;
+                if (!slot.personId) return null;
                 const slotLabel = getLabel(areaId, idx);
                 const roleDisplay = isGenericSlotLabel(slotLabel) ? ROLE_PA : slotLabel;
                 const showRole = roleDisplay !== prevRole;
@@ -332,7 +333,7 @@ function LineViewInner({
                         >
                           {isOnBreak ? (
                             <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.1 }}>
-                              <span style={{ fontWeight: 700, fontSize: compact ? undefined : '1.1rem' }}>X</span>
+                              <span style={{ fontWeight: 700, fontSize: compact ? undefined : '0.95rem' }}>{name}</span>
                               {coveringName && (
                                 <span style={{ fontSize: compact ? '0.65rem' : '0.7rem', color: '#1976d2', fontWeight: 600, marginTop: 1 }}>
                                   {coveringName}
@@ -404,66 +405,11 @@ function LineViewInner({
         {isCompact ? (
           <div className="line-view-summary-compact">
             <span className="line-view-headline-compact">{totalOnLine}/{fullStaff}</span>
-            <span className="line-view-metric-compact">{staffingPct}%</span>
-            <span className="line-view-metric-compact">Leads: {assignedLeadKeys.length}</span>
-            <div className="line-view-bar-compact" style={{ width: 48, height: BAR_HEIGHT_COMPACT, position: 'relative', borderRadius: 3, overflow: 'hidden', background: '#eee' }}>
-              <div
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  width: `${Math.min(100, staffingPct)}%`,
-                  background: staffingPct >= 80 ? '#27ae60' : staffingPct >= 50 ? '#f1c40f' : '#e74c3c',
-                  borderRadius: 0,
-                }}
-              />
-            </div>
-            <span className="line-view-metric-compact">
-              {lineHealthScore != null ? `${(lineHealthScore).toFixed(1)}/3` : '—'}
-            </span>
-            <div className="line-view-bar-compact line-view-knowledge-bar-compact">
-              <KnowledgeBar position={knowledgePosition} compact />
-            </div>
           </div>
         ) : (
-          <>
-            <div className="line-view-headline" style={{ fontSize: 'clamp(1.75rem, 6vw, 2.25rem)', fontWeight: 700, color: '#1a1a1a', marginBottom: 12, letterSpacing: '-0.02em' }}>
-              {totalOnLine}/{fullStaff}
-            </div>
-            <div className="line-view-metrics" style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                <span style={{ fontSize: '0.8rem', color: '#555', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Staffing</span>
-                <div style={{ height: BAR_HEIGHT, width: 100, borderRadius: 6, overflow: 'hidden', background: '#eee', position: 'relative', flexShrink: 0 }}>
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: `${Math.min(100, staffingPct)}%`,
-                      background: staffingPct >= 80 ? '#27ae60' : staffingPct >= 50 ? '#f1c40f' : '#e74c3c',
-                      transition: 'width 0.2s ease',
-                    }}
-                  />
-                </div>
-                <span style={{ fontSize: '1rem', fontWeight: 600, color: '#1a1a1a' }}>{staffingPct}%</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                <span style={{ fontSize: '0.8rem', color: '#555', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Leads</span>
-                <span style={{ fontSize: '1rem', fontWeight: 600, color: '#1a1a1a' }}>{assignedLeadKeys.length}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                <span style={{ fontSize: '0.8rem', color: '#555', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Experience</span>
-                <div style={{ width: 100, flexShrink: 0 }}>
-                  <KnowledgeBar position={knowledgePosition} />
-                </div>
-                <span style={{ fontSize: '1rem', fontWeight: 600, color: '#1a1a1a' }}>
-                  {lineHealthScore != null ? `${(lineHealthScore).toFixed(1)}/3` : '—'}
-                </span>
-              </div>
-            </div>
-          </>
+          <div className="line-view-headline" style={{ fontSize: 'clamp(1.75rem, 6vw, 2.25rem)', fontWeight: 700, color: '#1a1a1a', letterSpacing: '-0.02em' }}>
+            {totalOnLine}/{fullStaff}
+          </div>
         )}
       </header>
 
