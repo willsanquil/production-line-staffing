@@ -1,4 +1,4 @@
-import { memo, useState, useEffect } from 'react';
+import { memo, useState, useEffect, useRef, useCallback } from 'react';
 import type { AreaId, BreakSchedulesByArea, FloatSlotConfig, RosterPerson, SlotsByArea } from '../types';
 import type { SkillLevel } from '../types';
 import { LINE_SECTIONS, LEAD_SLOT_AREAS, areaRequiresTrainedOrExpert as defaultRequiresTrainedOrExpert } from '../types';
@@ -9,6 +9,7 @@ import type { SlotLabelsByArea } from '../types';
 import { getAreaRisks } from '../lib/lineViewRisks';
 import { computeFloatCoverage } from '../lib/floatCoverage';
 import type { FloatCoverageResult } from '../lib/floatCoverage';
+import { copyTeamsPresentationToClipboard } from '../lib/copyHtmlForTeams';
 
 const BAR_HEIGHT = 18;
 const BAR_HEIGHT_COMPACT = 10;
@@ -125,6 +126,22 @@ function LineViewInner({
   slotBreakCoverageEnabled = {},
 }: LineViewProps) {
   const isCompact = useCompactPresentation();
+  const teamsCopyRootRef = useRef<HTMLDivElement>(null);
+  const [teamsCopyState, setTeamsCopyState] = useState<'idle' | 'ok' | 'err'>('idle');
+  const onCopyForTeams = useCallback(async () => {
+    const root = teamsCopyRootRef.current;
+    if (!root) return;
+    setTeamsCopyState('idle');
+    const result = await copyTeamsPresentationToClipboard(root);
+    if (result.ok) {
+      setTeamsCopyState('ok');
+      window.setTimeout(() => setTeamsCopyState('idle'), 2200);
+    } else {
+      setTeamsCopyState('err');
+      if ('message' in result) window.alert(result.message);
+      window.setTimeout(() => setTeamsCopyState('idle'), 4000);
+    }
+  }, []);
   const sections = lineSectionsProp ?? LINE_SECTIONS;
   const leadSlotKeys = leadSlotKeysProp ?? [...LEAD_SLOT_AREAS];
   const getLeadSlotLabel = getLeadSlotLabelProp ?? ((key: string) => areaLabels[key] ?? key);
@@ -383,17 +400,38 @@ function LineViewInner({
       className={`line-view line-view-presentation${isCompact ? ' line-view-compact' : ''}`}
       style={{ maxWidth: 960, margin: '0 auto', padding: isCompact ? '6px 8px 60px' : '12px 16px 80px' }}
     >
-      <header className="line-view-summary" style={{ marginBottom: isCompact ? 8 : 20 }}>
-        {isCompact ? (
-          <div className="line-view-summary-compact">
-            <span className="line-view-headline-compact">{totalOnLine}/{fullStaff}</span>
-          </div>
-        ) : (
-          <div className="line-view-headline" style={{ fontSize: 'clamp(1.75rem, 6vw, 2.25rem)', fontWeight: 700, color: '#1a1a1a', letterSpacing: '-0.02em' }}>
-            {totalOnLine}/{fullStaff}
-          </div>
-        )}
-      </header>
+      <div ref={teamsCopyRootRef}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr auto',
+            gap: isCompact ? 8 : 14,
+            alignItems: 'center',
+            marginBottom: isCompact ? 8 : 20,
+          }}
+        >
+          <header className="line-view-summary" style={{ marginBottom: 0, paddingBottom: isCompact ? 0 : 12, borderBottom: '1px solid var(--color-border-light, #e8e8e8)' }}>
+            {isCompact ? (
+              <div className="line-view-summary-compact">
+                <span className="line-view-headline-compact">{totalOnLine}/{fullStaff}</span>
+              </div>
+            ) : (
+              <div className="line-view-headline" style={{ fontSize: 'clamp(1.75rem, 6vw, 2.25rem)', fontWeight: 700, color: '#1a1a1a', letterSpacing: '-0.02em' }}>
+                {totalOnLine}/{fullStaff}
+              </div>
+            )}
+          </header>
+          <button
+            type="button"
+            className="btn-primary"
+            data-teams-copy-exclude
+            onClick={onCopyForTeams}
+            style={{ whiteSpace: 'nowrap', fontSize: isCompact ? '0.75rem' : undefined, padding: isCompact ? '6px 10px' : undefined }}
+            aria-label="Copy staffing view as HTML for Microsoft Teams"
+          >
+            {teamsCopyState === 'ok' ? 'Copied!' : teamsCopyState === 'err' ? 'Copy failed' : 'Copy for Teams'}
+          </button>
+        </div>
 
       {!isCompact && breaksScope === 'line' && breakSchedules?.[BREAK_LINE_WIDE_KEY] && Object.keys(breakSchedules[BREAK_LINE_WIDE_KEY]).length > 0 && rotationCount >= 1 && (
         <div className="presentation-row" style={{ display: 'grid', gridTemplateColumns: COLUMNS_GRID, gap: 24, alignItems: 'start', marginBottom: 20 }}>
@@ -787,6 +825,7 @@ function LineViewInner({
           </section>
         )
       )}
+      </div>
     </div>
   );
 }
