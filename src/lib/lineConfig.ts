@@ -121,8 +121,13 @@ export function getRosterAreaIds(config: LineConfig): string[] {
       areaIds.push(s);
     }
   }
-  const floatIds = (config.floatSlots ?? []).map((f) => f.id);
-  return [...areaIds, ...floatIds];
+  // Float columns are intentionally excluded from the roster skill table:
+  // their "skill" is a read-only derivative of supportedAreaIds (combined skill),
+  // so showing one column per float duplicates information already visible in
+  // the station columns and clutters the grid (e.g. Flip 1 and Flip 2 both
+  // averaging 14.5 + Test Loop). Per-station skills remain editable; floats
+  // keep their auto-derived combined skill in the Profile modal.
+  return areaIds;
 }
 
 /** Base capacity (min/max) per area from config. Float slots get min/max 1. */

@@ -98,13 +98,18 @@ describe('NIC default line config', () => {
 });
 
 describe('getAreaIds / getRosterAreaIds with floats', () => {
-  it('returns station areas first, then float ids', () => {
+  it('getAreaIds returns station areas first, then float ids', () => {
     const ic = getDefaultICLineConfig();
     const ids = getAreaIds(ic);
     const stationCount = ic.areas.length;
     expect(ids.slice(0, stationCount)).toEqual(ic.areas.map((a) => a.id));
     expect(ids.slice(stationCount)).toEqual(['flip_1', 'flip_2']);
-    // Roster ordering should match for the no-combined-sections case.
-    expect(getRosterAreaIds(ic)).toEqual(ids);
+  });
+
+  it('getRosterAreaIds returns ONLY station areas (floats excluded to avoid duplicate skill columns)', () => {
+    const ic = getDefaultICLineConfig();
+    expect(getRosterAreaIds(ic)).toEqual(ic.areas.map((a) => a.id));
+    expect(getRosterAreaIds(ic)).not.toContain('flip_1');
+    expect(getRosterAreaIds(ic)).not.toContain('flip_2');
   });
 });
