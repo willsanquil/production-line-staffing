@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
 
     const { data: row, error: errData } = await supabase
       .from('cloud_line_data')
-      .select('state, updated_at, version')
+      .select('state, updated_at, version, viewer_session_id, viewer_heartbeat_at')
       .eq('line_id', lineId)
       .single();
     if (errData || !row) {
@@ -50,7 +50,13 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ rootState: row.state, updatedAt: row.updated_at, version: row.version ?? 1 }),
+      JSON.stringify({
+        rootState: row.state,
+        updatedAt: row.updated_at,
+        version: row.version ?? 1,
+        viewerSessionId: row.viewer_session_id ?? null,
+        viewerHeartbeatAt: row.viewer_heartbeat_at ?? null,
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (e) {

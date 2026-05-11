@@ -167,6 +167,24 @@ body {
   box-shadow: var(--shadow-xs);
 }
 
+/* Cloud line: second viewer is read-only; `.cloud-readonly-exempt` stays interactive (see App.tsx). */
+body.cloud-readonly button:not(.cloud-readonly-exempt),
+body.cloud-readonly input:not(.cloud-readonly-exempt),
+body.cloud-readonly select:not(.cloud-readonly-exempt),
+body.cloud-readonly textarea:not(.cloud-readonly-exempt) {
+  pointer-events: none;
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+body.cloud-readonly .cloud-readonly-exempt {
+  pointer-events: auto !important;
+  cursor: pointer;
+  opacity: 1;
+}
+body.cloud-readonly input.cloud-readonly-exempt {
+  cursor: text;
+}
+
 /* ============================================================
    Section Card (elevation: sits above page)
    ============================================================ */

@@ -423,7 +423,7 @@ function LineViewInner({
           </header>
           <button
             type="button"
-            className="btn-primary"
+            className="btn-primary cloud-readonly-exempt"
             data-teams-copy-exclude
             onClick={onCopyForTeams}
             style={{ whiteSpace: 'nowrap', fontSize: isCompact ? '0.75rem' : undefined, padding: isCompact ? '6px 10px' : undefined }}

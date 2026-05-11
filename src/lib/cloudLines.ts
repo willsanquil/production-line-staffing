@@ -95,6 +95,8 @@ export interface GetLineStateResult {
   rootState: RootState;
   updatedAt: string;
   version?: number;
+  viewerSessionId?: string | null;
+  viewerHeartbeatAt?: string | null;
 }
 
 /** Get a cloud line's full state (password-protected). Returns state and server updated_at for optimistic locking. */
@@ -107,6 +109,8 @@ export async function getLineState(
     rootState?: RootState;
     updatedAt?: string;
     version?: number;
+    viewerSessionId?: string | null;
+    viewerHeartbeatAt?: string | null;
     error?: string;
   }>('get-line-state', {
     body: { lineId, password },
@@ -121,6 +125,8 @@ export async function getLineState(
     rootState: data.rootState as RootState,
     updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : '',
     version: typeof data.version === 'number' ? data.version : undefined,
+    viewerSessionId: data.viewerSessionId ?? null,
+    viewerHeartbeatAt: data.viewerHeartbeatAt ?? null,
   };
 }
 
@@ -138,6 +144,14 @@ export async function deleteCloudLine(lineId: string, password: string): Promise
   if (data?.error) throw new Error(data.error);
 }
 
+/** Thrown when save is rejected because only the active viewer may edit (403). */
+export class CloudNotEditorError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CloudNotEditorError';
+  }
+}
+
 /** Thrown when save is rejected because someone else saved first (409). Refetch and reload. */
 export class CloudConflictError extends Error {
   constructor(message: string) {
@@ -151,15 +165,20 @@ export async function setLineState(
   lineId: string,
   password: string,
   rootState: RootState,
-  expected?: string | { updatedAt?: string; version?: number }
+  expected?: string | { updatedAt?: string; version?: number; editorSessionId?: string }
 ): Promise<{ updatedAt: string; version?: number } | void> {
   const supabase = getClient();
   const expectedUpdatedAt = typeof expected === 'string' ? expected : expected?.updatedAt;
   const expectedVersion = typeof expected === 'object' ? expected.version : undefined;
-  const body =
+  const editorSessionId = typeof expected === 'object' ? expected.editorSessionId : undefined;
+  const base =
     expectedUpdatedAt != null || expectedVersion != null
       ? { lineId, password, rootState, expectedUpdatedAt, expectedVersion }
       : { lineId, password, rootState };
+  const body =
+    editorSessionId != null && typeof editorSessionId === 'string'
+      ? { ...base, editorSessionId }
+      : base;
   const { data, error } = await supabase.functions.invoke<{
     ok?: boolean;
     updatedAt?: string;
@@ -169,6 +188,13 @@ export async function setLineState(
   }>('set-line-state', { body });
   if (error) {
     const status = (error as { context?: { status?: number } })?.context?.status;
+    if (status === 403) {
+      const bodyJson = (error as { context?: { json?: () => Promise<{ error?: string; code?: string }> } })?.context?.json;
+      const parsed: { error?: string; code?: string } = bodyJson ? await bodyJson().catch(() => ({})) : {};
+      if (parsed?.code === 'NOT_EDITOR') {
+        throw new CloudNotEditorError(parsed.error ?? 'Only the active viewer can save.');
+      }
+    }
     if (status === 409) {
       const body = (error as { context?: { json?: () => Promise<{ error?: string }> } })?.context?.json;
       const parsed: { error?: string } = body ? await body().catch(() => ({})) : {};
@@ -185,4 +211,28 @@ export async function setLineState(
     throw new Error(data.error);
   }
   if (data?.updatedAt) return { updatedAt: data.updatedAt, version: data.version };
+}
+
+export type ViewerPresenceAction = 'sync' | 'yeet' | 'release';
+
+export async function viewerPresence(
+  lineId: string,
+  password: string,
+  sessionId: string,
+  action: ViewerPresenceAction
+): Promise<{ role?: string; ok?: boolean }> {
+  const supabase = getClient();
+  const { data, error } = await supabase.functions.invoke<{
+    ok?: boolean;
+    role?: string;
+    error?: string;
+  }>('viewer-presence', {
+    body: { lineId, password, sessionId, action },
+  });
+  if (error) {
+    const message = await getFunctionErrorMessage(error, 'viewer-presence');
+    throw new Error(message);
+  }
+  if (data?.error) throw new Error(data.error);
+  return { role: data?.role, ok: data?.ok };
 }

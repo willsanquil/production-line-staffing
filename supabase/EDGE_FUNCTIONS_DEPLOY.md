@@ -26,7 +26,7 @@ npx supabase link --project-ref YOUR_PROJECT_REF
 
 When prompted, choose your project or enter the ref.
 
-## 3. Deploy the four functions
+## 3. Deploy the functions
 
 From the **project root** (where `supabase/functions/` lives):
 
@@ -35,9 +35,12 @@ npx supabase functions deploy create-line
 npx supabase functions deploy get-line-state
 npx supabase functions deploy set-line-state
 npx supabase functions deploy delete-line
+npx supabase functions deploy viewer-presence
 ```
 
 Wait until each command reports success.
+
+Apply DB migrations in the Supabase SQL editor (or `supabase db push`) so `cloud_line_data` includes `viewer_session_id` and `viewer_heartbeat_at` (see `supabase/migrations/20260511120000_cloud_line_viewer_presence.sql`).
 
 ## 4. Confirm in the dashboard
 
@@ -47,6 +50,7 @@ Supabase Dashboard → **Edge Functions**. You should see:
 - get-line-state  
 - set-line-state  
 - delete-line  
+- viewer-presence  
 
 ## 5. Same project as the app
 

@@ -76,6 +76,7 @@ import { loadSavedDays, addSavedDay, removeSavedDay, exportStateToJson, importSt
 import { saveToFile, overwriteFile, openFromFile, isSaveToFileSupported } from './lib/fileStorage';
 import { getLineState, createCloudLine, deleteCloudLine, listCloudLines } from './lib/cloudLines';
 import { getCloudSession, setCloudSession, clearCloudSession } from './lib/cloudSession';
+import { clearCloudViewerSession } from './lib/cloudViewerSession';
 import { BreakTable } from './components/BreakTable';
 import { PersonProfileModal } from './components/PersonProfileModal';
 import { TrainingReport } from './components/TrainingReport';
@@ -286,8 +287,25 @@ export default function App() {
   const [lineStateReloadKey, setLineStateReloadKey] = useState(0);
   const reloadLineState = useCallback(() => setLineStateReloadKey((k) => k + 1), []);
 
+  const handleGoHome = useCallback(() => {
+    if (cloudLineId) clearCloudViewerSession(cloudLineId);
+    clearCloudSession();
+    setCloudLineId(null);
+    cloudPasswordRef.current = null;
+    setRootState(getHydratedRootState());
+    setAppMode('entry');
+  }, [cloudLineId]);
+
+  const handleViewerKickedToHome = useCallback(() => {
+    window.alert('Another person took over editing this line (YEET). Returning to the home screen.');
+    handleGoHome();
+  }, [handleGoHome]);
+
   const {
     cloudConflictBanner,
+    cloudViewerRole,
+    yeetBusy,
+    yeetOtherViewer,
     markLocalChange,
     schedulePersistForRootEdit,
     setCloudUpdatedAt,
@@ -303,7 +321,16 @@ export default function App() {
     reloadLineState,
     persistDebounceMs: PERSIST_DEBOUNCE_MS,
     persistDeps: [slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea, areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled, areaCoversBreaksFor, fullStaffOverride],
+    onViewerKickedToHome: handleViewerKickedToHome,
+    onIdleReturnToEntry: handleGoHome,
   });
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const on = appMode === 'app' && Boolean(cloudLineId) && cloudViewerRole === 'readonly';
+    document.body.classList.toggle('cloud-readonly', on);
+    return () => document.body.classList.remove('cloud-readonly');
+  }, [appMode, cloudLineId, cloudViewerRole]);
 
   useEffect(() => {
     const lineState = rootState.lineStates[rootState.currentLineId];
@@ -1462,19 +1489,12 @@ export default function App() {
   }, []);
 
   const handleLeaveLine = useCallback(() => {
+    if (cloudLineId) clearCloudViewerSession(cloudLineId);
     clearCloudSession();
     setCloudLineId(null);
     cloudPasswordRef.current = null;
     setRootState(getHydratedRootState());
-  }, []);
-
-  const handleGoHome = useCallback(() => {
-    clearCloudSession();
-    setCloudLineId(null);
-    cloudPasswordRef.current = null;
-    setRootState(getHydratedRootState());
-    setAppMode('entry');
-  }, []);
+  }, [cloudLineId]);
 
   const handleShareSubmit = useCallback(() => {
     if (!shareName.trim() || !sharePassword) {
@@ -1835,15 +1855,15 @@ export default function App() {
         <header className="app-header">
           <span>Production Line Staffing — {currentConfig.name}{cloudLineId ? ' (Group)' : ''}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button type="button" onClick={handleGoHome}>
+            <button type="button" className="cloud-readonly-exempt" onClick={handleGoHome}>
               Home
             </button>
           {cloudLineId && (
             <>
-              <button type="button" onClick={handleCopyShareLink} style={shareLinkCopied ? { background: '#27ae60', color: '#fff' } : undefined}>
+              <button type="button" className="cloud-readonly-exempt" onClick={handleCopyShareLink} style={shareLinkCopied ? { background: '#27ae60', color: '#fff' } : undefined}>
                 {shareLinkCopied ? 'Link Copied!' : 'Share Link'}
               </button>
-              <button type="button" onClick={handleLeaveLine}>
+              <button type="button" className="cloud-readonly-exempt" onClick={handleLeaveLine}>
                 Leave line
               </button>
               <button
@@ -1856,18 +1876,49 @@ export default function App() {
               </button>
             </>
           )}
-          <button type="button" onClick={() => setView('line-manager')}>
+          <button type="button" className="cloud-readonly-exempt" onClick={() => setView('line-manager')}>
             Lines
           </button>
           <button
             type="button"
-            className="btn-primary"
+            className="btn-primary cloud-readonly-exempt"
             onClick={() => setAdminVisible(true)}
             >
               Admin View
             </button>
           </div>
         </header>
+        {appMode === 'app' && cloudLineId && cloudViewerRole === 'readonly' && (
+          <div
+            role="region"
+            aria-label="Read-only viewer"
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 12,
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 16px',
+              marginBottom: 12,
+              background: '#fff8e1',
+              border: '1px solid #ffc107',
+              borderRadius: 10,
+            }}
+          >
+            <span style={{ fontSize: '0.95rem', maxWidth: 760 }}>
+              Someone else is editing this line in another tab or device. You can review the sheet but not change it. YEET sends them to the home screen and gives you control.
+            </span>
+            <button
+              type="button"
+              className="btn-danger cloud-readonly-exempt"
+              onClick={() => void yeetOtherViewer()}
+              disabled={yeetBusy}
+              style={{ fontWeight: 800, letterSpacing: '0.08em' }}
+            >
+              {yeetBusy ? '…' : 'YEET'}
+            </button>
+          </div>
+        )}
         <Suspense fallback={<div style={{ padding: 24 }}>Loading staffing view…</div>}>
           <LineView
             slots={presentationSlots}
@@ -1903,12 +1954,12 @@ export default function App() {
       <header className="app-header">
         <span>Production Line Staffing — {currentConfig.name}{cloudLineId ? ' (Group)' : ''}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button type="button" onClick={handleGoHome}>
+          <button type="button" className="cloud-readonly-exempt" onClick={handleGoHome}>
             Home
           </button>
           {cloudLineId && (
             <>
-              <button type="button" onClick={handleLeaveLine}>
+              <button type="button" className="cloud-readonly-exempt" onClick={handleLeaveLine}>
                 Leave line
               </button>
               <button
@@ -1921,11 +1972,12 @@ export default function App() {
               </button>
             </>
           )}
-          <button type="button" onClick={() => setView('line-manager')}>
+          <button type="button" className="cloud-readonly-exempt" onClick={() => setView('line-manager')}>
             Lines
           </button>
           <button
             type="button"
+            className="cloud-readonly-exempt"
             onClick={() => setAdminVisible(false)}
             title="Presentation view for screenshot or phone"
           >
@@ -1933,6 +1985,38 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {appMode === 'app' && cloudLineId && cloudViewerRole === 'readonly' && (
+        <div
+          role="region"
+          aria-label="Read-only viewer"
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 12,
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '10px 16px',
+            marginBottom: 12,
+            background: '#fff8e1',
+            border: '1px solid #ffc107',
+            borderRadius: 10,
+          }}
+        >
+          <span style={{ fontSize: '0.95rem', maxWidth: 760 }}>
+            Someone else is editing this line in another tab or device. You can review the sheet but not change it. YEET sends them to the home screen and gives you control.
+          </span>
+          <button
+            type="button"
+            className="btn-danger cloud-readonly-exempt"
+            onClick={() => void yeetOtherViewer()}
+            disabled={yeetBusy}
+            style={{ fontWeight: 800, letterSpacing: '0.08em' }}
+          >
+            {yeetBusy ? '…' : 'YEET'}
+          </button>
+        </div>
+      )}
 
       {cloudConflictBanner && (
         <div

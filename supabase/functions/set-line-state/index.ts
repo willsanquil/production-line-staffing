@@ -3,6 +3,14 @@ import { verifyPassword } from '../_shared/password.ts';
 import { corsHeadersFor } from '../_shared/cors.ts';
 import { validateRootStatePayload } from '../_shared/rootStateValidation.ts';
 
+const VIEWER_STALE_MS = 10 * 60 * 1000;
+
+function isViewerLockStale(iso: string | null | undefined): boolean {
+  if (!iso) return true;
+  const t = new Date(iso).getTime();
+  return Number.isNaN(t) || Date.now() - t > VIEWER_STALE_MS;
+}
+
 Deno.serve(async (req) => {
   const corsHeaders = corsHeadersFor(req);
   if (req.method === 'OPTIONS') {
@@ -15,8 +23,9 @@ Deno.serve(async (req) => {
       rootState?: unknown;
       expectedUpdatedAt?: string;
       expectedVersion?: number;
+      editorSessionId?: string;
     };
-    const { lineId, password, rootState, expectedUpdatedAt, expectedVersion } = body;
+    const { lineId, password, rootState, expectedUpdatedAt, expectedVersion, editorSessionId } = body;
     if (!lineId || typeof lineId !== 'string' || !password || typeof password !== 'string') {
       return new Response(
         JSON.stringify({ error: 'lineId and password required' }),
@@ -60,7 +69,7 @@ Deno.serve(async (req) => {
 
     const { data: existingData, error: errExisting } = await supabase
       .from('cloud_line_data')
-      .select('version')
+      .select('version, viewer_session_id, viewer_heartbeat_at')
       .eq('line_id', lineId)
       .single();
     if (errExisting || !existingData) {
@@ -68,6 +77,21 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: 'Line data not found' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    const lockId = existingData.viewer_session_id as string | null | undefined;
+    const lockHb = existingData.viewer_heartbeat_at as string | null | undefined;
+    if (lockId != null && !isViewerLockStale(lockHb)) {
+      const sid = typeof editorSessionId === 'string' ? editorSessionId.trim() : '';
+      if (!sid || sid !== lockId) {
+        return new Response(
+          JSON.stringify({
+            error: 'Only the active viewer can save. Open read-only until they go idle, or use YEET to take over.',
+            code: 'NOT_EDITOR',
+          }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     const currentVersion = typeof existingData.version === 'number' ? existingData.version : 1;
