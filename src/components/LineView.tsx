@@ -237,6 +237,10 @@ function LineViewInner({
     const tableClassName = compact ? 'presentation-table-compact' : 'presentation-table';
     const thClassName = compact ? 'presentation-th-compact' : undefined;
     const tdClassName = compact ? 'presentation-td-compact' : undefined;
+    const breakThClass = [thClassName, 'presentation-col-break'].filter(Boolean).join(' ');
+    const breakTdClass = compact
+      ? `${tdClassName} presentation-td-break presentation-col-break`
+      : 'presentation-td-break presentation-col-break';
 
     return (
       <div
@@ -270,7 +274,7 @@ function LineViewInner({
                         textAlign: 'center',
                         ...(isUncovered ? { color: '#c0392b', fontWeight: 700, background: 'rgba(192, 57, 43, 0.08)' } : {}),
                       }}
-                      className={thClassName}
+                      className={breakThClass}
                       title={isUncovered ? 'Uncovered break — no one in this area is off during this slot' : undefined}
                     >
                       {label}
@@ -308,7 +312,7 @@ function LineViewInner({
                         <td
                           key={i}
                           style={{ textAlign: 'center' }}
-                          className={compact ? `${tdClassName} presentation-td-break` : 'presentation-td-break'}
+                          className={breakTdClass}
                         >
                           {isOnBreak ? (
                             <span style={{ fontWeight: 700, fontSize: compact ? undefined : '0.95rem' }}>{name}</span>
@@ -347,7 +351,7 @@ function LineViewInner({
                       const coveredName = coveredPersonId ? getName(coveredPersonId) : null;
                       const coveringLabel = coveredName ? `Covering ${coveredName}` : (activity?.type === 'covering' ? `At ${areaLabels[activity.areaId] ?? activity.areaId}` : null);
                       return (
-                        <td key={i} style={{ textAlign: 'center' }} className={compact ? `${tdClassName} presentation-td-break` : 'presentation-td-break'}>
+                        <td key={i} style={{ textAlign: 'center' }} className={breakTdClass}>
                           {coveringHere
                             ? <span style={{ fontWeight: 700, fontSize: compact ? undefined : '0.85rem', color: '#1976d2' }}>{coveringLabel ?? 'Covering'}</span>
                             : onBreak
@@ -477,7 +481,7 @@ function LineViewInner({
                     <th>Float</th>
                     <th>Assigned</th>
                     {breakSlotLabels.map((label, i) => (
-                      <th key={i}>{label}</th>
+                      <th key={i} className="presentation-col-break">{label}</th>
                     ))}
                   </tr>
                 </thead>
@@ -501,7 +505,7 @@ function LineViewInner({
                                 : (areaLabels[activity.areaId] ?? activity.areaId))
                             : null;
                           return (
-                            <td key={i}>
+                            <td key={i} className="presentation-col-break">
                               {activity?.type === 'on_break'
                                 ? <span style={{ fontWeight: 700, color: '#1976d2' }}>On break</span>
                                 : activity?.type === 'covering'
@@ -631,7 +635,7 @@ function LineViewInner({
                   <tr>
                     <th className="presentation-th-compact">Area</th>
                     {breakSlotLabels.map((label, i) => (
-                      <th key={i} className="presentation-th-compact" style={{ textAlign: 'center' }}>{label}</th>
+                      <th key={i} className="presentation-th-compact presentation-col-break">{label}</th>
                     ))}
                   </tr>
                 </thead>
@@ -641,15 +645,14 @@ function LineViewInner({
                       <td className="presentation-td-compact" style={{ fontWeight: 600 }}>{row.areaLabel}</td>
                       {row.slots.map((s, i) => {
                         if (s.peopleOnBreak === 0) {
-                          return <td key={i} className="presentation-td-compact" style={{ textAlign: 'center', color: '#bbb' }}>&mdash;</td>;
+                          return <td key={i} className="presentation-td-compact presentation-col-break" style={{ color: '#bbb' }}>&mdash;</td>;
                         }
                         const floatPersonId = s.coveredByFloatId ? (slots[s.coveredByFloatId]?.[0]?.personId ?? null) : null;
                         return (
                           <td
                             key={i}
-                            className="presentation-td-compact"
+                            className="presentation-td-compact presentation-col-break"
                             style={{
-                              textAlign: 'center',
                               background: s.uncovered ? 'rgba(192, 57, 43, 0.10)' : 'rgba(39, 174, 96, 0.10)',
                               color: s.uncovered ? '#c0392b' : '#27ae60',
                               fontWeight: 600,
@@ -681,7 +684,7 @@ function LineViewInner({
                         <th>Float</th>
                         <th>Assigned</th>
                         {breakSlotLabels.map((label, i) => (
-                          <th key={i}>{label}</th>
+                          <th key={i} className="presentation-col-break">{label}</th>
                         ))}
                       </tr>
                     </thead>
@@ -705,7 +708,7 @@ function LineViewInner({
                                     : (areaLabels[activity.areaId] ?? activity.areaId))
                                 : null;
                               return (
-                                <td key={i}>
+                                <td key={i} className="presentation-col-break">
                                   {activity?.type === 'on_break'
                                     ? <span style={{ fontWeight: 700, color: '#1976d2' }}>On break</span>
                                     : activity?.type === 'covering'
@@ -729,7 +732,7 @@ function LineViewInner({
                   <tr>
                     <th>Area</th>
                     {breakSlotLabels.map((label, i) => (
-                      <th key={i} style={{ textAlign: 'center' }}>{label}</th>
+                      <th key={i} className="presentation-col-break">{label}</th>
                     ))}
                   </tr>
                 </thead>
@@ -739,14 +742,14 @@ function LineViewInner({
                       <td style={{ fontWeight: 600 }}>{row.areaLabel}</td>
                       {row.slots.map((s, i) => {
                         if (s.peopleOnBreak === 0) {
-                          return <td key={i} style={{ textAlign: 'center', color: '#bbb' }}>&mdash;</td>;
+                          return <td key={i} className="presentation-col-break" style={{ color: '#bbb' }}>&mdash;</td>;
                         }
                         const floatPersonId = s.coveredByFloatId ? (slots[s.coveredByFloatId]?.[0]?.personId ?? null) : null;
                         return (
                           <td
                             key={i}
+                            className="presentation-col-break"
                             style={{
-                              textAlign: 'center',
                               background: s.uncovered ? 'rgba(192, 57, 43, 0.10)' : 'rgba(39, 174, 96, 0.10)',
                               color: s.uncovered ? '#c0392b' : '#27ae60',
                               fontWeight: 600,

@@ -619,6 +619,18 @@ textarea {
 }
 .presentation-table tbody tr:last-child td { border-bottom: none; }
 
+/* Break rotation columns in staffing view — center names (default th is left-aligned). */
+.line-view-presentation .presentation-table th.presentation-col-break,
+.line-view-presentation .presentation-table td.presentation-col-break {
+  text-align: center;
+  vertical-align: middle;
+}
+.line-view-compact .presentation-table-compact th.presentation-col-break,
+.line-view-compact .presentation-table-compact td.presentation-col-break {
+  text-align: center;
+  vertical-align: middle;
+}
+
 /* ============================================================
    Modal
    ============================================================ */
