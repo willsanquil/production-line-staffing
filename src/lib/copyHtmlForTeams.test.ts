@@ -12,4 +12,13 @@ describe('copyHtmlForTeams', () => {
     expect(plainText).toContain('Hello');
     expect(plainText).not.toContain('X');
   });
+
+  it('removes subtrees marked data-teams-copy-exclude (e.g. leads after float schedule)', () => {
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<section><p>Keep</p></section><section data-teams-copy-exclude=""><p>Drop</p></section>';
+    const { plainText } = buildTeamsClipboardDocument(root);
+    expect(plainText).toContain('Keep');
+    expect(plainText).not.toContain('Drop');
+  });
 });

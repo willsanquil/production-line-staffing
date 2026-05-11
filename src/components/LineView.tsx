@@ -572,7 +572,7 @@ function LineViewInner({
 
       {assignedLeadKeys.length > 0 && (
         isCompact ? (
-          <section className="presentation-section-compact" style={{ padding: 6, marginBottom: 8 }}>
+          <section className="presentation-section-compact" style={{ padding: 6, marginBottom: 8 }} data-teams-copy-exclude="">
             <h2 style={{ fontSize: '0.8rem', marginBottom: 4 }}>Leads</h2>
             <div style={{ overflowX: 'auto' }}>
               <table className="presentation-table-compact">
@@ -601,7 +601,7 @@ function LineViewInner({
             </div>
           </section>
         ) : (
-          <section className="section-card" style={{ marginTop: 8 }}>
+          <section className="section-card" style={{ marginTop: 8 }} data-teams-copy-exclude="">
             <h2>Leads</h2>
             <div style={{ overflowX: 'auto' }}>
               <table className="presentation-table">
@@ -634,7 +634,7 @@ function LineViewInner({
 
       {((floatSlots.length > 0) || (coverageSummaryFiltered.length > 0 && coverageSummaryFiltered.some((row) => row.slots.some((s) => s.peopleOnBreak > 0)))) && (
         isCompact ? (
-          <section className="presentation-section-compact" style={{ padding: 6, marginTop: 8, marginBottom: 8 }}>
+          <section className="presentation-section-compact" style={{ padding: 6, marginTop: 8, marginBottom: 8 }} data-teams-copy-exclude="">
             <h2 style={{ fontSize: '0.8rem', marginBottom: 4 }}>Break coverage</h2>
             <p style={{ fontSize: '0.75rem', color: '#555', margin: '0 0 6px 0' }}>Float-supported areas only. Areas at full staff without a float manage breaks internally.</p>
             {floatSlots.length > 0 && (
@@ -721,7 +721,7 @@ function LineViewInner({
             )}
           </section>
         ) : (
-          <section className="section-card" style={{ marginTop: 8 }}>
+          <section className="section-card" style={{ marginTop: 8 }} data-teams-copy-exclude="">
             <h2>Break coverage</h2>
             <p style={{ fontSize: '0.9rem', color: '#555', margin: '0 0 12px 0' }}>Float-supported areas only. Areas at full staff without a float manage breaks internally.</p>
             {floatSlots.length > 0 && (
