@@ -108,8 +108,6 @@ function LineViewInner({
   effectiveCapacity,
   totalOnLine,
   fullStaff,
-  staffingPct,
-  lineHealthScore,
   lineSections: lineSectionsProp,
   leadSlotKeys: leadSlotKeysProp,
   getLeadSlotLabel: getLeadSlotLabelProp,
@@ -135,7 +133,6 @@ function LineViewInner({
     const p = roster.find((r) => r.id === personId);
     return (p?.skills[areaId] ?? 'no_experience') as SkillLevel;
   };
-  const knowledgePosition = lineHealthScore != null ? (lineHealthScore / 3) * 100 : null;
   const assignedLeadKeys = leadSlotKeys.filter((k: string) => leadSlots[k] != null && leadSlots[k] !== '');
   const firstAreaId = typeof sections[0] === 'string' ? sections[0] : sections[0]?.[0];
 
