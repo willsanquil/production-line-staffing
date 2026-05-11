@@ -236,8 +236,9 @@ export default function App() {
         : ({} as Record<string, { min: number; max: number }>),
     [effectiveConfig, areaCapacityOverrides]
   );
-  // Full staff = user override, or leads + sum of all areas' min capacity
-  const [fullStaffOverride, setFullStaffOverride] = useState<number | null>(null);
+  // Full staff = user override (persisted per-line), or leads + sum of all areas' min capacity.
+  // Persisted in line state so the value sticks across reloads, line switches, and day loads.
+  const [fullStaffOverride, setFullStaffOverride] = useState<number | null>(firstLineState.fullStaffOverride ?? null);
   const computedFullStaff = useMemo(() => {
     const minSlots = Object.values(effectiveCapacity).reduce((sum, cap) => sum + cap.min, 0);
     return leadSlotKeys.length + minSlots;
@@ -275,7 +276,7 @@ export default function App() {
   );
 
   const stateRef = useRef(extractLineDraftState(firstLineState));
-  stateRef.current = { slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, leadBreakCoverage, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea, areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled, areaCoversBreaksFor };
+  stateRef.current = { slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, leadBreakCoverage, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea, areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled, areaCoversBreaksFor, fullStaffOverride };
   const rootStateRef = useRef(rootState);
   rootStateRef.current = rootState;
 
@@ -301,7 +302,7 @@ export default function App() {
     setRootState,
     reloadLineState,
     persistDebounceMs: PERSIST_DEBOUNCE_MS,
-    persistDeps: [slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea, areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled, areaCoversBreaksFor],
+    persistDeps: [slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea, areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled, areaCoversBreaksFor, fullStaffOverride],
   });
 
   useEffect(() => {
@@ -324,6 +325,7 @@ export default function App() {
     setAreaRequiresTrainedOrExpertOverrides(lineState.areaRequiresTrainedOrExpertOverrides ?? {});
     setSlotBreakCoverageEnabled(lineState.slotBreakCoverageEnabled ?? {});
     setAreaCoversBreaksFor(lineState.areaCoversBreaksFor ?? {});
+    setFullStaffOverride(lineState.fullStaffOverride ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rootState.currentLineId, lineStateReloadKey]);
 
@@ -1105,7 +1107,7 @@ export default function App() {
     const state = stateRef.current;
     addSavedDay(
       date,
-      { roster, slots: state.slots, leadSlots: state.leadSlots, juicedAreas: state.juicedAreas, deJuicedAreas: state.deJuicedAreas, sectionTasks: state.sectionTasks, schedule: state.schedule, dayNotes: state.dayNotes, documents: state.documents, breakSchedules: state.breakSchedules, leadBreakCoverage: state.leadBreakCoverage, areaBreakCoverageEnabled: state.areaBreakCoverageEnabled, areaRequiresTrainedOrExpertOverrides: state.areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled: state.slotBreakCoverageEnabled, areaCoversBreaksFor: state.areaCoversBreaksFor },
+      { roster, slots: state.slots, leadSlots: state.leadSlots, juicedAreas: state.juicedAreas, deJuicedAreas: state.deJuicedAreas, sectionTasks: state.sectionTasks, schedule: state.schedule, dayNotes: state.dayNotes, documents: state.documents, breakSchedules: state.breakSchedules, leadBreakCoverage: state.leadBreakCoverage, areaBreakCoverageEnabled: state.areaBreakCoverageEnabled, areaRequiresTrainedOrExpertOverrides: state.areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled: state.slotBreakCoverageEnabled, areaCoversBreaksFor: state.areaCoversBreaksFor, fullStaffOverride: state.fullStaffOverride },
       name,
       rootState.currentLineId
     );
@@ -1136,6 +1138,7 @@ export default function App() {
       areaRequiresTrainedOrExpertOverrides: day.areaRequiresTrainedOrExpertOverrides ?? {},
       slotBreakCoverageEnabled: day.slotBreakCoverageEnabled ?? {},
       areaCoversBreaksFor: day.areaCoversBreaksFor ?? {},
+      fullStaffOverride: day.fullStaffOverride ?? null,
       areaCapacityOverrides: areaCapacityOverrides ?? {},
       areaNameOverrides: areaNameOverrides ?? {},
       slotLabelsByArea: slotLabelsByArea ?? {},
@@ -1181,6 +1184,7 @@ export default function App() {
     setAreaRequiresTrainedOrExpertOverrides(lineStateForDay.areaRequiresTrainedOrExpertOverrides ?? {});
     setSlotBreakCoverageEnabled(lineStateForDay.slotBreakCoverageEnabled ?? {});
     setAreaCoversBreaksFor(lineStateForDay.areaCoversBreaksFor ?? {});
+    setFullStaffOverride(lineStateForDay.fullStaffOverride ?? null);
     // Force a reload so the useEffect at line 276 re-syncs all local state from rootState
     setLineStateReloadKey((k) => k + 1);
   }, [areaCapacityOverrides, areaNameOverrides, leadSlotKeys, rootState.currentLineId, rootState.lines, rootState.lineStates, slotLabelsByArea]);
@@ -1333,6 +1337,7 @@ export default function App() {
     setAreaRequiresTrainedOrExpertOverrides(imported.areaRequiresTrainedOrExpertOverrides ?? {});
     setSlotBreakCoverageEnabled(imported.slotBreakCoverageEnabled ?? {});
     setAreaCoversBreaksFor(imported.areaCoversBreaksFor ?? {});
+    setFullStaffOverride(imported.fullStaffOverride ?? null);
     setAreaCapacityOverrides(imported.areaCapacityOverrides ?? {});
     setAreaNameOverrides(imported.areaNameOverrides ?? {});
     setSlotLabelsByArea(imported.slotLabelsByArea ?? {});
@@ -1981,6 +1986,7 @@ export default function App() {
             min={1}
             value={fullStaff}
             onChange={(e) => {
+              markLocalChange();
               const v = e.target.valueAsNumber;
               if (!Number.isNaN(v) && v >= 1) {
                 setFullStaffOverride(v);
@@ -1989,7 +1995,7 @@ export default function App() {
               }
             }}
             style={{ width: 52, padding: '2px 6px', fontSize: 'inherit', fontWeight: 700 }}
-            title={`Computed: ${computedFullStaff}. Edit to override.`}
+            title={`Computed: ${computedFullStaff}. Edit to override (saved per line).`}
             aria-label="Full staff count"
           />
         </div>

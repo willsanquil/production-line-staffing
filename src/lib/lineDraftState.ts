@@ -19,6 +19,7 @@ export type LineDraftState = Pick<
   | 'areaRequiresTrainedOrExpertOverrides'
   | 'slotBreakCoverageEnabled'
   | 'areaCoversBreaksFor'
+  | 'fullStaffOverride'
 >;
 
 export function extractLineDraftState(lineState: Partial<LineState>): LineDraftState {
@@ -40,6 +41,7 @@ export function extractLineDraftState(lineState: Partial<LineState>): LineDraftS
     areaRequiresTrainedOrExpertOverrides: lineState.areaRequiresTrainedOrExpertOverrides ?? {},
     slotBreakCoverageEnabled: lineState.slotBreakCoverageEnabled ?? {},
     areaCoversBreaksFor: lineState.areaCoversBreaksFor ?? {},
+    fullStaffOverride: lineState.fullStaffOverride ?? null,
   };
 }
 

@@ -193,6 +193,8 @@ export interface SavedDay {
   slotBreakCoverageEnabled?: Record<string, Record<string, boolean>>;
   /** Which stations cover breaks for which other stations on this saved day. */
   areaCoversBreaksFor?: Record<string, string[]>;
+  /** Manual override for the "Full staff" headcount on this saved day. */
+  fullStaffOverride?: number | null;
 }
 
 export interface AppState {
@@ -222,6 +224,10 @@ export interface AppState {
    * rotation is optimized just like a real float), and the staffing view shows Break Coverage
    * rows on the supported stations. The coverage station still renders as a regular station. */
   areaCoversBreaksFor?: Record<string, string[]>;
+  /** Manual override for the "Full staff" headcount used to compute the staffing percentage.
+   * When null/undefined, the displayed Full staff is computed as leads + sum of area min slots.
+   * The user-entered value persists across reloads / line switches / day loads. */
+  fullStaffOverride?: number | null;
   /** Per-lead and supervisor assignment views: key = lead slot key or ASSIGNMENT_VIEW_SUPERVISOR_KEY. */
   assignmentViews?: Record<string, AssignmentViewSnapshot>;
   /** Which assignment view is currently shown (supervisor vs each lead). Default supervisor. */
