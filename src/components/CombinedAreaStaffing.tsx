@@ -56,6 +56,8 @@ interface CombinedAreaStaffingProps {
   onClearArea?: (areaId: AreaId) => void;
   /** Optional: when provided, render a "Delete area" button per sub-area (configure mode only). */
   onDeleteArea?: (areaId: AreaId) => void;
+  /** Optional: when provided, render a "Convert to floats" button per sub-area (configure mode only). */
+  onConvertToFloats?: (areaId: AreaId) => void;
   /** Move the whole combined section one step earlier in the line. */
   onMoveLeft?: () => void;
   /** Move the whole combined section one step later in the line. */
@@ -97,6 +99,7 @@ function CombinedAreaStaffingInner({
   onSlotLabelChange,
   onClearArea,
   onDeleteArea,
+  onConvertToFloats,
   onMoveLeft,
   onMoveRight,
   moveLabel,
@@ -236,6 +239,16 @@ function CombinedAreaStaffingInner({
               title={`Clear assigned people from ${areaLabel}`}
             >
               Clear area
+            </button>
+          )}
+          {onConvertToFloats && (
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => onConvertToFloats(areaId)}
+              title={`Convert ${areaLabel} into float positions that cover breaks elsewhere`}
+            >
+              Convert to floats
             </button>
           )}
           {onDeleteArea && (

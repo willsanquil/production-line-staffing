@@ -235,6 +235,23 @@ function LineViewInner({
     });
     const supportingFloats = supportingFloatsRaw;
     const showBreakCols = !!breakAssignments && Object.keys(breakAssignments).length > 0 && rotCount >= 1;
+
+    /** Lookup: covered slot index + rotation -> float person name covering them.
+     * Lets the person's break cell display "X — Manuel" so the link is obvious. */
+    const coverageBySlotAndRot: Record<string, string> = {};
+    for (const f of supportingFloats) {
+      const fSchedule = floatSchedule[f.id];
+      if (!fSchedule) continue;
+      const floatPersonId = slots[f.id]?.[0]?.personId ?? null;
+      const floatName = floatPersonId ? getName(floatPersonId) : null;
+      if (!floatName) continue;
+      for (const [rotStr, activity] of Object.entries(fSchedule)) {
+        if (activity.type !== 'covering') continue;
+        if (activity.areaId !== areaId) continue;
+        if (!('slotIndex' in activity) || activity.slotIndex === undefined) continue;
+        coverageBySlotAndRot[`${activity.slotIndex}:${rotStr}`] = floatName;
+      }
+    }
     const understaffed = filled < min;
     const uncoveredRotations: number[] = [];
     if (understaffed && showBreakCols && breakAssignments) {
@@ -311,7 +328,9 @@ function LineViewInner({
                       </span>
                     </td>
                     {showBreakCols && breakSlotLabels.map((_, i) => {
-                      const isOnBreak = breakRot === i + 1;
+                      const rot = i + 1;
+                      const isOnBreak = breakRot === rot;
+                      const coveringName = isOnBreak ? coverageBySlotAndRot[`${idx}:${rot}`] : undefined;
                       return (
                         <td
                           key={i}
@@ -319,7 +338,14 @@ function LineViewInner({
                           className={compact ? `${tdClassName} presentation-td-break` : 'presentation-td-break'}
                         >
                           {isOnBreak ? (
-                            <span style={{ fontWeight: 700, fontSize: compact ? undefined : '1.1rem' }}>X</span>
+                            <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.1 }}>
+                              <span style={{ fontWeight: 700, fontSize: compact ? undefined : '1.1rem' }}>X</span>
+                              {coveringName && (
+                                <span style={{ fontSize: compact ? '0.65rem' : '0.7rem', color: '#1976d2', fontWeight: 600, marginTop: 1 }}>
+                                  {coveringName}
+                                </span>
+                              )}
+                            </span>
                           ) : (
                             ''
                           )}

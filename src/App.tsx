@@ -175,6 +175,8 @@ export default function App() {
   const [showAddStationForm, setShowAddStationForm] = useState(false);
   const [showFloatSupportModal, setShowFloatSupportModal] = useState(false);
   const [floatSupportDraft, setFloatSupportDraft] = useState<FloatSlotConfig[] | null>(null);
+  /** Modal draft for "Convert station to floats": which station + which areas the new floats should cover. */
+  const [convertStationDraft, setConvertStationDraft] = useState<{ areaId: string; supportedAreaIds: string[] } | null>(null);
   const [addStationName, setAddStationName] = useState('');
   const [addStationMin, setAddStationMin] = useState(2);
   const [addStationMax, setAddStationMax] = useState(5);
@@ -776,6 +778,118 @@ export default function App() {
       const lines = prev.lines.slice();
       lines[lineIndex] = { ...line, areas: reorderedAreas };
       return { ...prev, lines };
+    });
+    schedulePersistForRootEdit();
+  }, [schedulePersistForRootEdit]);
+
+  /** Convert a station into N float positions (one per enabled, non-disabled slot).
+   * Each new float covers breaks for the user-selected `supportedAreaIds`. People are moved
+   * from the station's slots into the new floats, and the original station is removed.
+   * Pre-enables slot-level break coverage for every slot in supportedAreaIds so the floats
+   * prioritize covering them. */
+  const handleConvertStationToFloats = useCallback((areaId: string, supportedAreaIds: string[]) => {
+    setRootState((prev) => {
+      const lineIndex = prev.lines.findIndex((l) => l.id === prev.currentLineId);
+      if (lineIndex === -1) return prev;
+      const line = prev.lines[lineIndex];
+      const sourceArea = line.areas.find((a) => a.id === areaId);
+      if (!sourceArea) return prev;
+      const lineState = prev.lineStates[prev.currentLineId];
+      if (!lineState) return prev;
+
+      const sourceSlots = lineState.slots[areaId] ?? [];
+      const enabledSourceSlots = sourceSlots.filter((s) => !s.disabled);
+      if (enabledSourceSlots.length === 0) return prev;
+
+      const existingFloatIds = new Set((line.floatSlots ?? []).map((f) => f.id));
+      const baseId = areaId.replace(/^area_/, '').replace(/[^a-z0-9_]/gi, '_').toLowerCase() || 'cov';
+      const newFloats: FloatSlotConfig[] = [];
+      const newFloatSlotEntries: Record<string, typeof sourceSlots> = {};
+      enabledSourceSlots.forEach((src, i) => {
+        let id = `${baseId}_${i + 1}`;
+        let suffix = i + 1;
+        while (existingFloatIds.has(id)) {
+          suffix += 1;
+          id = `${baseId}_${suffix}`;
+        }
+        existingFloatIds.add(id);
+        newFloats.push({
+          id,
+          name: `${sourceArea.name} ${i + 1}`,
+          supportedAreaIds: [...supportedAreaIds],
+        });
+        newFloatSlotEntries[id] = [{ id: src.id, personId: src.personId, disabled: false }];
+      });
+
+      const lines = prev.lines.slice();
+      const remainingAreas = line.areas.filter((a) => a.id !== areaId);
+      const remainingCombinedSections = (line.combinedSections ?? []).filter(
+        ([a, b]) => a !== areaId && b !== areaId
+      );
+      const remainingLeadAreaIds = (line.leadAreaIds ?? []).filter((id) => id !== areaId);
+      const remainingFloatSlots = (line.floatSlots ?? []).map((f) => ({
+        ...f,
+        supportedAreaIds: f.supportedAreaIds.filter((id) => id !== areaId),
+      }));
+      lines[lineIndex] = {
+        ...line,
+        areas: remainingAreas,
+        combinedSections: remainingCombinedSections,
+        leadAreaIds: remainingLeadAreaIds,
+        floatSlots: [...remainingFloatSlots, ...newFloats],
+      };
+
+      const dropKey = <T extends Record<string, unknown>>(obj: T | undefined): T | undefined => {
+        if (!obj || !(areaId in obj)) return obj;
+        const next = { ...obj } as Record<string, unknown>;
+        delete next[areaId];
+        return next as T;
+      };
+
+      const nextSlots = { ...lineState.slots, ...newFloatSlotEntries };
+      delete nextSlots[areaId];
+      const nextSectionTasks = { ...lineState.sectionTasks };
+      delete (nextSectionTasks as Record<string, unknown>)[areaId];
+      const nextLeadSlots = { ...lineState.leadSlots };
+      delete nextLeadSlots[areaId];
+
+      // Pre-enable slot-level break coverage for every enabled slot in supportedAreaIds,
+      // so float coverage prioritizes covering those positions when their owners go on break.
+      const prevSlotBreakCoverageEnabled = lineState.slotBreakCoverageEnabled ?? {};
+      const nextSlotBreakCoverageEnabled = { ...prevSlotBreakCoverageEnabled };
+      for (const supportedId of supportedAreaIds) {
+        const supportSlots = lineState.slots[supportedId] ?? [];
+        const perSlotMap = { ...(prevSlotBreakCoverageEnabled[supportedId] ?? {}) };
+        for (const s of supportSlots) {
+          if (!s.disabled) perSlotMap[s.id] = true;
+        }
+        nextSlotBreakCoverageEnabled[supportedId] = perSlotMap;
+      }
+      // The dropped area shouldn't keep its own per-slot coverage flags.
+      delete nextSlotBreakCoverageEnabled[areaId];
+
+      const roster = (lineState.roster ?? []).map((p) =>
+        p.defaultAreaId === areaId ? { ...p, defaultAreaId: null, defaultSlotIndex: null } : p
+      );
+
+      const newLineState = {
+        ...lineState,
+        slots: nextSlots,
+        sectionTasks: nextSectionTasks,
+        leadSlots: nextLeadSlots,
+        roster,
+        juicedAreas: dropKey(lineState.juicedAreas) ?? {},
+        deJuicedAreas: dropKey(lineState.deJuicedAreas) ?? {},
+        breakSchedules: dropKey(lineState.breakSchedules) ?? {},
+        areaBreakCoverageEnabled: dropKey(lineState.areaBreakCoverageEnabled),
+        areaCapacityOverrides: dropKey(lineState.areaCapacityOverrides),
+        areaNameOverrides: dropKey(lineState.areaNameOverrides),
+        slotLabelsByArea: dropKey(lineState.slotLabelsByArea),
+        areaRequiresTrainedOrExpertOverrides: dropKey(lineState.areaRequiresTrainedOrExpertOverrides),
+        slotBreakCoverageEnabled: nextSlotBreakCoverageEnabled,
+      };
+      const lineStates = { ...prev.lineStates, [prev.currentLineId]: newLineState };
+      return { ...prev, lines, lineStates };
     });
     schedulePersistForRootEdit();
   }, [schedulePersistForRootEdit]);
@@ -2112,6 +2226,91 @@ export default function App() {
         </div>
       )}
 
+      {convertStationDraft && currentConfig && (() => {
+        const sourceArea = currentConfig.areas.find((a) => a.id === convertStationDraft.areaId);
+        if (!sourceArea) return null;
+        const sourceLabel = areaLabels[sourceArea.id] ?? sourceArea.name;
+        const enabledCount = (slots[sourceArea.id] ?? []).filter((s) => !s.disabled).length;
+        const otherAreas = currentConfig.areas.filter((a) => a.id !== sourceArea.id);
+        const selected = convertStationDraft.supportedAreaIds;
+        return (
+          <div
+            className="modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="convert-floats-title"
+            onClick={() => setConvertStationDraft(null)}
+          >
+            <div
+              className="modal-dialog"
+              style={{ maxHeight: '85vh', overflow: 'auto' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 id="convert-floats-title" style={{ margin: '0 0 8px 0', fontSize: '1.1rem' }}>
+                Convert {sourceLabel} to floats
+              </h3>
+              <p style={{ color: '#555', fontSize: '0.9rem', marginBottom: 12 }}>
+                Each of the {enabledCount} {enabledCount === 1 ? 'person' : 'people'} at {sourceLabel} becomes a float.
+                Floats don't run a station — they cover breaks at the stations you pick below
+                (and take their own breaks in a rotation that leaves coverage in place).
+              </p>
+              <div style={{ fontSize: '0.85rem', color: '#333', fontWeight: 600, marginBottom: 6 }}>
+                Cover breaks for:
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                {otherAreas.length === 0 && (
+                  <span style={{ color: '#888', fontSize: '0.85rem' }}>No other stations to cover.</span>
+                )}
+                {otherAreas.map((a) => {
+                  const checked = selected.includes(a.id);
+                  return (
+                    <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) =>
+                          setConvertStationDraft((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  supportedAreaIds: e.target.checked
+                                    ? [...prev.supportedAreaIds, a.id]
+                                    : prev.supportedAreaIds.filter((id) => id !== a.id),
+                                }
+                              : null
+                          )
+                        }
+                      />
+                      <span>{areaLabels[a.id] ?? a.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={selected.length === 0 || enabledCount === 0}
+                  onClick={() => {
+                    handleConvertStationToFloats(sourceArea.id, selected);
+                    setConvertStationDraft(null);
+                  }}
+                >
+                  Convert
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={() => setConvertStationDraft(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {showStaffTheLineWizard && currentConfig && (
         <Suspense fallback={null}>
           <StaffTheLineWizard
@@ -2186,6 +2385,7 @@ export default function App() {
                 onSlotLabelChange={handleSlotLabelChange}
                 onClearArea={handleClearArea}
                 onDeleteArea={configureMode ? handleRemoveStation : undefined}
+                onConvertToFloats={configureMode ? (id) => setConvertStationDraft({ areaId: id, supportedAreaIds: [] }) : undefined}
                 onMoveLeft={configureMode && !isFirst ? () => handleMoveStation(idA, -1) : undefined}
                 onMoveRight={configureMode && !isLast ? () => handleMoveStation(idA, 1) : undefined}
                 moveLabel={`${areaLabels[idA] ?? idA} & ${areaLabels[idB] ?? idB}`}
@@ -2224,6 +2424,7 @@ export default function App() {
               onSlotLabelChange={handleSlotLabelChange}
               onClearArea={handleClearArea}
               onDeleteArea={configureMode ? handleRemoveStation : undefined}
+              onConvertToFloats={configureMode ? (id) => setConvertStationDraft({ areaId: id, supportedAreaIds: [] }) : undefined}
               onMoveLeft={configureMode && !isFirst ? (id) => handleMoveStation(id, -1) : undefined}
               onMoveRight={configureMode && !isLast ? (id) => handleMoveStation(id, 1) : undefined}
               sectionTasks={sectionTasks[areaId] ?? []}

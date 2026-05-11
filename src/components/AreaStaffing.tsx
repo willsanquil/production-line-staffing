@@ -44,6 +44,10 @@ interface AreaStaffingProps {
   onClearArea?: (areaId: AreaId) => void;
   /** Optional: when provided, render a "Delete area" button (configure mode only). */
   onDeleteArea?: (areaId: AreaId) => void;
+  /** Optional: when provided, render a "Convert to floats" button (configure mode only).
+   * Clicking lets the user pick which areas the new floats should cover; on confirm the
+   * station is replaced with one float per enabled slot. */
+  onConvertToFloats?: (areaId: AreaId) => void;
   /** Optional: move this section one step earlier in the line. When undefined, button is hidden / disabled. */
   onMoveLeft?: (areaId: AreaId) => void;
   /** Optional: move this section one step later in the line. */
@@ -86,6 +90,7 @@ function AreaStaffingInner({
   onSlotLabelChange,
   onClearArea,
   onDeleteArea,
+  onConvertToFloats,
   onMoveLeft,
   onMoveRight,
   onSlotsChange,
@@ -282,6 +287,16 @@ function AreaStaffingInner({
             title={`Clear assigned people from ${areaLabel}`}
           >
             Clear area
+          </button>
+        )}
+        {onConvertToFloats && (
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => onConvertToFloats(areaId)}
+            title={`Convert ${areaLabel} into float positions that cover breaks elsewhere`}
+          >
+            Convert to floats
           </button>
         )}
         {onDeleteArea && (
