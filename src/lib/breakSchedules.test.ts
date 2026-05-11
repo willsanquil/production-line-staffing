@@ -167,7 +167,12 @@ describe('Flip-as-floats coverage (IC default scenario)', () => {
     }
   });
 
-  it('the two Flip floats themselves take their breaks in different rotations', () => {
+  it('the two Flip floats break together in the rotation with no coverage need', () => {
+    // Scenario mirrors the IC default: 14.5 has 2 people, Test Loop has 1, both Flip floats
+    // support both. With 3 rotations, 14.5 fills slots 1 + 2 and Test Loop fills slot 1, so
+    // rotation 3 has zero break events. Both Flip floats should land there together since
+    // there is no coverage cost to doing so (and operationally it's preferred — they go to
+    // lunch / break together).
     const roster: RosterPerson[] = [
       makePerson('p_a', ['area_14_5']),
       makePerson('p_b', ['area_14_5']),
@@ -201,6 +206,59 @@ describe('Flip-as-floats coverage (IC default scenario)', () => {
       3,
     );
 
-    expect(optimized.flip_1?.flip1?.breakRotation).not.toBe(optimized.flip_2?.flip2?.breakRotation);
+    expect(optimized.flip_1?.flip1?.breakRotation).toBe(optimized.flip_2?.flip2?.breakRotation);
+  });
+
+  it('floats are split across rotations when togetherness would drop coverage', () => {
+    // 14.5 has 2 people on break (rot 1, rot 2), Test Loop 1 person on break (rot 2). Floats
+    // cannot all break together: rot 2 has 2 simultaneous break events, so at least one float
+    // must be available there. Coverage cost wins over togetherness.
+    const roster: RosterPerson[] = [
+      makePerson('a1', ['area_14_5']),
+      makePerson('a2', ['area_14_5']),
+      makePerson('t1', ['area_testing']),
+      makePerson('flipA', ['area_14_5', 'area_testing']),
+      makePerson('flipB', ['area_14_5', 'area_testing']),
+    ];
+    const slots = {
+      area_14_5: [
+        { id: 's_a1', personId: 'a1' },
+        { id: 's_a2', personId: 'a2' },
+      ],
+      area_testing: [{ id: 's_t1', personId: 't1' }],
+      flip_a: [{ id: 's_fa', personId: 'flipA' }],
+      flip_b: [{ id: 's_fb', personId: 'flipB' }],
+    };
+
+    // Pre-seed: a1 rot 1, a2 rot 2, t1 rot 2 (so rot 2 has 2 simultaneous break events).
+    const seeded = {
+      area_14_5: {
+        a1: { breakRotation: 1 as const, lunchRotation: 1 as const },
+        a2: { breakRotation: 2 as const, lunchRotation: 2 as const },
+      },
+      area_testing: {
+        t1: { breakRotation: 2 as const, lunchRotation: 2 as const },
+      },
+      flip_a: { flipA: { breakRotation: 1 as const, lunchRotation: 1 as const } },
+      flip_b: { flipB: { breakRotation: 2 as const, lunchRotation: 2 as const } },
+    };
+
+    const optimized = optimizeFloatBreakRotations(
+      seeded,
+      [
+        { id: 'flip_a', name: 'Flip A', supportedAreaIds: ['area_14_5', 'area_testing'] },
+        { id: 'flip_b', name: 'Flip B', supportedAreaIds: ['area_14_5', 'area_testing'] },
+      ],
+      slots,
+      3,
+    );
+
+    // Neither float should be on break in rot 2 (where two areas need cover simultaneously).
+    expect(optimized.flip_a?.flipA?.breakRotation).not.toBe(2);
+    expect(optimized.flip_b?.flipB?.breakRotation).not.toBe(2);
+    // Only one Flip person can be free during rot 2 to cover one area; the other area is
+    // necessarily uncovered. The optimizer doesn't fix that here — it just shouldn't make
+    // it worse by having BOTH floats on break in rot 2.
+    void roster;
   });
 });

@@ -311,8 +311,14 @@ export function optimizeFloatBreakRotations(
 
   // Track which areas are already covered by a previously-processed float per rotation
   const coveredAreas: Record<number, Set<string>> = {};
+  // Track how many already-processed floats break in each rotation. Used as a tiebreaker
+  // so when coverage cost is equal across rotations, additional floats prefer to break
+  // alongside ones that already broke there (e.g. Manuel and Marcus go to break together
+  // in the same rotation when neither 14.5 nor Test Loop needs them in that slot).
+  const floatBreakCounts: Record<number, number> = {};
   for (let r = 1; r <= rotationCount; r++) {
     coveredAreas[r] = new Set<string>();
+    floatBreakCounts[r] = 0;
   }
 
   for (const float of floatSlots) {
@@ -351,12 +357,21 @@ export function optimizeFloatBreakRotations(
       needScores.push(needScore);
     }
 
-    // Pick rotation with lowest need score; on ties prefer current rotation (stability)
+    // Pick rotation with lowest need score (primary: don't drop coverage).
+    // First-tier tiebreaker: prefer a rotation where other floats are already
+    // breaking, so floats break together when coverage allows it.
+    // Second-tier tiebreaker: prefer the currently assigned rotation, so the
+    // schedule is stable across regenerations when nothing else differentiates.
+    const minScore = Math.min(...needScores);
     let bestRotation: number = currentRotation;
-    let bestScore = needScores[currentRotation - 1];
+    let bestTogetherness = needScores[currentRotation - 1] === minScore
+      ? floatBreakCounts[currentRotation] ?? 0
+      : -1;
     for (let r = 1; r <= rotationCount; r++) {
-      if (needScores[r - 1] < bestScore) {
-        bestScore = needScores[r - 1];
+      if (needScores[r - 1] !== minScore) continue;
+      const togetherness = floatBreakCounts[r] ?? 0;
+      if (togetherness > bestTogetherness) {
+        bestTogetherness = togetherness;
         bestRotation = r;
       }
     }
@@ -377,6 +392,7 @@ export function optimizeFloatBreakRotations(
     // For each rotation where this float is NOT on break, find the first supported area
     // that has someone on break and hasn't been covered yet.
     const assignedRotation = bestRotation;
+    floatBreakCounts[assignedRotation] = (floatBreakCounts[assignedRotation] ?? 0) + 1;
     for (let r = 1; r <= rotationCount; r++) {
       if (r === assignedRotation) continue; // float is on break in this rotation, can't cover
       for (const areaId of float.supportedAreaIds) {
