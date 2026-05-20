@@ -77,6 +77,7 @@ import { saveToFile, overwriteFile, openFromFile, isSaveToFileSupported } from '
 import { getLineState, createCloudLine, deleteCloudLine, listCloudLines, logDay, listDayLogs } from './lib/cloudLines';
 import type { DayLogSummary } from './types';
 import { LogDayModal } from './components/history/LogDayModal';
+import { SHIFT_HOURS } from './lib/dayLogConstants';
 import { HistoryReportsView } from './components/history/HistoryReportsView';
 import { getCloudSession, setCloudSession, clearCloudSession } from './lib/cloudSession';
 import { clearCloudViewerSession } from './lib/cloudViewerSession';
@@ -1584,7 +1585,7 @@ export default function App() {
   }, [refreshDayLogSummaries]);
 
   const handleLogDayConfirm = useCallback(
-    async (workDate: string, shiftHours: number) => {
+    async (workDate: string) => {
       if (!cloudLineId || !cloudPasswordRef.current || !effectiveConfig) return;
       setLogDayLoading(true);
       setLogDayError(null);
@@ -1595,7 +1596,7 @@ export default function App() {
           lineId: cloudLineId,
           password: cloudPasswordRef.current,
           workDate,
-          shiftHours,
+          shiftHours: SHIFT_HOURS,
           lineConfig: effectiveConfig,
           lineState: {
             roster: lineState.roster,
@@ -2072,7 +2073,7 @@ export default function App() {
           error={logDayError}
           loggedDates={dayLogSummaries.map((s) => s.workDate)}
           onClose={() => setLogDayOpen(false)}
-          onConfirm={(workDate, shiftHours) => void handleLogDayConfirm(workDate, shiftHours)}
+          onConfirm={(workDate) => void handleLogDayConfirm(workDate)}
         />
       )}
 

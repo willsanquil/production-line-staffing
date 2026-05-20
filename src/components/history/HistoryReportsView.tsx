@@ -169,7 +169,7 @@ export function HistoryReportsView({ lineId, password, lineConfig, onBack }: His
               {dayDetail && !dayLoading && (
                 <>
                   <p style={{ color: '#666', fontSize: '0.9rem' }}>
-                    Logged {new Date(dayDetail.loggedAt).toLocaleString()} · {dayDetail.shiftHours}h shift
+                    Logged {new Date(dayDetail.loggedAt).toLocaleString()}
                     {dayDetail.notes ? ` · ${dayDetail.notes}` : ''}
                   </p>
                   <DayLogPlacement

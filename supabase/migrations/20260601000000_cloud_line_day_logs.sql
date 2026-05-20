@@ -6,7 +6,7 @@ create table if not exists public.cloud_line_day_logs (
   work_date date not null,
   logged_at timestamptz not null default now(),
   logged_by text null,
-  shift_hours numeric not null default 8,
+  shift_hours numeric not null default 11.5,
   snapshot jsonb not null default '{}',
   notes text null,
   unique (line_id, work_date)

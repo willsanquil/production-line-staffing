@@ -1,4 +1,5 @@
 import type { DayLogDetail } from '../types';
+import { SHIFT_HOURS } from './dayLogConstants';
 
 export interface PersonStationStats {
   personId: string;
@@ -27,7 +28,7 @@ export interface PersonCompareResult {
 export function aggregatePersonStationMatrix(logs: DayLogDetail[]): PersonStationStats[] {
   const map = new Map<string, PersonStationStats>();
   for (const log of logs) {
-    const hours = log.shiftHours > 0 ? log.shiftHours : 8;
+    const hours = SHIFT_HOURS;
     for (const a of log.assignments) {
       if (a.assignmentType !== 'primary') continue;
       const key = `${a.personId}\0${a.areaId}`;
@@ -55,7 +56,7 @@ export function aggregatePersonStationMatrix(logs: DayLogDetail[]): PersonStatio
 export function aggregateStationTotals(logs: DayLogDetail[]): StationTotalStats[] {
   const map = new Map<string, StationTotalStats>();
   for (const log of logs) {
-    const hours = log.shiftHours > 0 ? log.shiftHours : 8;
+    const hours = SHIFT_HOURS;
     for (const a of log.assignments) {
       if (a.assignmentType !== 'primary') continue;
       const cur = map.get(a.areaId);
@@ -99,7 +100,7 @@ export function comparePeopleAtStation(
     let nameA = '';
     let nameB = '';
     for (const log of logs) {
-      const h = log.shiftHours > 0 ? log.shiftHours : 8;
+      const h = SHIFT_HOURS;
       const atA = log.assignments.some(
         (x) => x.assignmentType === 'primary' && x.personId === personAId && x.areaId === aid
       );

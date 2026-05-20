@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import type { DayLogDetail } from '../types';
+import { SHIFT_HOURS } from './dayLogConstants';
 import { aggregatePersonStationMatrix, comparePeopleAtStation } from './dayLogReports';
 
 function makeLog(
   workDate: string,
   assignments: DayLogDetail['assignments'],
-  shiftHours = 8
+  shiftHours = SHIFT_HOURS
 ): DayLogDetail {
   return {
     id: `log-${workDate}`,
@@ -68,7 +69,7 @@ describe('dayLogReports', () => {
     const alexPotting = matrix.find((r) => r.personId === 'a' && r.areaId === 'area_potting');
     const blakePotting = matrix.find((r) => r.personId === 'b' && r.areaId === 'area_potting');
     expect(alexPotting?.days).toBe(2);
-    expect(alexPotting?.estimatedHours).toBe(16);
+    expect(alexPotting?.estimatedHours).toBe(SHIFT_HOURS * 2);
     expect(blakePotting?.days).toBe(1);
   });
 

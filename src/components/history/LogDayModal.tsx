@@ -7,7 +7,7 @@ interface LogDayModalProps {
   error: string | null;
   loggedDates: string[];
   onClose: () => void;
-  onConfirm: (workDate: string, shiftHours: number) => void;
+  onConfirm: (workDate: string) => void;
 }
 
 function todayIso(): string {
@@ -24,7 +24,6 @@ export function LogDayModal({
   onConfirm,
 }: LogDayModalProps) {
   const [workDate, setWorkDate] = useState(todayIso);
-  const [shiftHours, setShiftHours] = useState(8);
   const [confirmReplace, setConfirmReplace] = useState(false);
 
   if (!open) return null;
@@ -74,18 +73,6 @@ export function LogDayModal({
             style={{ width: '100%' }}
           />
         </label>
-        <label style={{ display: 'block', marginBottom: 16 }}>
-          <span style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Shift hours (for time estimates)</span>
-          <input
-            type="number"
-            min={1}
-            max={24}
-            step={0.5}
-            value={shiftHours}
-            onChange={(e) => setShiftHours(Number(e.target.value) || 8)}
-            style={{ width: 80 }}
-          />
-        </label>
         {existingLogForDate && (
           <p style={{ background: '#fff8e1', padding: 10, borderRadius: 6, fontSize: '0.9rem' }}>
             A log already exists for this date. Logging again will replace it.
@@ -104,7 +91,7 @@ export function LogDayModal({
                 setConfirmReplace(true);
                 return;
               }
-              onConfirm(workDate.trim(), shiftHours);
+              onConfirm(workDate.trim());
             }}
           >
             {loading ? 'Saving…' : needsReplaceConfirm ? 'Replace existing log' : 'Log the day'}

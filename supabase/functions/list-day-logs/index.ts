@@ -1,6 +1,7 @@
 import { createAdminClient } from '../_shared/supabaseAdmin.ts';
 import { corsHeadersFor } from '../_shared/cors.ts';
 import { parseWorkDate, verifyLinePassword } from '../_shared/verifyLineAccess.ts';
+import { SHIFT_HOURS } from '../_shared/shiftHours.ts';
 
 Deno.serve(async (req) => {
   const corsHeaders = corsHeadersFor(req);
@@ -83,7 +84,7 @@ Deno.serve(async (req) => {
       id: l.id,
       workDate: l.work_date,
       loggedAt: l.logged_at,
-      shiftHours: Number(l.shift_hours ?? 8),
+      shiftHours: Number(l.shift_hours ?? SHIFT_HOURS),
       assignmentCount: counts.get(l.id as string) ?? 0,
       notes: l.notes ?? null,
     }));

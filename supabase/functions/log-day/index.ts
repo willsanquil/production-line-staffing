@@ -2,6 +2,7 @@ import { createAdminClient } from '../_shared/supabaseAdmin.ts';
 import { corsHeadersFor } from '../_shared/cors.ts';
 import { buildDayLogSnapshotJson, extractDayAssignmentsDb } from '../_shared/dayLogExtract.ts';
 import { parseWorkDate, verifyLinePassword } from '../_shared/verifyLineAccess.ts';
+import { SHIFT_HOURS } from '../_shared/shiftHours.ts';
 
 Deno.serve(async (req) => {
   const corsHeaders = corsHeadersFor(req);
@@ -19,7 +20,7 @@ Deno.serve(async (req) => {
       lineConfig?: unknown;
       lineState?: unknown;
     };
-    const { lineId, password, workDate: workDateRaw, shiftHours, notes, loggedBy, lineConfig, lineState } = body;
+    const { lineId, password, workDate: workDateRaw, notes, loggedBy, lineConfig, lineState } = body;
     if (!lineId || typeof lineId !== 'string' || !password || typeof password !== 'string') {
       return new Response(JSON.stringify({ error: 'lineId and password required' }), {
         status: 400,
@@ -86,8 +87,7 @@ Deno.serve(async (req) => {
       dayNotes: st.dayNotes,
     });
 
-    const hours =
-      typeof shiftHours === 'number' && shiftHours > 0 && shiftHours <= 24 ? shiftHours : 8;
+    const hours = SHIFT_HOURS;
     const nowIso = new Date().toISOString();
     const supabase = createAdminClient();
 

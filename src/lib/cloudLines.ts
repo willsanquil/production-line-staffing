@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient, FunctionsHttpError } from '@supabase/supabase-js';
 import type { DayLogAssignment, DayLogDetail, DayLogSummary, LineConfig, LineState, RootState } from '../types';
 import { buildDayLogExtractInput } from './dayLogExtract';
+import { SHIFT_HOURS } from './dayLogConstants';
 
 /** Get a user-friendly error message from an Edge Function non-2xx response. */
 async function getFunctionErrorMessage(error: unknown, functionName: string): Promise<string> {
@@ -299,7 +300,7 @@ export async function logDay(params: LogDayParams): Promise<{
       lineId: params.lineId,
       password: params.password,
       workDate: params.workDate,
-      shiftHours: params.shiftHours,
+      shiftHours: params.shiftHours ?? SHIFT_HOURS,
       notes: params.notes,
       loggedBy: params.loggedBy,
       lineConfig: params.lineConfig,

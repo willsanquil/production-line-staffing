@@ -1,6 +1,7 @@
 import { createAdminClient } from '../_shared/supabaseAdmin.ts';
 import { corsHeadersFor } from '../_shared/cors.ts';
 import { parseWorkDate, verifyLinePassword } from '../_shared/verifyLineAccess.ts';
+import { SHIFT_HOURS } from '../_shared/shiftHours.ts';
 
 function mapAssignment(row: Record<string, unknown>) {
   return {
@@ -107,7 +108,7 @@ Deno.serve(async (req) => {
           id: log.id,
           workDate: log.work_date,
           loggedAt: log.logged_at,
-          shiftHours: Number(log.shift_hours ?? 8),
+          shiftHours: Number(log.shift_hours ?? SHIFT_HOURS),
           notes: log.notes ?? null,
           loggedBy: log.logged_by ?? null,
           assignmentCount: (assignmentRows ?? []).length,
