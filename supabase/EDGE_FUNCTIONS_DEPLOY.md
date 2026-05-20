@@ -36,6 +36,15 @@ npx supabase functions deploy get-line-state
 npx supabase functions deploy set-line-state
 npx supabase functions deploy delete-line
 npx supabase functions deploy viewer-presence
+npx supabase functions deploy log-day
+npx supabase functions deploy list-day-logs
+npx supabase functions deploy get-day-log
+```
+
+Or deploy all at once:
+
+```bash
+npx supabase functions deploy
 ```
 
 Wait until each command reports success.
@@ -51,6 +60,11 @@ Supabase Dashboard → **Edge Functions**. You should see:
 - set-line-state  
 - delete-line  
 - viewer-presence  
+- log-day  
+- list-day-logs  
+- get-day-log  
+
+Apply the day-log migration `supabase/migrations/20260601000000_cloud_line_day_logs.sql` in the SQL Editor before using **Log the day** / **History**.
 
 ## 5. Same project as the app
 

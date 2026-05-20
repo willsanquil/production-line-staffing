@@ -2,6 +2,7 @@ import { createAdminClient } from '../_shared/supabaseAdmin.ts';
 import { verifyPassword } from '../_shared/password.ts';
 import { corsHeadersFor } from '../_shared/cors.ts';
 import { validateRootStatePayload } from '../_shared/rootStateValidation.ts';
+import { isMissingViewerColumnsSchemaError } from '../_shared/viewerSchema.ts';
 
 const VIEWER_STALE_MS = 10 * 60 * 1000;
 
@@ -67,11 +68,32 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { data: existingData, error: errExisting } = await supabase
+    const fullExisting = await supabase
       .from('cloud_line_data')
       .select('version, viewer_session_id, viewer_heartbeat_at')
       .eq('line_id', lineId)
       .single();
+
+    let existingData = fullExisting.data as
+      | { version: number | null; viewer_session_id: string | null; viewer_heartbeat_at: string | null }
+      | null;
+    let errExisting = fullExisting.error;
+
+    if (errExisting && isMissingViewerColumnsSchemaError(errExisting)) {
+      const legacy = await supabase.from('cloud_line_data').select('version').eq('line_id', lineId).single();
+      if (legacy.data) {
+        existingData = {
+          version: legacy.data.version,
+          viewer_session_id: null,
+          viewer_heartbeat_at: null,
+        };
+        errExisting = null;
+      } else {
+        existingData = null;
+        errExisting = legacy.error;
+      }
+    }
+
     if (errExisting || !existingData) {
       return new Response(
         JSON.stringify({ error: 'Line data not found' }),

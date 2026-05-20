@@ -287,3 +287,34 @@ export interface RootState {
   lines: LineConfig[];
   lineStates: Record<string, LineState>;
 }
+
+/** Cloud day log assignment fact (from get-day-log). */
+export type DayLogAssignmentType = 'primary' | 'lead' | 'float_cover';
+
+export interface DayLogAssignment {
+  personId: string;
+  personName: string;
+  assignmentType: DayLogAssignmentType;
+  areaId: string;
+  areaName: string;
+  slotIndex: number | null;
+  slotLabel: string | null;
+  breakRotation: number | null;
+  lunchRotation: number | null;
+  skillLevel: SkillLevel | null;
+}
+
+export interface DayLogSummary {
+  id: string;
+  workDate: string;
+  loggedAt: string;
+  shiftHours: number;
+  assignmentCount: number;
+  notes?: string | null;
+}
+
+export interface DayLogDetail extends DayLogSummary {
+  loggedBy?: string | null;
+  snapshot: Record<string, unknown>;
+  assignments: DayLogAssignment[];
+}

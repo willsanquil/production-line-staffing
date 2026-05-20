@@ -1,6 +1,7 @@
 import { createAdminClient } from '../_shared/supabaseAdmin.ts';
 import { verifyPassword } from '../_shared/password.ts';
 import { corsHeadersFor } from '../_shared/cors.ts';
+import { isMissingViewerColumnsSchemaError } from '../_shared/viewerSchema.ts';
 
 /** Must match client idle kick and set-line-state editor check. */
 const VIEWER_STALE_MS = 10 * 60 * 1000;
@@ -65,7 +66,21 @@ Deno.serve(async (req) => {
       .select('viewer_session_id, viewer_heartbeat_at')
       .eq('line_id', lineId)
       .single();
+
     if (errData || !row) {
+      if (errData && isMissingViewerColumnsSchemaError(errData)) {
+        const leg = await supabase.from('cloud_line_data').select('line_id').eq('line_id', lineId).maybeSingle();
+        if (leg.data) {
+          if (act === 'release') {
+            return new Response(JSON.stringify({ ok: true, role: 'released' }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ ok: true, role: 'editor' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
       return new Response(JSON.stringify({ error: 'Line data not found' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

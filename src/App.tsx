@@ -74,7 +74,10 @@ import { synthesizeCoverageFloats, mirrorVirtualFloatBreaksToStations } from './
 import { clearAreaAssignments } from './lib/slots';
 import { loadSavedDays, addSavedDay, removeSavedDay, exportStateToJson, importStateFromJson } from './lib/persist';
 import { saveToFile, overwriteFile, openFromFile, isSaveToFileSupported } from './lib/fileStorage';
-import { getLineState, createCloudLine, deleteCloudLine, listCloudLines } from './lib/cloudLines';
+import { getLineState, createCloudLine, deleteCloudLine, listCloudLines, logDay, listDayLogs } from './lib/cloudLines';
+import type { DayLogSummary } from './types';
+import { LogDayModal } from './components/history/LogDayModal';
+import { HistoryReportsView } from './components/history/HistoryReportsView';
 import { getCloudSession, setCloudSession, clearCloudSession } from './lib/cloudSession';
 import { clearCloudViewerSession } from './lib/cloudViewerSession';
 import { BreakTable } from './components/BreakTable';
@@ -137,7 +140,11 @@ export default function App() {
   const cloudPasswordRef = useRef<string | null>(null);
 
   const [rootState, setRootState] = useState(rootInitial);
-  const [view, setView] = useState<'staffing' | 'line-manager' | 'build-line'>('staffing');
+  const [view, setView] = useState<'staffing' | 'line-manager' | 'build-line' | 'history'>('staffing');
+  const [logDayOpen, setLogDayOpen] = useState(false);
+  const [logDayLoading, setLogDayLoading] = useState(false);
+  const [logDayError, setLogDayError] = useState<string | null>(null);
+  const [dayLogSummaries, setDayLogSummaries] = useState<DayLogSummary[]>([]);
 
   const [slots, setSlots] = useState(firstLineState.slots);
   const [leadSlots, setLeadSlots] = useState(firstLineState.leadSlots);
@@ -1560,6 +1567,60 @@ export default function App() {
     });
   }, [cloudLineId]);
 
+  const refreshDayLogSummaries = useCallback(async () => {
+    if (!cloudLineId || !cloudPasswordRef.current) return;
+    try {
+      const logs = await listDayLogs(cloudLineId, cloudPasswordRef.current);
+      setDayLogSummaries(logs);
+    } catch {
+      setDayLogSummaries([]);
+    }
+  }, [cloudLineId]);
+
+  const handleOpenLogDay = useCallback(() => {
+    setLogDayError(null);
+    setLogDayOpen(true);
+    void refreshDayLogSummaries();
+  }, [refreshDayLogSummaries]);
+
+  const handleLogDayConfirm = useCallback(
+    async (workDate: string, shiftHours: number) => {
+      if (!cloudLineId || !cloudPasswordRef.current || !effectiveConfig) return;
+      setLogDayLoading(true);
+      setLogDayError(null);
+      try {
+        const lineState = rootState.lineStates[rootState.currentLineId];
+        if (!lineState) throw new Error('No line state to log');
+        const res = await logDay({
+          lineId: cloudLineId,
+          password: cloudPasswordRef.current,
+          workDate,
+          shiftHours,
+          lineConfig: effectiveConfig,
+          lineState: {
+            roster: lineState.roster,
+            slots: lineState.slots,
+            leadSlots: lineState.leadSlots,
+            breakSchedules: lineState.breakSchedules,
+            areaNameOverrides: lineState.areaNameOverrides,
+            slotLabelsByArea: lineState.slotLabelsByArea,
+            juicedAreas: lineState.juicedAreas,
+            dayNotes: lineState.dayNotes,
+          },
+          notes: lineState.dayNotes,
+        });
+        setSaveMessage(`Logged ${workDate} (${res.assignmentCount} assignments)`);
+        setLogDayOpen(false);
+        void refreshDayLogSummaries();
+      } catch (e) {
+        setLogDayError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLogDayLoading(false);
+      }
+    },
+    [cloudLineId, effectiveConfig, refreshDayLogSummaries, rootState]
+  );
+
   const handleOpenImportModal = useCallback(() => {
     setImportLineId('');
     setImportPassword('');
@@ -1734,6 +1795,17 @@ export default function App() {
       <div style={{ padding: 48, textAlign: 'center' }}>
         <p>Loading group line…</p>
       </div>
+    );
+  }
+
+  if (view === 'history' && cloudLineId && effectiveConfig && cloudPasswordRef.current) {
+    return (
+      <HistoryReportsView
+        lineId={cloudLineId}
+        password={cloudPasswordRef.current}
+        lineConfig={effectiveConfig}
+        onBack={() => setView('staffing')}
+      />
     );
   }
 
@@ -1959,6 +2031,12 @@ export default function App() {
           </button>
           {cloudLineId && (
             <>
+              <button type="button" className="cloud-readonly-exempt" onClick={handleOpenLogDay}>
+                Log the day
+              </button>
+              <button type="button" className="cloud-readonly-exempt" onClick={() => setView('history')}>
+                History
+              </button>
               <button type="button" className="cloud-readonly-exempt" onClick={handleLeaveLine}>
                 Leave line
               </button>
@@ -1985,6 +2063,18 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {cloudLineId && effectiveConfig && (
+        <LogDayModal
+          lineName={effectiveConfig.name}
+          open={logDayOpen}
+          loading={logDayLoading}
+          error={logDayError}
+          loggedDates={dayLogSummaries.map((s) => s.workDate)}
+          onClose={() => setLogDayOpen(false)}
+          onConfirm={(workDate, shiftHours) => void handleLogDayConfirm(workDate, shiftHours)}
+        />
+      )}
 
       {appMode === 'app' && cloudLineId && cloudViewerRole === 'readonly' && (
         <div

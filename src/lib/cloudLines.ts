@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient, FunctionsHttpError } from '@supabase/supabase-js';
-import type { RootState } from '../types';
+import type { DayLogAssignment, DayLogDetail, DayLogSummary, LineConfig, LineState, RootState } from '../types';
+import { buildDayLogExtractInput } from './dayLogExtract';
 
 /** Get a user-friendly error message from an Edge Function non-2xx response. */
 async function getFunctionErrorMessage(error: unknown, functionName: string): Promise<string> {
@@ -27,6 +28,18 @@ async function getFunctionErrorMessage(error: unknown, functionName: string): Pr
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+
+/** Subdomain from `https://xxxx.supabase.co` for troubleshooting deploy vs env mismatches. */
+export function getConfiguredSupabaseProjectRef(): string {
+  if (!supabaseUrl) return '(VITE_SUPABASE_URL not set)';
+  try {
+    const host = new URL(supabaseUrl).hostname;
+    const m = /^([^.]+)\.supabase\.co$/i.exec(host);
+    return m?.[1] ?? host;
+  } catch {
+    return '(invalid VITE_SUPABASE_URL)';
+  }
+}
 
 let client: SupabaseClient | null = null;
 
@@ -116,10 +129,21 @@ export async function getLineState(
     body: { lineId, password },
   });
   if (error) {
-    const message = await getFunctionErrorMessage(error, 'get-line-state');
+    let message = await getFunctionErrorMessage(error, 'get-line-state');
+    if (message.includes('Line data not found')) {
+      const ref = getConfiguredSupabaseProjectRef();
+      message += ` Your app is using Supabase project "${ref}". After \`npx supabase functions deploy\`, the dashboard URL must show that same id (Settings → API → Project URL). If the id differs, update Vercel env VITE_SUPABASE_URL and redeploy the site, or run \`npx supabase link --project-ref ${ref}\` in this repo and deploy again.`;
+    }
     throw new Error(message);
   }
-  if (data?.error) throw new Error(data.error);
+  if (data?.error) {
+    let m = data.error;
+    if (m.includes('Line data not found')) {
+      const ref = getConfiguredSupabaseProjectRef();
+      m += ` Your app is using Supabase project "${ref}". That id must match the project you deploy functions to.`;
+    }
+    throw new Error(m);
+  }
   if (!data?.rootState) throw new Error('Invalid response from get-line-state');
   return {
     rootState: data.rootState as RootState,
@@ -235,4 +259,119 @@ export async function viewerPresence(
   }
   if (data?.error) throw new Error(data.error);
   return { role: data?.role, ok: data?.ok };
+}
+
+export interface LogDayParams {
+  lineId: string;
+  password: string;
+  workDate: string;
+  lineConfig: LineConfig;
+  lineState: Pick<
+    LineState,
+    | 'roster'
+    | 'slots'
+    | 'leadSlots'
+    | 'breakSchedules'
+    | 'areaNameOverrides'
+    | 'slotLabelsByArea'
+    | 'juicedAreas'
+    | 'dayNotes'
+  >;
+  shiftHours?: number;
+  notes?: string;
+  loggedBy?: string;
+}
+
+export async function logDay(params: LogDayParams): Promise<{
+  logId: string;
+  workDate: string;
+  assignmentCount: number;
+}> {
+  const supabase = getClient();
+  const { data, error } = await supabase.functions.invoke<{
+    ok?: boolean;
+    logId?: string;
+    workDate?: string;
+    assignmentCount?: number;
+    error?: string;
+  }>('log-day', {
+    body: {
+      lineId: params.lineId,
+      password: params.password,
+      workDate: params.workDate,
+      shiftHours: params.shiftHours,
+      notes: params.notes,
+      loggedBy: params.loggedBy,
+      lineConfig: params.lineConfig,
+      lineState: params.lineState,
+    },
+  });
+  if (error) {
+    const message = await getFunctionErrorMessage(error, 'log-day');
+    throw new Error(message);
+  }
+  if (data?.error) throw new Error(data.error);
+  if (!data?.logId) throw new Error('Invalid response from log-day');
+  return {
+    logId: data.logId,
+    workDate: data.workDate ?? params.workDate,
+    assignmentCount: data.assignmentCount ?? 0,
+  };
+}
+
+/** Convenience: build extract input from config + state. */
+export function prepareLogDayPayload(lineConfig: LineConfig, lineState: LogDayParams['lineState']) {
+  return buildDayLogExtractInput(lineConfig, lineState);
+}
+
+export async function listDayLogs(
+  lineId: string,
+  password: string,
+  fromDate?: string,
+  toDate?: string
+): Promise<DayLogSummary[]> {
+  const supabase = getClient();
+  const { data, error } = await supabase.functions.invoke<{ logs?: DayLogSummary[]; error?: string }>(
+    'list-day-logs',
+    { body: { lineId, password, fromDate, toDate } }
+  );
+  if (error) {
+    const message = await getFunctionErrorMessage(error, 'list-day-logs');
+    throw new Error(message);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data?.logs ?? [];
+}
+
+export async function getDayLog(
+  lineId: string,
+  password: string,
+  opts: { logId?: string; workDate?: string }
+): Promise<DayLogDetail> {
+  const supabase = getClient();
+  const { data, error } = await supabase.functions.invoke<{
+    log?: DayLogDetail & { snapshot?: Record<string, unknown> };
+    assignments?: DayLogAssignment[];
+    error?: string;
+  }>('get-day-log', {
+    body: { lineId, password, logId: opts.logId, workDate: opts.workDate },
+  });
+  if (error) {
+    const message = await getFunctionErrorMessage(error, 'get-day-log');
+    throw new Error(message);
+  }
+  if (data?.error) throw new Error(data.error);
+  if (!data?.log) throw new Error('Day log not found');
+  const log = data.log;
+  return {
+    id: log.id,
+    workDate: log.workDate,
+    loggedAt: log.loggedAt,
+    shiftHours: log.shiftHours,
+    assignmentCount: log.assignmentCount ?? (data.assignments?.length ?? 0),
+    notes: log.notes ?? null,
+    loggedBy: log.loggedBy ?? null,
+    snapshot: log.snapshot ?? {},
+    assignments: data.assignments ?? [],
+  };
 }

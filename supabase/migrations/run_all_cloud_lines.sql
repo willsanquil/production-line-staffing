@@ -30,6 +30,11 @@ alter table public.cloud_lines enable row level security;
 alter table public.cloud_line_data enable row level security;
 alter table public.cloud_line_revisions enable row level security;
 
+-- Safe to re-run: 42710 duplicate_object if policies already exist.
+drop policy if exists "No anon access" on public.cloud_lines;
+drop policy if exists "No anon access" on public.cloud_line_data;
+drop policy if exists "No anon access" on public.cloud_line_revisions;
+
 create policy "No anon access" on public.cloud_lines for all using (false);
 create policy "No anon access" on public.cloud_line_data for all using (false);
 create policy "No anon access" on public.cloud_line_revisions for all using (false);

@@ -14,6 +14,7 @@ create table if not exists public.cloud_line_revisions (
 
 alter table public.cloud_line_revisions enable row level security;
 
+drop policy if exists "No anon access" on public.cloud_line_revisions;
 create policy "No anon access" on public.cloud_line_revisions for all using (false);
 
 comment on table public.cloud_line_revisions is 'Append-only cloud line snapshots for recovery and audit.';
