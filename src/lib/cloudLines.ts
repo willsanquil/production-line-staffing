@@ -24,7 +24,12 @@ async function getFunctionErrorMessage(error: unknown, functionName: string): Pr
   if (typeof status === 'number') {
     return `(${status}) Check Supabase Dashboard → Edge Functions → ${functionName} → Logs.`;
   }
-  return error instanceof Error ? error.message : String(error);
+  const raw = error instanceof Error ? error.message : String(error);
+  if (raw.includes('Failed to send a request')) {
+    const ref = getConfiguredSupabaseProjectRef();
+    return `${raw} The "${functionName}" function may not be deployed on project "${ref}". From the repo folder run: npx supabase functions deploy ${functionName} (or npx supabase functions deploy for all). For log-day, also run migration 20260601000000_cloud_line_day_logs.sql in the SQL Editor.`;
+  }
+  return raw;
 }
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
