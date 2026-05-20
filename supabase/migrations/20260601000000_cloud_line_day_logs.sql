@@ -52,3 +52,6 @@ create policy "No anon access" on public.cloud_line_day_assignments for all usin
 
 comment on table public.cloud_line_day_logs is 'One logged snapshot per cloud line per calendar work day.';
 comment on table public.cloud_line_day_assignments is 'Normalized person–station facts for analytics (primary slot + leads).';
+
+-- Let PostgREST / Supabase API see new tables immediately (fixes "schema cache" errors).
+notify pgrst, 'reload schema';

@@ -26,4 +26,11 @@ If `cloud_line_data` does not yet have `viewer_session_id` / `viewer_heartbeat_a
 
 Run **`migrations/20260601000000_cloud_line_day_logs.sql`** to create `cloud_line_day_logs` and `cloud_line_day_assignments`. Then deploy the `log-day`, `list-day-logs`, and `get-day-log` Edge Functions (see `EDGE_FUNCTIONS_DEPLOY.md`).
 
+### Still seeing "Day log tables are missing"?
+
+1. Confirm you ran SQL on the **same** project as your app: Vercel → `VITE_SUPABASE_URL` must be `https://YOUR_REF.supabase.co` (same ref as in the Supabase dashboard URL).
+2. In SQL Editor, run **`scripts/verify_and_fix_day_log_tables.sql`**. You should see **two** table names. If you see zero, run the full day-log migration file again.
+3. If you see two tables but the app still fails, the script runs `NOTIFY pgrst, 'reload schema';` — wait a few seconds and try **Log the day** again.
+4. Optional: Supabase Dashboard → **Project Settings** → **API** → reload schema / restart if your project offers it.
+
 Done. Deploy Edge Functions when the app expects them; see README for `ALLOWED_ORIGINS` if you lock down CORS.
