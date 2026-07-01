@@ -3,6 +3,8 @@ import { corsHeadersFor } from '../_shared/cors.ts';
 import { buildDayLogSnapshotJson, extractDayAssignmentsDb } from '../_shared/dayLogExtract.ts';
 import { parseWorkDate, verifyLinePassword } from '../_shared/verifyLineAccess.ts';
 import { SHIFT_HOURS } from '../_shared/shiftHours.ts';
+import { formatDbError, formatPostgresJsError } from '../_shared/pgError.ts';
+import { hasDirectDbUrl, saveDayLogPostgres } from '../_shared/dayLogPostgres.ts';
 
 Deno.serve(async (req) => {
   const corsHeaders = corsHeadersFor(req);
@@ -87,36 +89,95 @@ Deno.serve(async (req) => {
       dayNotes: st.dayNotes,
     });
 
+    const notesVal = typeof notes === 'string' ? notes : st.dayNotes ?? null;
+    const loggedByVal = typeof loggedBy === 'string' ? loggedBy : null;
+
+    if (hasDirectDbUrl()) {
+      try {
+        const { logId, assignmentCount } = await saveDayLogPostgres(lineId, workDate, snapshot, assignments, {
+          loggedBy: loggedByVal,
+          notes: notesVal,
+          shiftHours: SHIFT_HOURS,
+        });
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            logId,
+            workDate,
+            assignmentCount,
+            replaced: true,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (e) {
+        console.error('log-day postgres failed', e);
+        return new Response(JSON.stringify(formatPostgresJsError(e)), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     const hours = SHIFT_HOURS;
     const nowIso = new Date().toISOString();
     const supabase = createAdminClient();
 
-    const { data: logRow, error: upsertErr } = await supabase
-      .from('cloud_line_day_logs')
-      .upsert(
-        {
-          line_id: lineId,
-          work_date: workDate,
-          logged_at: nowIso,
-          logged_by: typeof loggedBy === 'string' ? loggedBy : null,
-          shift_hours: hours,
-          snapshot,
-          notes: typeof notes === 'string' ? notes : st.dayNotes ?? null,
-        },
-        { onConflict: 'line_id,work_date' }
-      )
-      .select('id')
-      .single();
+    const rowPayload = {
+      line_id: lineId,
+      work_date: workDate,
+      logged_at: nowIso,
+      logged_by: loggedByVal,
+      shift_hours: hours,
+      snapshot,
+      notes: notesVal,
+    };
 
-    if (upsertErr || !logRow?.id) {
-      console.error('log-day upsert failed', upsertErr);
-      return new Response(JSON.stringify({ error: 'Could not save day log' }), {
+    const { data: existing, error: existErr } = await supabase
+      .from('cloud_line_day_logs')
+      .select('id')
+      .eq('line_id', lineId)
+      .eq('work_date', workDate)
+      .maybeSingle();
+
+    if (existErr) {
+      console.error('log-day lookup failed', existErr);
+      return new Response(JSON.stringify(formatDbError(existErr)), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const logId = logRow.id as string;
+    let logId: string;
+    if (existing?.id) {
+      const { data: updated, error: updErr } = await supabase
+        .from('cloud_line_day_logs')
+        .update(rowPayload)
+        .eq('id', existing.id)
+        .select('id')
+        .single();
+      if (updErr || !updated?.id) {
+        console.error('log-day update failed', updErr);
+        return new Response(JSON.stringify(formatDbError(updErr)), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      logId = updated.id as string;
+    } else {
+      const { data: inserted, error: insErr } = await supabase
+        .from('cloud_line_day_logs')
+        .insert(rowPayload)
+        .select('id')
+        .single();
+      if (insErr || !inserted?.id) {
+        console.error('log-day insert failed', insErr);
+        return new Response(JSON.stringify(formatDbError(insErr)), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      logId = inserted.id as string;
+    }
     await supabase.from('cloud_line_day_assignments').delete().eq('log_id', logId);
 
     if (assignments.length > 0) {
@@ -130,7 +191,9 @@ Deno.serve(async (req) => {
       );
       if (insErr) {
         console.error('log-day assignments insert failed', insErr);
-        return new Response(JSON.stringify({ error: 'Could not save assignments' }), {
+        const errBody = formatDbError(insErr);
+        errBody.error = 'Could not save assignments';
+        return new Response(JSON.stringify(errBody), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });

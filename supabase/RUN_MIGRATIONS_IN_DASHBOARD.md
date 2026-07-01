@@ -24,7 +24,7 @@ If `cloud_line_data` does not yet have `viewer_session_id` / `viewer_heartbeat_a
 
 ## Day logs (Log the day / History & reports)
 
-Run **`migrations/20260601000000_cloud_line_day_logs.sql`** to create `cloud_line_day_logs` and `cloud_line_day_assignments`. Then deploy the `log-day`, `list-day-logs`, and `get-day-log` Edge Functions (see `EDGE_FUNCTIONS_DEPLOY.md`).
+Run **`migrations/20260601000000_cloud_line_day_logs.sql`** to create `cloud_line_day_logs` and `cloud_line_day_assignments`. Then deploy the day-log Edge Functions: `log-day`, `list-day-logs`, `get-day-log`, `delete-day-log` (see `EDGE_FUNCTIONS_DEPLOY.md`).
 
 ### Still seeing "Day log tables are missing"?
 

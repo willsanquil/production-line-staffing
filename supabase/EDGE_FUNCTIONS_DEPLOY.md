@@ -39,6 +39,7 @@ npx supabase functions deploy viewer-presence
 npx supabase functions deploy log-day
 npx supabase functions deploy list-day-logs
 npx supabase functions deploy get-day-log
+npx supabase functions deploy delete-day-log
 ```
 
 Or deploy all at once:
@@ -62,7 +63,8 @@ Supabase Dashboard → **Edge Functions**. You should see:
 - viewer-presence  
 - log-day  
 - list-day-logs  
-- get-day-log  
+- get-day-log
+- delete-day-log  
 
 Apply the day-log migration `supabase/migrations/20260601000000_cloud_line_day_logs.sql` in the SQL Editor before using **Log the day** / **History**.
 

@@ -2,6 +2,8 @@ import { createAdminClient } from '../_shared/supabaseAdmin.ts';
 import { corsHeadersFor } from '../_shared/cors.ts';
 import { parseWorkDate, verifyLinePassword } from '../_shared/verifyLineAccess.ts';
 import { SHIFT_HOURS } from '../_shared/shiftHours.ts';
+import { formatPostgresJsError } from '../_shared/pgError.ts';
+import { hasDirectDbUrl, listDayLogsPostgres } from '../_shared/dayLogPostgres.ts';
 
 Deno.serve(async (req) => {
   const corsHeaders = corsHeadersFor(req);
@@ -44,6 +46,21 @@ Deno.serve(async (req) => {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    if (hasDirectDbUrl()) {
+      try {
+        const logs = await listDayLogsPostgres(lineId, fromDate, toDate);
+        return new Response(JSON.stringify({ logs }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (e) {
+        console.error('list-day-logs postgres failed', e);
+        return new Response(JSON.stringify(formatPostgresJsError(e)), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     const supabase = createAdminClient();

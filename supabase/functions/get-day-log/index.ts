@@ -2,6 +2,8 @@ import { createAdminClient } from '../_shared/supabaseAdmin.ts';
 import { corsHeadersFor } from '../_shared/cors.ts';
 import { parseWorkDate, verifyLinePassword } from '../_shared/verifyLineAccess.ts';
 import { SHIFT_HOURS } from '../_shared/shiftHours.ts';
+import { formatPostgresJsError } from '../_shared/pgError.ts';
+import { getDayLogPostgres, hasDirectDbUrl } from '../_shared/dayLogPostgres.ts';
 
 function mapAssignment(row: Record<string, unknown>) {
   return {
@@ -50,6 +52,43 @@ Deno.serve(async (req) => {
         status: auth.status,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    if (hasDirectDbUrl()) {
+      const workDate =
+        !logId && workDateRaw ? parseWorkDate(workDateRaw) : null;
+      if (!logId && workDateRaw && !workDate) {
+        return new Response(JSON.stringify({ error: 'workDate must be YYYY-MM-DD' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      try {
+        const result = await getDayLogPostgres(
+          lineId,
+          logId && typeof logId === 'string' ? logId : null,
+          workDate
+        );
+        if (!result) {
+          return new Response(JSON.stringify({ error: 'Day log not found' }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            log: result.log,
+            assignments: result.assignments.map((r) => mapAssignment(r)),
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (e) {
+        console.error('get-day-log postgres failed', e);
+        return new Response(JSON.stringify(formatPostgresJsError(e)), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     const supabase = createAdminClient();

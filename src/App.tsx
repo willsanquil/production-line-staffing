@@ -77,6 +77,7 @@ import { saveToFile, overwriteFile, openFromFile, isSaveToFileSupported } from '
 import { getLineState, createCloudLine, deleteCloudLine, listCloudLines, logDay, listDayLogs } from './lib/cloudLines';
 import type { DayLogSummary } from './types';
 import { LogDayModal } from './components/history/LogDayModal';
+import { LogDayPromptModal } from './components/history/LogDayPromptModal';
 import { SHIFT_HOURS } from './lib/dayLogConstants';
 import { HistoryReportsView } from './components/history/HistoryReportsView';
 import { getCloudSession, setCloudSession, clearCloudSession } from './lib/cloudSession';
@@ -143,6 +144,7 @@ export default function App() {
   const [rootState, setRootState] = useState(rootInitial);
   const [view, setView] = useState<'staffing' | 'line-manager' | 'build-line' | 'history'>('staffing');
   const [logDayOpen, setLogDayOpen] = useState(false);
+  const [logDayAfterCopyOpen, setLogDayAfterCopyOpen] = useState(false);
   const [logDayLoading, setLogDayLoading] = useState(false);
   const [logDayError, setLogDayError] = useState<string | null>(null);
   const [dayLogSummaries, setDayLogSummaries] = useState<DayLogSummary[]>([]);
@@ -1584,6 +1586,10 @@ export default function App() {
     void refreshDayLogSummaries();
   }, [refreshDayLogSummaries]);
 
+  const handleCopyForTeamsSuccess = useCallback(() => {
+    if (cloudLineId) setLogDayAfterCopyOpen(true);
+  }, [cloudLineId]);
+
   const handleLogDayConfirm = useCallback(
     async (workDate: string) => {
       if (!cloudLineId || !cloudPasswordRef.current || !effectiveConfig) return;
@@ -2016,8 +2022,31 @@ export default function App() {
             linkedSlotsByArea={presentationLinkedSlots}
             areaBreakCoverageEnabled={areaBreakCoverageEnabled}
             slotBreakCoverageEnabled={slotBreakCoverageEnabled}
+            onCopyForTeamsSuccess={cloudLineId ? handleCopyForTeamsSuccess : undefined}
           />
         </Suspense>
+        {cloudLineId && effectiveConfig && (
+          <>
+            <LogDayPromptModal
+              open={logDayAfterCopyOpen}
+              lineName={effectiveConfig.name}
+              onNo={() => setLogDayAfterCopyOpen(false)}
+              onYes={() => {
+                setLogDayAfterCopyOpen(false);
+                handleOpenLogDay();
+              }}
+            />
+            <LogDayModal
+              lineName={effectiveConfig.name}
+              open={logDayOpen}
+              loading={logDayLoading}
+              error={logDayError}
+              loggedDates={dayLogSummaries.map((s) => s.workDate)}
+              onClose={() => setLogDayOpen(false)}
+              onConfirm={(workDate) => void handleLogDayConfirm(workDate)}
+            />
+          </>
+        )}
       </>
     );
   }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { DayLogDetail, DayLogSummary, LineConfig } from '../../types';
-import { getDayLog, listDayLogs } from '../../lib/cloudLines';
+import { deleteDayLog, getDayLog, listDayLogs } from '../../lib/cloudLines';
 import {
   aggregatePersonStationMatrix,
   aggregateStationTotals,
@@ -25,9 +25,11 @@ export function HistoryReportsView({ lineId, password, lineConfig, onBack }: His
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [summaries, setSummaries] = useState<DayLogSummary[]>([]);
-  const [selectedWorkDate, setSelectedWorkDate] = useState<string | null>(null);
+  const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
   const [dayDetail, setDayDetail] = useState<DayLogDetail | null>(null);
   const [dayLoading, setDayLoading] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [fromDate, setFromDate] = useState(() => defaultDateRangeDays(30).fromDate);
   const [toDate, setToDate] = useState(() => defaultDateRangeDays(30).toDate);
@@ -43,8 +45,8 @@ export function HistoryReportsView({ lineId, password, lineConfig, onBack }: His
     try {
       const logs = await listDayLogs(lineId, password);
       setSummaries(logs);
-      if (logs.length > 0 && !selectedWorkDate) {
-        setSelectedWorkDate(logs[0].workDate);
+      if (logs.length > 0 && !selectedLogId) {
+        setSelectedLogId(logs[0].id);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -58,13 +60,13 @@ export function HistoryReportsView({ lineId, password, lineConfig, onBack }: His
   }, [loadSummaries]);
 
   useEffect(() => {
-    if (!selectedWorkDate) {
+    if (!selectedLogId) {
       setDayDetail(null);
       return;
     }
     let cancelled = false;
     setDayLoading(true);
-    getDayLog(lineId, password, { workDate: selectedWorkDate })
+    getDayLog(lineId, password, { logId: selectedLogId })
       .then((d) => {
         if (!cancelled) setDayDetail(d);
       })
@@ -77,7 +79,32 @@ export function HistoryReportsView({ lineId, password, lineConfig, onBack }: His
     return () => {
       cancelled = true;
     };
-  }, [lineId, password, selectedWorkDate]);
+  }, [lineId, password, selectedLogId]);
+
+  const handleDeleteLog = useCallback(async () => {
+    if (!selectedLogId) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteDayLog(lineId, password, { logId: selectedLogId });
+      const remaining = summaries.filter((s) => s.id !== selectedLogId);
+      setSummaries(remaining);
+      setSelectedLogId(remaining[0]?.id ?? null);
+      setDayDetail(null);
+      setDeleteConfirm(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeleting(false);
+    }
+  }, [lineId, password, selectedLogId, summaries]);
+
+  const formatWorkDateLabel = (iso: string) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+    if (!m) return iso;
+    const d = new Date(`${m[1]}-${m[2]}-${m[3]}T12:00:00Z`);
+    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  };
 
   const loadReports = useCallback(async () => {
     setReportsLoading(true);
@@ -152,19 +179,49 @@ export function HistoryReportsView({ lineId, password, lineConfig, onBack }: His
             <p>No logged days yet. Use &quot;Log the day&quot; on the staffing screen to save a snapshot.</p>
           ) : (
             <>
-              <label style={{ display: 'block', marginBottom: 12 }}>
-                <span style={{ fontWeight: 600, marginRight: 8 }}>Logged date</span>
-                <select
-                  value={selectedWorkDate ?? ''}
-                  onChange={(e) => setSelectedWorkDate(e.target.value)}
-                >
-                  {summaries.map((s) => (
-                    <option key={s.id} value={s.workDate}>
-                      {s.workDate} ({s.assignmentCount} assignments)
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+                <label style={{ margin: 0 }}>
+                  <span style={{ fontWeight: 600, marginRight: 8 }}>Logged date</span>
+                  <select
+                    value={selectedLogId ?? ''}
+                    onChange={(e) => {
+                      setSelectedLogId(e.target.value);
+                      setDeleteConfirm(false);
+                    }}
+                  >
+                    {summaries.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {formatWorkDateLabel(s.workDate)} ({s.assignmentCount} assignments)
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {!deleteConfirm ? (
+                  <button
+                    type="button"
+                    className="btn-danger"
+                    onClick={() => setDeleteConfirm(true)}
+                    disabled={deleting}
+                  >
+                    Delete this log
+                  </button>
+                ) : (
+                  <span style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.9rem', color: '#a00' }}>Delete permanently?</span>
+                    <button type="button" onClick={() => setDeleteConfirm(false)} disabled={deleting}>
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-danger"
+                      onClick={() => void handleDeleteLog()}
+                      disabled={deleting}
+                    >
+                      {deleting ? 'Deleting…' : 'Confirm delete'}
+                    </button>
+                  </span>
+                )}
+              </div>
               {dayLoading && <p>Loading day…</p>}
               {dayDetail && !dayLoading && (
                 <>

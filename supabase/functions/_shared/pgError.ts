@@ -47,3 +47,16 @@ export function formatDbError(err: { code?: string; message?: string; details?: 
 
   return { error: 'Could not save day log', details: msg };
 }
+
+/** postgres.js throws objects with code / message. */
+export function formatPostgresJsError(e: unknown): {
+  error: string;
+  details?: string;
+  hint?: string;
+} {
+  if (e && typeof e === 'object') {
+    const o = e as { code?: string; message?: string };
+    return formatDbError({ code: o.code, message: o.message ?? String(e) });
+  }
+  return { error: 'Database error', details: String(e) };
+}

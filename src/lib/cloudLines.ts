@@ -3,13 +3,32 @@ import type { DayLogAssignment, DayLogDetail, DayLogSummary, LineConfig, LineSta
 import { buildDayLogExtractInput } from './dayLogExtract';
 import { SHIFT_HOURS } from './dayLogConstants';
 
+/** Normalize API work_date values to YYYY-MM-DD (handles legacy "Wed May 20" strings). */
+function normalizeWorkDate(value: string): string {
+  const iso = /^(\d{4}-\d{2}-\d{2})/.exec(value);
+  if (iso) return iso[1];
+  const d = new Date(value);
+  if (!Number.isNaN(d.getTime())) {
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  return value;
+}
+
 /** Get a user-friendly error message from an Edge Function non-2xx response. */
 async function getFunctionErrorMessage(error: unknown, functionName: string): Promise<string> {
   const response = error instanceof FunctionsHttpError ? error.context : null;
   if (response && typeof response.json === 'function') {
     try {
-      const body = (await response.json()) as { error?: string };
-      if (body?.error && typeof body.error === 'string') return body.error;
+      const body = (await response.json()) as { error?: string; details?: string; hint?: string };
+      if (body?.error && typeof body.error === 'string') {
+        const parts = [body.error];
+        if (body.details) parts.push(body.details);
+        if (body.hint) parts.push(body.hint);
+        return parts.join(' ');
+      }
     } catch {
       // body wasn't JSON (e.g. HTML 404 page)
     }
@@ -346,7 +365,10 @@ export async function listDayLogs(
     throw new Error(message);
   }
   if (data?.error) throw new Error(data.error);
-  return data?.logs ?? [];
+  return (data?.logs ?? []).map((l) => ({
+    ...l,
+    workDate: normalizeWorkDate(l.workDate),
+  }));
 }
 
 export async function getDayLog(
@@ -371,7 +393,7 @@ export async function getDayLog(
   const log = data.log;
   return {
     id: log.id,
-    workDate: log.workDate,
+    workDate: normalizeWorkDate(log.workDate),
     loggedAt: log.loggedAt,
     shiftHours: log.shiftHours,
     assignmentCount: log.assignmentCount ?? (data.assignments?.length ?? 0),
@@ -380,4 +402,21 @@ export async function getDayLog(
     snapshot: log.snapshot ?? {},
     assignments: data.assignments ?? [],
   };
+}
+
+export async function deleteDayLog(
+  lineId: string,
+  password: string,
+  opts: { logId?: string; workDate?: string }
+): Promise<void> {
+  const supabase = getClient();
+  const { data, error } = await supabase.functions.invoke<{ ok?: boolean; error?: string }>('delete-day-log', {
+    body: { lineId, password, logId: opts.logId, workDate: opts.workDate },
+  });
+  if (error) {
+    const message = await getFunctionErrorMessage(error, 'delete-day-log');
+    throw new Error(message);
+  }
+  if (data?.error) throw new Error(data.error);
+  if (!data?.ok) throw new Error('Could not delete day log');
 }
