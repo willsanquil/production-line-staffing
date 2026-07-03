@@ -101,8 +101,6 @@ interface LineViewProps {
    * to prioritize WHICH slot to cover when multiple breaks collide, but no longer required
    * for an area to receive coverage at all. */
   slotBreakCoverageEnabled?: Record<string, Record<string, boolean>>;
-  /** Called after a successful Copy for Teams (cloud lines may prompt to log the day). */
-  onCopyForTeamsSuccess?: () => void;
 }
 
 /** Compact, screenshot- and phone-friendly view: line health, areas, who is running each, and risks. */
@@ -126,7 +124,6 @@ function LineViewInner({
   floatSlots = [],
   linkedSlotsByArea = {},
   slotBreakCoverageEnabled = {},
-  onCopyForTeamsSuccess,
 }: LineViewProps) {
   const isCompact = useCompactPresentation();
   const teamsCopyRootRef = useRef<HTMLDivElement>(null);
@@ -138,14 +135,13 @@ function LineViewInner({
     const result = await copyTeamsPresentationToClipboard(root);
     if (result.ok) {
       setTeamsCopyState('ok');
-      onCopyForTeamsSuccess?.();
       window.setTimeout(() => setTeamsCopyState('idle'), 2200);
     } else {
       setTeamsCopyState('err');
       if ('message' in result) window.alert(result.message);
       window.setTimeout(() => setTeamsCopyState('idle'), 4000);
     }
-  }, [onCopyForTeamsSuccess]);
+  }, []);
   const sections = lineSectionsProp ?? LINE_SECTIONS;
   const leadSlotKeys = leadSlotKeysProp ?? [...LEAD_SLOT_AREAS];
   const getLeadSlotLabel = getLeadSlotLabelProp ?? ((key: string) => areaLabels[key] ?? key);
