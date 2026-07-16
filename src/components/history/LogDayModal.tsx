@@ -32,35 +32,15 @@ export function LogDayModal({
   const needsReplaceConfirm = existingLogForDate && !confirmReplace;
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.35)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-        padding: 16,
-      }}
-    >
-      <div
-        role="dialog"
-        aria-labelledby="log-day-title"
-        className="section-card"
-        style={{ maxWidth: 420, width: '100%', padding: 20 }}
-      >
-        <h2 id="log-day-title" style={{ marginTop: 0 }}>
+    <div className="modal-overlay" role="presentation">
+      <div role="dialog" aria-labelledby="log-day-title" className="modal-dialog">
+        <h2 id="log-day-title" style={{ marginTop: 0, fontFamily: 'var(--font-display)' }}>
           Log the day
         </h2>
-        <p style={{ color: '#555', marginBottom: 16 }}>
+        <p className="entry-muted" style={{ marginBottom: 16 }}>
           Save staffing placements for <strong>{lineName}</strong> to the cloud for history and reports.
         </p>
-        {error && (
-          <div style={{ background: '#fde8e8', padding: 10, borderRadius: 6, marginBottom: 12, color: '#a00' }}>
-            {error}
-          </div>
-        )}
+        {error && <div className="alert alert-error">{error}</div>}
         <label style={{ display: 'block', marginBottom: 12 }}>
           <span style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Work date</span>
           <input
@@ -74,7 +54,7 @@ export function LogDayModal({
           />
         </label>
         {existingLogForDate && (
-          <p style={{ background: '#fff8e1', padding: 10, borderRadius: 6, fontSize: '0.9rem' }}>
+          <p className="alert alert-warning" style={{ fontSize: '0.9rem' }}>
             A log already exists for this date. Logging again will replace it.
           </p>
         )}

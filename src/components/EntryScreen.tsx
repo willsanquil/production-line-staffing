@@ -248,59 +248,52 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
 
   if (step === 'choose') {
     return (
-      <div style={{ padding: 24, textAlign: 'center' }}>
-        <h1 style={{ fontSize: '1.75rem', marginBottom: 8 }}>Production Line Staffing</h1>
-        <p style={{ color: '#666', marginBottom: 24 }}>Choose how you want to use the app</p>
-        <div className="section-card" style={{ maxWidth: 420, margin: '0 auto' }}>
-          <button
-            type="button"
-            onClick={onSelectLocal}
-            className="btn-primary"
-            style={{ width: '100%', padding: 14 }}
-          >
+      <div className="entry-screen">
+        <div className="entry-brand">
+          <span className="entry-brand-mark" aria-hidden />
+          <h1>Production Line Staffing</h1>
+          <p>Staff the line, cover breaks, and share the day&apos;s plan.</p>
+        </div>
+        <div className="entry-panel">
+          <button type="button" onClick={onSelectLocal} className="btn-primary" style={{ padding: '14px 16px' }}>
             Local / Demo
           </button>
-          <p style={{ fontSize: '0.9rem', color: '#666', marginTop: 12, marginBottom: 16 }}>
-            Use the app on this device. Data stays in your browser.
-          </p>
+          <p className="entry-panel-desc">Use the app on this device. Data stays in your browser.</p>
           {cloudAvailable ? (
             <>
-              <button
-                type="button"
-                onClick={() => setStep('list')}
-                style={{ width: '100%', marginTop: 8 }}
-              >
+              <hr className="entry-divider" />
+              <button type="button" onClick={() => setStep('list')} style={{ padding: '12px 16px' }}>
                 Group
               </button>
-              <p style={{ fontSize: '0.9rem', color: '#666', marginTop: 12 }}>
-                Create or join a shared line. Data is saved to the cloud; others can join with the password.
+              <p className="entry-panel-desc">
+                Create or join a shared line. Data is saved to the cloud; others join with the password.
               </p>
-              <div style={{ borderTop: '1px solid #eee', margin: '8px 0 0 0', paddingTop: 8 }}>
-                <div style={{ fontSize: '0.85rem', color: '#555', marginBottom: 4 }}>Quick join:</div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setQuickJoinName('IC');
-                    setStep('list');
-                  }}
-                  style={{ width: '100%', marginTop: 4 }}
-                >
-                  Go to IC line (enter password)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setQuickJoinName('NIC');
-                    setStep('list');
-                  }}
-                  style={{ width: '100%', marginTop: 4 }}
-                >
-                  Go to NIC line (enter password)
-                </button>
+              <div style={{ marginTop: 16 }}>
+                <div className="entry-quick-label">Quick join</div>
+                <div className="entry-actions">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuickJoinName('IC');
+                      setStep('list');
+                    }}
+                  >
+                    IC line
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuickJoinName('NIC');
+                      setStep('list');
+                    }}
+                  >
+                    NIC line
+                  </button>
+                </div>
               </div>
             </>
           ) : (
-            <p style={{ fontSize: '0.9rem', color: '#999' }}>
+            <p className="entry-panel-desc" style={{ color: 'var(--color-text-muted)' }}>
               Group mode is not configured (missing Supabase env).
             </p>
           )}
@@ -311,20 +304,16 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
 
   if (step === 'list') {
     return (
-      <div style={{ padding: 24, maxWidth: 480, margin: '0 auto' }}>
+      <div className="entry-screen entry-screen--narrow">
         <h1 style={{ fontSize: '1.5rem', marginBottom: 8 }}>Group lines</h1>
-        <p style={{ color: '#666', marginBottom: 16 }}>
+        <p className="entry-muted" style={{ marginBottom: 16 }}>
           Create a new shared line or join one with its password.
         </p>
-        {error && (
-          <div style={{ background: '#fee', padding: 12, borderRadius: 8, marginBottom: 16 }}>
-            {error}
-          </div>
-        )}
+        {error && <div className="alert alert-error">{error}</div>}
         {loading && step === 'list' && !lines.length ? (
-          <p>Loading lines…</p>
+          <p className="entry-muted">Loading lines…</p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="entry-actions">
             <button type="button" onClick={() => setStep('create')} className="btn-primary">
               Create a new line
             </button>
@@ -337,11 +326,11 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
           </div>
         )}
         {lines.length > 0 && (
-          <p style={{ fontSize: '0.9rem', color: '#666', marginTop: 16 }}>
+          <p className="entry-muted" style={{ fontSize: '0.9rem', marginTop: 16 }}>
             {lines.length} line(s) available. Join one and enter its password.
           </p>
         )}
-        <button type="button" onClick={() => setStep('choose')} style={{ marginTop: 16 }}>
+        <button type="button" className="btn-ghost" onClick={() => setStep('choose')} style={{ marginTop: 16 }}>
           Back
         </button>
       </div>
@@ -352,17 +341,13 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
     const quickJoinLine = lines.find((l) => l.id === joinLineId);
     const lineDisplayName = quickJoinLine?.name ?? joinLineId;
     return (
-      <div style={{ padding: 24, maxWidth: 400, margin: '0 auto' }}>
+      <div className="entry-screen entry-screen--narrow">
         <h1 style={{ fontSize: '1.5rem', marginBottom: 8 }}>Quick join</h1>
-        <p style={{ color: '#666', marginBottom: 16 }}>
+        <p className="entry-muted" style={{ marginBottom: 16 }}>
           Enter the password for <strong>{lineDisplayName}</strong> to open the staffing view.
         </p>
-        {error && (
-          <div style={{ background: '#fee', padding: 12, borderRadius: 8, marginBottom: 16 }}>
-            {error}
-          </div>
-        )}
-        <div className="section-card" style={{ marginBottom: 16 }}>
+        {error && <div className="alert alert-error">{error}</div>}
+        <div className="entry-panel" style={{ maxWidth: '100%', marginBottom: 16 }}>
           <label style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>Password</label>
           <input
             type="password"
@@ -372,23 +357,18 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
               setError(null);
             }}
             placeholder="Line password"
-            style={{ width: '100%', padding: '8px 12px', marginBottom: 12 }}
+            style={{ width: '100%', marginBottom: 12 }}
             autoComplete="current-password"
             autoFocus
             onKeyDown={(e) => e.key === 'Enter' && handleQuickJoin()}
           />
-          <button
-            type="button"
-            onClick={handleQuickJoin}
-            disabled={loading}
-            className="btn-primary"
-            style={{ width: '100%' }}
-          >
+          <button type="button" onClick={handleQuickJoin} disabled={loading} className="btn-primary">
             {loading ? 'Opening…' : 'Open staffing view'}
           </button>
         </div>
         <button
           type="button"
+          className="btn-ghost"
           onClick={() => {
             setStep('choose');
             setJoinLineId('');
@@ -404,15 +384,13 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
 
   if (step === 'configure' && configureLineId) {
     return (
-      <div style={{ padding: 24, maxWidth: 560, margin: '0 auto' }}>
+      <div className="entry-screen entry-screen--narrow" style={{ maxWidth: 560 }}>
         <h1 style={{ fontSize: '1.5rem', marginBottom: 8 }}>Set up your line</h1>
-        <p style={{ color: '#666', marginBottom: 16 }}>
+        <p className="entry-muted" style={{ marginBottom: 16 }}>
           Add sections, lead roles, and break options. This line will then be saved to the cloud.
         </p>
         {error && (
-          <div style={{ background: '#fee', padding: 12, borderRadius: 8, marginBottom: 16 }}>
-            {error}
-          </div>
+          <div className="alert alert-error">{error}</div>
         )}
         {loading ? (
           <p>Saving…</p>
@@ -437,14 +415,12 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
 
   if (step === 'create') {
     return (
-      <div style={{ padding: 24, maxWidth: 420, margin: '0 auto' }}>
+      <div className="entry-screen entry-screen--narrow">
         <h1 style={{ fontSize: '1.5rem', marginBottom: 16 }}>Create a group line</h1>
         {error && (
-          <div style={{ background: '#fee', padding: 12, borderRadius: 8, marginBottom: 16 }}>
-            {error}
-          </div>
+          <div className="alert alert-error">{error}</div>
         )}
-        <div className="section-card">
+        <div className="entry-panel" style={{ maxWidth: '100%' }}>
           <label style={{ display: 'block', fontWeight: 600 }}>Line name</label>
           <input
             type="text"
@@ -467,7 +443,7 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
             {loading ? 'Creating…' : 'Create line'}
           </button>
         </div>
-        <button type="button" onClick={() => setStep('list')}>
+        <button type="button" className="btn-ghost" onClick={() => setStep('list')} style={{ marginTop: 12 }}>
           Back
         </button>
       </div>
@@ -476,17 +452,15 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
 
   if (step === 'clone') {
     return (
-      <div style={{ padding: 24, maxWidth: 420, margin: '0 auto' }}>
+      <div className="entry-screen entry-screen--narrow">
         <h1 style={{ fontSize: '1.5rem', marginBottom: 16 }}>Clone a line</h1>
-        <p style={{ color: '#666', marginBottom: 16 }}>
+        <p className="entry-muted" style={{ marginBottom: 16 }}>
           Copy all settings from an existing line but start with an empty roster.
         </p>
         {error && (
-          <div style={{ background: '#fee', padding: 12, borderRadius: 8, marginBottom: 16 }}>
-            {error}
-          </div>
+          <div className="alert alert-error">{error}</div>
         )}
-        <div className="section-card">
+        <div className="entry-panel" style={{ maxWidth: '100%' }}>
           <label style={{ display: 'block', fontWeight: 600 }}>Source line</label>
           <select
             value={cloneSourceLineId}
@@ -509,7 +483,7 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
             style={{ width: '100%', marginTop: 6, marginBottom: 12 }}
             autoComplete="current-password"
           />
-          <hr style={{ margin: '16px 0', border: 'none', borderTop: '1px solid #eee' }} />
+          <hr className="entry-divider" />
           <label style={{ display: 'block', fontWeight: 600 }}>New line name</label>
           <input
             type="text"
@@ -532,7 +506,7 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
             {loading ? 'Cloning…' : 'Clone line'}
           </button>
         </div>
-        <button type="button" onClick={() => setStep('list')}>
+        <button type="button" className="btn-ghost" onClick={() => setStep('list')} style={{ marginTop: 12 }}>
           Back
         </button>
       </div>
@@ -541,14 +515,12 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
 
   // step === 'join'
   return (
-    <div style={{ padding: 24, maxWidth: 420, margin: '0 auto' }}>
+    <div className="entry-screen entry-screen--narrow">
       <h1 style={{ fontSize: '1.5rem', marginBottom: 16 }}>Join a group line</h1>
       {error && (
-        <div style={{ background: '#fee', padding: 12, borderRadius: 8, marginBottom: 16 }}>
-          {error}
-        </div>
+      <div className="alert alert-error">{error}</div>
       )}
-      <div className="section-card">
+      <div className="entry-panel" style={{ maxWidth: '100%' }}>
         <label style={{ display: 'block', fontWeight: 600 }}>Line</label>
         <select
           value={joinLineId}
@@ -585,7 +557,7 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
           </button>
         )}
       </div>
-      <button type="button" onClick={() => setStep('list')}>
+      <button type="button" className="btn-ghost" onClick={() => setStep('list')} style={{ marginTop: 12 }}>
         Back
       </button>
     </div>

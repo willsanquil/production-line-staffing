@@ -165,11 +165,7 @@ export function HistoryReportsView({ lineId, password, lineConfig, onBack }: His
         </button>
       </div>
 
-      {error && (
-        <div style={{ background: '#fde8e8', padding: 10, borderRadius: 6, marginBottom: 12, color: '#a00' }}>
-          {error}
-        </div>
-      )}
+      {error && <div className="alert alert-error">{error}</div>}
 
       {tab === 'day' && (
         <div>

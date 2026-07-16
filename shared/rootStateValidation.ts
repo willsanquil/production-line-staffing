@@ -1,4 +1,3 @@
-/** Keep in sync with shared/rootStateValidation.ts (app + tests import from shared/). */
 export const MAX_ROOT_STATE_BYTES = 1_000_000;
 
 type JsonObject = Record<string, unknown>;

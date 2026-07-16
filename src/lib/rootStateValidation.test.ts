@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeRootStateForCloudLine, validateRootStatePayload } from '../../supabase/functions/_shared/rootStateValidation';
+import { normalizeRootStateForCloudLine, validateRootStatePayload } from '../../shared/rootStateValidation';
 
 describe('rootStateValidation', () => {
   it('rejects invalid cloud root payloads', () => {

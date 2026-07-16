@@ -1,10 +1,12 @@
-import type { AppState, LineState, RootState, RosterPerson, SavedConfig, SavedDay, SlotsByArea } from '../types';
+import type { AppState, LineState, RootState, RosterPerson, SavedDay, SlotsByArea } from '../types';
 import { getDefaultICLineConfig } from './lineConfig';
 import { normalizeSlotsToCapacity } from '../data/initialState';
 
 const KEY_STATE = 'staffing-app-state';
-const KEY_CONFIGS = 'staffing-app-configs';
 const KEY_DAYS = 'staffing-app-days';
+
+const BACKUP_FORMAT = 'production-line-staffing-root' as const;
+const BACKUP_VERSION = 1;
 
 function nanoid(): string {
   return Math.random().toString(36).slice(2, 11);
@@ -76,6 +78,25 @@ function migrateGlobalRosterToPerLine(root: {
   };
 }
 
+function normalizeRootFromParsed(data: {
+  currentLineId: string;
+  lines: RootState['lines'];
+  lineStates: Record<string, AppState | LineState>;
+  globalRoster?: RosterPerson[];
+}): RootState | null {
+  const migrated = migrateGlobalRosterToPerLine(data);
+  if (migrated) return migrated;
+  const lineStates: Record<string, LineState> = {};
+  for (const [lineId, state] of Object.entries(data.lineStates || {})) {
+    const s = state as AppState;
+    const roster = Array.isArray(s?.roster) ? s.roster.map(normalizeRosterPerson) : [];
+    lineStates[lineId] = { ...s, roster } as LineState;
+  }
+  if (!data.currentLineId || !Array.isArray(data.lines) || data.lines.length === 0) return null;
+  if (!lineStates[data.currentLineId]) return null;
+  return { currentLineId: data.currentLineId, lines: data.lines, lineStates };
+}
+
 /** Load root state (multi-line). Migrates old globalRoster to per-line rosters. */
 export function loadRootState(): RootState | null {
   try {
@@ -83,16 +104,7 @@ export function loadRootState(): RootState | null {
     if (!raw) return null;
     const data = JSON.parse(raw);
     if (data?.currentLineId != null && Array.isArray(data?.lines) && data?.lineStates != null) {
-      const root = data as RootState & { globalRoster?: RosterPerson[] };
-      const migrated = migrateGlobalRosterToPerLine(root);
-      if (migrated) return migrated;
-      const lineStates: Record<string, LineState> = {};
-      for (const [lineId, state] of Object.entries(root.lineStates || {})) {
-        const s = state as AppState;
-        const roster = Array.isArray(s?.roster) ? s.roster.map(normalizeRosterPerson) : [];
-        lineStates[lineId] = { ...s, roster } as LineState;
-      }
-      return { currentLineId: root.currentLineId, lines: root.lines, lineStates };
+      return normalizeRootFromParsed(data as RootState & { globalRoster?: RosterPerson[] });
     }
     const legacy = data as AppState;
     if (legacy && Array.isArray(legacy.roster) && legacy.slots && typeof legacy.slots === 'object') {
@@ -131,48 +143,72 @@ export function saveRootState(root: RootState): void {
   localStorage.setItem(KEY_STATE, JSON.stringify(root));
 }
 
-/** Export full app state as JSON string (for backup / restore). */
+/** Export full multi-line root state as JSON (preferred backup format). */
+export function exportRootStateToJson(root: RootState): string {
+  return JSON.stringify(
+    {
+      format: BACKUP_FORMAT,
+      version: BACKUP_VERSION,
+      exportedAt: new Date().toISOString(),
+      root,
+    },
+    null,
+    2
+  );
+}
+
+/** @deprecated Prefer exportRootStateToJson — single-line export for legacy callers. */
 export function exportStateToJson(state: AppState): string {
   return JSON.stringify({ ...state, _exportedAt: new Date().toISOString() }, null, 2);
 }
 
-/** Import from a previously exported JSON string. Returns state or null if invalid. */
-export function importStateFromJson(json: string): AppState | null {
+export type ImportedBackup =
+  | { kind: 'root'; root: RootState }
+  | { kind: 'line'; state: AppState };
+
+/**
+ * Import backup JSON. Accepts:
+ * - New multi-line RootState envelope (`format: production-line-staffing-root`)
+ * - Bare RootState (`currentLineId` + `lines` + `lineStates`)
+ * - Legacy single-line AppState (`roster` + `slots`)
+ */
+export function importBackupFromJson(json: string): ImportedBackup | null {
   try {
     const data = JSON.parse(json) as Record<string, unknown>;
-    if (!data || !Array.isArray(data.roster) || !data.slots || typeof data.slots !== 'object') return null;
-    return data as unknown as AppState;
+    if (!data || typeof data !== 'object') return null;
+
+    if (data.format === BACKUP_FORMAT && data.root && typeof data.root === 'object') {
+      const root = normalizeRootFromParsed(data.root as RootState);
+      return root ? { kind: 'root', root } : null;
+    }
+
+    if (
+      typeof data.currentLineId === 'string' &&
+      Array.isArray(data.lines) &&
+      data.lineStates &&
+      typeof data.lineStates === 'object'
+    ) {
+      const root = normalizeRootFromParsed(data as unknown as RootState);
+      return root ? { kind: 'root', root } : null;
+    }
+
+    if (Array.isArray(data.roster) && data.slots && typeof data.slots === 'object') {
+      return { kind: 'line', state: data as unknown as AppState };
+    }
+
+    return null;
   } catch {
     return null;
   }
 }
 
-export function loadSavedConfigs(): SavedConfig[] {
-  try {
-    const raw = localStorage.getItem(KEY_CONFIGS);
-    if (!raw) return [];
-    return JSON.parse(raw) as SavedConfig[];
-  } catch {
-    return [];
-  }
-}
-
-function saveConfigsList(configs: SavedConfig[]): void {
-  localStorage.setItem(KEY_CONFIGS, JSON.stringify(configs));
-}
-
-export function addSavedConfig(name: string, slots: SlotsByArea, note?: string): SavedConfig {
-  const configs = loadSavedConfigs();
-  const newOne: SavedConfig = {
-    id: nanoid(),
-    name,
-    note,
-    savedAt: new Date().toISOString(),
-    slots: JSON.parse(JSON.stringify(slots)),
-  };
-  configs.unshift(newOne);
-  saveConfigsList(configs);
-  return newOne;
+/** @deprecated Prefer importBackupFromJson — returns AppState only for legacy single-line files. */
+export function importStateFromJson(json: string): AppState | null {
+  const result = importBackupFromJson(json);
+  if (!result) return null;
+  if (result.kind === 'line') return result.state;
+  const line = result.root.lineStates[result.root.currentLineId];
+  return line ?? null;
 }
 
 export function loadSavedDays(): SavedDay[] {
@@ -214,8 +250,12 @@ export function addSavedDay(
     breakSchedules: state.breakSchedules ? JSON.parse(JSON.stringify(state.breakSchedules)) : {},
     leadBreakCoverage: state.leadBreakCoverage ? JSON.parse(JSON.stringify(state.leadBreakCoverage)) : {},
     areaBreakCoverageEnabled: state.areaBreakCoverageEnabled ? JSON.parse(JSON.stringify(state.areaBreakCoverageEnabled)) : {},
-    areaRequiresTrainedOrExpertOverrides: state.areaRequiresTrainedOrExpertOverrides ? JSON.parse(JSON.stringify(state.areaRequiresTrainedOrExpertOverrides)) : {},
-    slotBreakCoverageEnabled: state.slotBreakCoverageEnabled ? JSON.parse(JSON.stringify(state.slotBreakCoverageEnabled)) : {},
+    areaRequiresTrainedOrExpertOverrides: state.areaRequiresTrainedOrExpertOverrides
+      ? JSON.parse(JSON.stringify(state.areaRequiresTrainedOrExpertOverrides))
+      : {},
+    slotBreakCoverageEnabled: state.slotBreakCoverageEnabled
+      ? JSON.parse(JSON.stringify(state.slotBreakCoverageEnabled))
+      : {},
   };
   days.push(newOne);
   saveDaysList(days);
@@ -227,14 +267,8 @@ export function removeSavedDay(id: string): void {
   saveDaysList(days);
 }
 
-export function exportConfigJson(slots: SlotsByArea): string {
-  return JSON.stringify({ slots, exportedAt: new Date().toISOString() }, null, 2);
-}
-
-export function importConfigJson(
-  json: string,
-  currentSlots: SlotsByArea
-): SlotsByArea {
+/** Apply slot personIds from a slots-only JSON onto current slots (legacy config import). */
+export function importConfigJson(json: string, currentSlots: SlotsByArea): SlotsByArea {
   const data = JSON.parse(json) as { slots: SlotsByArea };
   if (!data || typeof data.slots !== 'object') throw new Error('Invalid format');
   const imported = data.slots as Record<string, Array<{ id: string; personId: string | null }>>;

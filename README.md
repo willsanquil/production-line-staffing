@@ -1,6 +1,6 @@
 # Production Line Staffing App
 
-Single-page app for managing production line staffing: roster with skill depth, per-area slot assignments, break/lunch schedule, task lists, and save/load of configurations and days.
+Single-page app for managing production line staffing: roster with skill depth, per-area slot assignments, break/lunch schedule, task lists, day logging, and save/load of configurations and days.
 
 ## Run locally
 
@@ -18,85 +18,58 @@ Open the URL shown in the terminal (e.g. http://localhost:5173).
 npm run build
 ```
 
-Output is in `dist/`. Serve with any static host.
+Output is in `dist/`. Serve with any static host (Vercel, or `run.bat` / `run.sh` for portable use).
 
 ## Running from a thumb drive
 
-Copy this folder to a USB drive. On the other computer (needs Python or Node):
-
-- **Windows:** Double-click **`run.bat`**
-- **Mac/Linux:** Run **`./run.sh`**
-
-See **PORTABLE.md** for full steps (one-time build, what to copy, and moving data between computers).
+See **[PORTABLE.md](PORTABLE.md)**. Build once with Node, copy the folder, run `run.bat` / `run.sh` on the other PC. Use **Download backup** / **Import backup** to move multi-line data between computers.
 
 ## Features
 
-- **Roster**: Skill grid (No experience = red, Training = yellow, Trained = green, Expert = plaid). Mark people absent.
-- **Areas**: 14.5, Courtyard, Bonding, Testing, Potting, End Of Line, Flip. Per-area staffing % and slots (dropdowns; no double-booking). Add/remove slots. Section task lists.
-- **Grand total**: Count of distinct people currently on the line.
-- **Day timeline**: 6am–6pm in 1-hour chunks. Breaks 8:30, 2pm, 4pm (15 min, 3 rotations). Lunch 11:30 (30 min, 3 rotations). Per-hour task lists.
-- **Notes & documents**: Day notes plus a list of text/links.
-- **Automation**: “Spread talent” (assign best fit per area, round-robin); “Randomize” (shuffle assignments).
-- **Save config**: Name and save current slot assignment; load from list; export/import JSON.
-- **Bank of days**: Save current state (slots, absences, tasks, notes) with date; load or remove from list.
-
-Data is stored in the browser (localStorage). Export config JSON to backup or move assignments; saved days are stored locally in the app.
+- **Roster**: Skill grid (No experience / Training / Trained / Expert). Mark people absent, OT, late, etc.
+- **Areas & floats**: Configurable stations and float coverage; leads; break rotations.
+- **Automation**: Spread talent / fill remaining / randomize.
+- **Local mode**: Data in the browser (`localStorage`). **Download backup** exports the full multi-line `RootState` (older single-line backups still import).
+- **Group mode** (optional Supabase): Shared password-protected cloud lines, viewer lock / YEET, **Log the day** + History reports.
+- **Staffing View**: Presentation layout + **Copy for Teams** (clipboard).
 
 ## Git
 
-The repo is ready to push:
-
-- **`.gitignore`** – ignores `node_modules/`, `dist/`, `.env*`, IDE/OS files. No secrets in the repo.
-- **No `.env` files** – when you add Supabase (or other services), put keys in Vercel env vars, not in Git.
+- **`.gitignore`** – ignores `node_modules/`, `dist/`, `.env*`, IDE/OS files.
+- Put Supabase keys in Vercel / `.env.local`, not in Git (see `.env.example`).
 
 ## Deploy on Vercel
 
-1. Push this repo to GitHub (or GitLab/Bitbucket).
-2. In [Vercel](https://vercel.com), **Add New Project** → import the repo.
-3. Vercel will detect Vite; **Build Command**: `npm run build`, **Output Directory**: `dist`. Deploy.
-4. The app is static; no server or env vars required for the current localStorage-only setup.
+1. Push this repo to GitHub.
+2. In [Vercel](https://vercel.com), import the repo.
+3. Build: `npm run build`, output: `dist`.
+4. For Group mode, set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 
 ## Supabase (Group / cloud lines)
 
-The app supports **Local / Demo** (data in browser only) and **Group** (shared lines in the cloud, password-protected).
+### 1. Project + migrations
 
-### 1. Supabase project
+Create a Supabase project, then run SQL from `supabase/migrations/` (or see `supabase/RUN_MIGRATIONS_IN_DASHBOARD.md`), including:
 
-- Create a project at [Supabase](https://supabase.com).
-- Run migrations (from the repo root):
-  ```bash
-  npx supabase db push
-  ```
-  Or in the Supabase SQL editor, run the contents of `supabase/migrations/20250128000000_cloud_lines.sql` and `supabase/migrations/20250128100000_cloud_lines_view_security.sql`.
+- Cloud lines + data + public list view  
+- Version / revisions  
+- Viewer presence  
+- Day logs (`20260601000000_cloud_line_day_logs.sql`)
 
 ### 2. Edge Functions
 
-Deploy the Edge Functions (create-line, get-line-state, set-line-state, delete-line):
+See `supabase/EDGE_FUNCTIONS_DEPLOY.md`. Deploy at least:
 
-```bash
-npx supabase functions deploy create-line
-npx supabase functions deploy get-line-state
-npx supabase functions deploy set-line-state
-npx supabase functions deploy delete-line
-```
+`create-line`, `get-line-state`, `set-line-state`, `delete-line`, `viewer-presence`, `log-day`, `list-day-logs`, `get-day-log`, `delete-day-log`
 
-### 3. Environment variables
+### 3. Environment
 
-- **Vercel** (or your host) → project → **Settings → Environment Variables**:
-  - `VITE_SUPABASE_URL` – Supabase project URL
-  - `VITE_SUPABASE_ANON_KEY` – Supabase anon/public key
-  - Copy `.env.example` to `.env.local` for local development and fill in the same public values.
-
-- **Supabase** → Project Settings → Edge Functions: ensure the project has the default `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (set automatically).
-- Set `ALLOWED_ORIGINS` for Edge Functions to a comma-separated list of app origins, for example `https://your-app.vercel.app,http://localhost:5173`.
+- **App:** `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+- **Optional CORS:** Edge Function secret `ALLOWED_ORIGINS` (comma-separated origins)
 
 ### 4. App flow
 
-- On open, users choose **Local / Demo** (browser-only) or **Group**.
-- **Group**: list public lines → **Create a new line** (name + password) or **Join an existing line** (select line + password). Data is saved to the cloud; anyone with the password can join and edit. **Leave line** returns to local and shows the entry screen again on next open (or refresh after leaving).
+- **Local / Demo** — browser-only  
+- **Group** — create/join a shared line; **Log the day** / **History** for reporting; **Leave line** clears the session  
 
-### 5. Troubleshooting "Edge Function returned a non-2xx status code"
-
-- **Deploy the functions** if you haven’t: `npx supabase login`, then `npx supabase link --project-ref YOUR_REF`, then deploy `create-line`, `get-line-state`, `set-line-state`, `delete-line`.
-- **Check Edge Function logs**: Supabase Dashboard → **Edge Functions** → select `create-line` → **Logs**. The real error (e.g. missing env, database error) appears there.
-- After the next deploy, the app will show the function’s error message in the red banner when create/join fails.
+Shared business constants live under `shared/` (used by the app and Edge Functions).

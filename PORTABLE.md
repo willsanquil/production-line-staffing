@@ -35,7 +35,8 @@ You need **Python** (or Node) installed on that computer. The script will tell y
 ## Data and backups
 
 - Data is stored in the **browser’s localStorage** on that computer. It does not travel with the thumb drive.
-- Use the app’s **Save to file** / **Open from file** or **Download backup** / **Import backup** to move data between computers (e.g. save a file to the thumb drive and import it on the other PC).
+- Use **Download backup** / **Import backup** (or **Save to file** / **Open from file** in Chromium/Edge) to move data between computers.
+- New backups include the **full multi-line** state (all lines + rosters). Older single-line backup JSON files still import into the current line.
 
 ## Summary
 

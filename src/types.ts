@@ -135,14 +135,6 @@ export interface SectionTasks {
 }
 export type TasksByArea = Record<AreaId, TaskItem[]>;
 
-export interface SavedConfig {
-  id: string;
-  name: string;
-  note?: string;
-  savedAt: string; // ISO
-  slots: SlotsByArea;
-}
-
 /** Area-specific lead roles (one person per area). */
 export const LEAD_SLOT_AREAS = ['area_end_of_line', 'area_courtyard', 'area_bonding'] as const;
 export type LeadSlotAreaId = string;

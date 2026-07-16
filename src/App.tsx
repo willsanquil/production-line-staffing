@@ -1,41 +1,7 @@
 import { lazy, Suspense, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { AppState, AreaId, BreakPreference, FloatSlotConfig, RootState, RosterPerson, SavedDay, SlotsByArea } from './types';
 import type { SkillLevel } from './types';
-import { SKILL_SCORE } from './lib/skill';
-
-/** Overall line health: average knowledge (0–3) of everyone on the line in their assigned role. */
-function getLineHealthScore(
-  slots: SlotsByArea,
-  leadSlots: Record<string, string | null>,
-  roster: { id: string; skills: Record<AreaId, SkillLevel> }[],
-  areaIds: string[],
-  leadSlotKeys: string[]
-): number | null {
-  let sum = 0;
-  let count = 0;
-  for (const areaId of areaIds) {
-    const areaSlots = slots[areaId] ?? [];
-    for (const slot of areaSlots) {
-      if (!slot.personId) continue;
-      const p = roster.find((r) => r.id === slot.personId);
-      if (p) {
-        sum += SKILL_SCORE[p.skills[areaId] ?? 'no_experience'];
-        count++;
-      }
-    }
-  }
-  for (const key of leadSlotKeys) {
-    const personId = leadSlots[key];
-    if (!personId) continue;
-    const p = roster.find((r) => r.id === personId);
-    if (p) {
-      const areaForSkill = /^\d+$/.test(key) ? areaIds[0] : key;
-      sum += SKILL_SCORE[p.skills[areaForSkill] ?? 'no_experience'];
-      count++;
-    }
-  }
-  return count > 0 ? sum / count : null;
-}
+import { getLineHealthScore } from './lib/lineHealth';
 import { getHydratedRootState } from './lib/initialState';
 import { getRosterForLine, getFlexedInPersonIds } from './lib/personLabel';
 import { sortByFirstName } from './lib/rosterSort';
@@ -67,12 +33,14 @@ import { LeadSlotsSection } from './components/LeadSlotsSection';
 import { AreaStaffing } from './components/AreaStaffing';
 import { CombinedAreaStaffing } from './components/CombinedAreaStaffing';
 import { UnslottedBank } from './components/UnslottedBank';
-import { DayBank } from './components/DayBank';
+import { LocalBackupPanel } from './components/LocalBackupPanel';
+import { CloudImportModal } from './components/CloudImportModal';
 import { randomizeAssignments, applyDefaultPositionsThenSpread, fillRemainingAssignments } from './lib/automation';
 import { generateBreakSchedules, optimizeFloatBreakRotations } from './lib/breakSchedules';
 import { synthesizeCoverageFloats, mirrorVirtualFloatBreaksToStations } from './lib/coverageStations';
 import { clearAreaAssignments } from './lib/slots';
-import { loadSavedDays, addSavedDay, removeSavedDay, exportStateToJson, importStateFromJson } from './lib/persist';
+import { loadSavedDays, addSavedDay, removeSavedDay, exportRootStateToJson, importBackupFromJson } from './lib/persist';
+import type { ImportedBackup } from './lib/persist';
 import { saveToFile, overwriteFile, openFromFile, isSaveToFileSupported } from './lib/fileStorage';
 import { getLineState, createCloudLine, deleteCloudLine, listCloudLines, logDay, listDayLogs } from './lib/cloudLines';
 import type { DayLogSummary } from './types';
@@ -1379,17 +1347,29 @@ export default function App() {
     setSavedDays(loadSavedDays());
   }, [effectiveConfig, leadSlotKeys]);
 
+  const applyImportedBackup = useCallback(
+    (backup: ImportedBackup) => {
+      if (backup.kind === 'root') {
+        setRootState(backup.root);
+        reloadLineState();
+        setSavedDays(loadSavedDays());
+        schedulePersistForRootEdit();
+        return;
+      }
+      applyImportedState(backup.state);
+    },
+    [applyImportedState, reloadLineState, schedulePersistForRootEdit]
+  );
+
   const handleSaveToFile = useCallback(async () => {
     const root = buildPersistedRootState(rootStateRef.current, stateRef.current);
-    const rosterForLine = getRosterForLine(root.currentLineId, root.lineStates);
-    const state: AppState = { ...stateRef.current, roster: rosterForLine };
     try {
       let written = false;
       if (savedFileHandleRef.current) {
-        written = await overwriteFile(state, savedFileHandleRef.current);
+        written = await overwriteFile(root, savedFileHandleRef.current);
       }
       if (!written) {
-        const handle = await saveToFile(state);
+        const handle = await saveToFile(root);
         if (handle) {
           savedFileHandleRef.current = handle;
           written = true;
@@ -1407,17 +1387,15 @@ export default function App() {
   const handleOpenFromFile = useCallback(async () => {
     try {
       const imported = await openFromFile();
-      if (imported) applyImportedState(imported);
+      if (imported) applyImportedBackup(imported);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not open file.');
     }
-  }, [applyImportedState]);
+  }, [applyImportedBackup]);
 
   const handleExportBackup = useCallback(() => {
-    const root = rootStateRef.current;
-    const rosterForLine = getRosterForLine(root.currentLineId, root.lineStates);
-    const state: AppState = { ...stateRef.current, roster: rosterForLine };
-    const json = exportStateToJson(state);
+    const root = buildPersistedRootState(rootStateRef.current, stateRef.current);
+    const json = exportRootStateToJson(root);
     const blob = new Blob([json], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -1426,22 +1404,25 @@ export default function App() {
     URL.revokeObjectURL(a.href);
   }, []);
 
-  const handleImportBackup = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = reader.result as string;
-      const imported = importStateFromJson(text);
-      if (!imported) {
-        alert('Invalid backup file.');
-        return;
-      }
-      applyImportedState(imported);
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  }, [applyImportedState]);
+  const handleImportBackup = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = reader.result as string;
+        const imported = importBackupFromJson(text);
+        if (!imported) {
+          alert('Invalid backup file.');
+          return;
+        }
+        applyImportedBackup(imported);
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    },
+    [applyImportedBackup]
+  );
 
   const handleAddToRosterFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1450,8 +1431,14 @@ export default function App() {
       const reader = new FileReader();
       reader.onload = () => {
         const text = reader.result as string;
-        const imported = importStateFromJson(text);
-        if (!imported || !Array.isArray(imported.roster)) {
+        const imported = importBackupFromJson(text);
+        let sourceRoster: RosterPerson[] | null = null;
+        if (imported?.kind === 'line') {
+          sourceRoster = imported.state.roster ?? null;
+        } else if (imported?.kind === 'root') {
+          sourceRoster = imported.root.lineStates[imported.root.currentLineId]?.roster ?? null;
+        }
+        if (!sourceRoster || !Array.isArray(sourceRoster)) {
           alert('Invalid file or no roster in file.');
           e.target.value = '';
           return;
@@ -1459,7 +1446,7 @@ export default function App() {
         setRootState((prev) => {
           const lineId = prev.currentLineId;
           const currentRoster = prev.lineStates[lineId]?.roster ?? [];
-          const toAdd: RosterPerson[] = (imported.roster as RosterPerson[]).map((p) => {
+          const toAdd: RosterPerson[] = sourceRoster.map((p) => {
             const id = Math.random().toString(36).slice(2, 11);
             const skills = { ...p.skills } as Record<AreaId, SkillLevel>;
             for (const aid of areaIds) {
@@ -2986,88 +2973,35 @@ export default function App() {
         );
       })()}
 
-      <div className="save-load-section" style={{ marginBottom: 12 }}>
-        <input
-          ref={addToRosterFileRef}
-          type="file"
-          accept=".json,application/json"
-          onChange={handleAddToRosterFileChange}
-          style={{ display: 'none' }}
-          aria-hidden
-        />
-        <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 8px 0' }}>
-          Download or import a one-off backup (works in any browser):
-        </p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-          <button type="button" onClick={handleExportBackup}>Download backup</button>
-          <input
-            ref={importFileRef}
-            type="file"
-            accept=".json,application/json"
-            onChange={handleImportBackup}
-            style={{ display: 'none' }}
-            aria-hidden
-          />
-          <button type="button" onClick={() => importFileRef.current?.click()}>Import backup</button>
-        </div>
-      </div>
-
-      <DayBank
+      <LocalBackupPanel
+        canSaveToFile={false}
+        saveMessage={null}
+        onSaveToFile={handleSaveToFile}
+        onOpenFromFile={handleOpenFromFile}
+        onExportBackup={handleExportBackup}
+        onImportBackupClick={() => importFileRef.current?.click()}
+        importFileRef={importFileRef}
+        onImportBackupChange={handleImportBackup}
+        addToRosterFileRef={addToRosterFileRef}
+        onAddToRosterFileChange={handleAddToRosterFileChange}
         savedDays={savedDays}
         onLoadDay={handleLoadDay}
         onSaveCurrentDay={handleSaveDay}
         onRemoveDay={handleRemoveDay}
       />
 
-      {showImportModal && (
-        <div
-          className="modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="import-cloud-title"
-          onClick={() => !importLoading && setShowImportModal(false)}
-        >
-          <div
-            className="modal-dialog"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 id="import-cloud-title" style={{ marginTop: 0, marginBottom: 16 }}>Import from another cloud line</h2>
-            <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: 16 }}>
-              Import people from another cloud line. People with matching names will have their skills merged.
-            </p>
-            {importError && (
-              <div style={{ background: '#fee', padding: 10, borderRadius: 8, marginBottom: 12 }}>{importError}</div>
-            )}
-            <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Cloud line</label>
-            <select
-              value={importLineId}
-              onChange={(e) => setImportLineId(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', marginBottom: 12, boxSizing: 'border-box' }}
-            >
-              <option value="">— Select a line —</option>
-              {importLines.map((l) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
-              ))}
-            </select>
-            <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Password</label>
-            <input
-              type="password"
-              value={importPassword}
-              onChange={(e) => setImportPassword(e.target.value)}
-              placeholder="Enter that line's password"
-              style={{ width: '100%', padding: '10px 12px', marginBottom: 16, boxSizing: 'border-box' }}
-            />
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" className="btn-primary" onClick={handleImportFromCloudLine} disabled={importLoading || !importLineId}>
-                {importLoading ? 'Importing…' : 'Import'}
-              </button>
-              <button type="button" className="btn-ghost" onClick={() => setShowImportModal(false)} disabled={importLoading}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CloudImportModal
+        open={showImportModal}
+        loading={importLoading}
+        error={importError}
+        lines={importLines}
+        lineId={importLineId}
+        password={importPassword}
+        onLineIdChange={setImportLineId}
+        onPasswordChange={setImportPassword}
+        onImport={handleImportFromCloudLine}
+        onClose={() => setShowImportModal(false)}
+      />
     </>
   );
 }
