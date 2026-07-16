@@ -73,6 +73,8 @@ interface CombinedAreaStaffingProps {
   onSlotsChange: (areaId: AreaId, slots: Slot[]) => void;
   onSectionTasksChange?: (areaId: AreaId, tasks: unknown[]) => void;
   onAssign: (areaId: AreaId, slotId: string, personId: string | null) => void;
+  /** Drag-and-drop transfer between slots (Admin). */
+  onTransfer?: (from: { areaId: string; slotId: string }, to: { areaId: string; slotId: string }) => void;
   requiresTrainedOrExpertA?: boolean;
   requiresTrainedOrExpertB?: boolean;
   onRequiresTrainedOrExpertChangeA?: (value: boolean) => void;
@@ -114,6 +116,7 @@ function CombinedAreaStaffingInner({
   moveLabel,
   onSlotsChange,
   onAssign,
+  onTransfer,
   requiresTrainedOrExpertA = false,
   requiresTrainedOrExpertB = false,
   onRequiresTrainedOrExpertChangeA,
@@ -178,6 +181,7 @@ function CombinedAreaStaffingInner({
                       assignedPersonIds={allAssignedPersonIds}
                       leadAssignedPersonIds={leadAssignedPersonIds}
                       onAssign={(slotId, personId) => onAssign(areaId, slotId, personId)}
+                      onTransfer={onTransfer}
                     />
                   )}
                 </div>
@@ -383,6 +387,7 @@ function CombinedAreaStaffingInner({
                     assignedPersonIds={allAssignedPersonIds}
                     leadAssignedPersonIds={leadAssignedPersonIds}
                     onAssign={(slotId, personId) => onAssign(areaId, slotId, personId)}
+                    onTransfer={onTransfer}
                   />
                 )}
               </div>

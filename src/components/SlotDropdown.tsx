@@ -1,9 +1,12 @@
-import { useState, useRef, useEffect, useMemo, type KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, useMemo, type DragEvent, type KeyboardEvent } from 'react';
 import type { AreaId, RosterPerson, SkillLevel, Slot } from '../types';
 import { SkillPill } from './SkillPill';
 import { sortByFirstName } from '../lib/rosterSort';
 import { formatPersonStatusLabel } from '../lib/personLabel';
 import { SKILL_SCORE, skillFromAverage } from '../lib/skill';
+import type { SlotRef } from '../lib/slots';
+
+export const SLOT_DRAG_MIME = 'application/x-pls-slot';
 
 /** For float slots: combined skill across supported areas. */
 function combinedSkillForAreas(person: RosterPerson, areaIds: string[]): SkillLevel {
@@ -26,6 +29,8 @@ interface SlotDropdownProps {
   /** For float slots: area IDs this float supports; skill pill uses combined skill across these. */
   supportedAreaIds?: string[];
   onAssign: (slotId: string, personId: string | null) => void;
+  /** Admin drag-and-drop: move/swap from another slot onto this one. */
+  onTransfer?: (from: SlotRef, to: SlotRef) => void;
   slotLabel?: string;
 }
 
@@ -37,6 +42,7 @@ export function SlotDropdown({
   leadAssignedPersonIds,
   supportedAreaIds,
   onAssign,
+  onTransfer,
   slotLabel,
 }: SlotDropdownProps) {
   const getDisplayLevel = (p: RosterPerson): SkillLevel =>
@@ -60,8 +66,13 @@ export function SlotDropdown({
 
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
+  const didDragRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const listboxId = `${slot.id}-options`;
+
+  const canDrag = !!onTransfer && !!slot.personId && !slot.locked && !slot.disabled;
+  const canDrop = !!onTransfer && !slot.locked && !slot.disabled;
 
   useEffect(() => {
     if (!open) return;
@@ -111,17 +122,95 @@ export function SlotDropdown({
     }
   }
 
+  function handleDragStart(event: DragEvent<HTMLButtonElement>) {
+    if (!canDrag) return;
+    didDragRef.current = true;
+    setOpen(false);
+    const payload: SlotRef = { areaId, slotId: slot.id };
+    event.dataTransfer.setData(SLOT_DRAG_MIME, JSON.stringify(payload));
+    event.dataTransfer.setData('text/plain', `${areaId}:${slot.id}`);
+    event.dataTransfer.effectAllowed = 'move';
+    event.currentTarget.classList.add('is-dragging');
+  }
+
+  function handleDragEnd(event: DragEvent<HTMLButtonElement>) {
+    event.currentTarget.classList.remove('is-dragging');
+    setDragOver(false);
+    window.setTimeout(() => {
+      didDragRef.current = false;
+    }, 0);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    if (!canDrop) return;
+    // Custom MIME types are often omitted from `types` during dragover in Chromium;
+    // allow drop and validate payload on drop instead.
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setDragOver(true);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
+    if (!containerRef.current?.contains(event.relatedTarget as Node)) {
+      setDragOver(false);
+    }
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    if (!canDrop || !onTransfer) return;
+    event.preventDefault();
+    setDragOver(false);
+    const raw = event.dataTransfer.getData(SLOT_DRAG_MIME) || event.dataTransfer.getData('text/plain');
+    if (!raw) return;
+    let from: SlotRef | null = null;
+    try {
+      if (raw.includes('{')) {
+        from = JSON.parse(raw) as SlotRef;
+      } else {
+        const [fromAreaId, fromSlotId] = raw.split(':');
+        if (fromAreaId && fromSlotId) from = { areaId: fromAreaId, slotId: fromSlotId };
+      }
+    } catch {
+      return;
+    }
+    if (!from?.areaId || !from.slotId) return;
+    onTransfer(from, { areaId, slotId: slot.id });
+  }
+
+  const wrapClass = [
+    'slot-wrap',
+    'slot-dropdown-wrap',
+    dragOver ? 'slot-dropdown-wrap--drag-over' : '',
+    canDrop ? 'slot-dropdown-wrap--droppable' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <div className="slot-wrap slot-dropdown-wrap" ref={containerRef} style={{ position: 'relative', display: 'inline-flex' }}>
+    <div
+      className={wrapClass}
+      ref={containerRef}
+      style={{ position: 'relative', display: 'inline-flex' }}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       {slotLabel && <span className="slot-dropdown-label">{slotLabel}</span>}
       <button
         type="button"
-        className="slot-dropdown-trigger"
-        onClick={() => setOpen((o) => !o)}
+        className={`slot-dropdown-trigger${canDrag ? ' slot-dropdown-trigger--draggable' : ''}`}
+        draggable={canDrag}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onClick={() => {
+          if (didDragRef.current) return;
+          setOpen((o) => !o);
+        }}
         onKeyDown={handleTriggerKeyDown}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
+        title={canDrag ? 'Drag to another slot to move or swap' : undefined}
       >
         {currentPerson ? (
           <SkillPill

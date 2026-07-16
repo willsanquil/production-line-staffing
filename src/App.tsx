@@ -35,7 +35,8 @@ import { UnslottedBank } from './components/UnslottedBank';
 import { randomizeAssignments, fillRemainingAssignments } from './lib/automation';
 import { generateBreakSchedules, optimizeFloatBreakRotations } from './lib/breakSchedules';
 import { synthesizeCoverageFloats, mirrorVirtualFloatBreaksToStations } from './lib/coverageStations';
-import { clearAreaAssignments } from './lib/slots';
+import { clearAreaAssignments, moveOrSwapSlotPerson } from './lib/slots';
+import type { SlotRef } from './lib/slots';
 import { getLineState, createCloudLine } from './lib/cloudLines';
 import { getCloudSession, setCloudSession, clearCloudSession } from './lib/cloudSession';
 import { clearCloudViewerSession } from './lib/cloudViewerSession';
@@ -399,6 +400,17 @@ export default function App() {
         s.id === slotId ? { ...s, personId } : s
       ),
     }));
+  }, [markLocalChange]);
+
+  const handleSlotTransfer = useCallback((from: SlotRef, to: SlotRef) => {
+    let didMove = false;
+    setSlots((prev) => {
+      const next = moveOrSwapSlotPerson(prev, from, to);
+      if (!next) return prev;
+      didMove = true;
+      return next;
+    });
+    if (didMove) markLocalChange();
   }, [markLocalChange]);
 
   const setSlotsForArea = useCallback((areaId: AreaId, newSlots: SlotsByArea[AreaId]) => {
@@ -1400,23 +1412,8 @@ export default function App() {
           </div>
         </header>
         {appMode === 'app' && cloudLineId && cloudViewerRole === 'readonly' && (
-          <div
-            role="region"
-            aria-label="Read-only viewer"
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 12,
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '10px 16px',
-              marginBottom: 12,
-              background: '#fff8e1',
-              border: '1px solid #ffc107',
-              borderRadius: 10,
-            }}
-          >
-            <span style={{ fontSize: '0.95rem', maxWidth: 760 }}>
+          <div role="region" aria-label="Read-only viewer" className="cloud-readonly-banner">
+            <span>
               Someone else is editing this line in another tab or device. You can review the sheet but not change it. YEET sends them to the home screen and gives you control.
             </span>
             <button
@@ -1481,23 +1478,8 @@ export default function App() {
       </header>
 
       {appMode === 'app' && cloudLineId && cloudViewerRole === 'readonly' && (
-        <div
-          role="region"
-          aria-label="Read-only viewer"
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 12,
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '10px 16px',
-            marginBottom: 12,
-            background: '#fff8e1',
-            border: '1px solid #ffc107',
-            borderRadius: 10,
-          }}
-        >
-          <span style={{ fontSize: '0.95rem', maxWidth: 760 }}>
+        <div role="region" aria-label="Read-only viewer" className="cloud-readonly-banner">
+          <span>
             Someone else is editing this line in another tab or device. You can review the sheet but not change it. YEET sends them to the home screen and gives you control.
           </span>
           <button
@@ -2117,6 +2099,7 @@ export default function App() {
                 moveLabel={`${areaLabels[idA] ?? idA} & ${areaLabels[idB] ?? idB}`}
                 onSlotsChange={setSlotsForArea}
                 onAssign={setSlotAssignment}
+                onTransfer={handleSlotTransfer}
                 requiresTrainedOrExpertA={areaRequiresTrainedOrExpert(idA)}
                 requiresTrainedOrExpertB={areaRequiresTrainedOrExpert(idB)}
                 onRequiresTrainedOrExpertChangeA={(value) => handleAreaRequiresTrainedOrExpertChange(idA, value)}
@@ -2159,6 +2142,7 @@ export default function App() {
               sectionTasks={sectionTasks[areaId] ?? []}
               onSlotsChange={setSlotsForArea}
               onAssign={setSlotAssignment}
+              onTransfer={handleSlotTransfer}
               requiresTrainedOrExpert={areaRequiresTrainedOrExpert(areaId)}
               onRequiresTrainedOrExpertChange={(value) => handleAreaRequiresTrainedOrExpertChange(areaId, value)}
               showBreakCoverageToggle={!!effectiveConfig && getBreaksEnabled(effectiveConfig)}
@@ -2202,6 +2186,7 @@ export default function App() {
                   onSlotsChange={setSlotsForArea}
                   onSectionTasksChange={() => {}}
                   onAssign={setSlotAssignment}
+                  onTransfer={handleSlotTransfer}
                   requiresTrainedOrExpert={false}
                   supportedAreaIds={f.supportedAreaIds}
                   breakSchedules={getBreaksEnabled(effectiveConfig) ? breakSchedules : undefined}

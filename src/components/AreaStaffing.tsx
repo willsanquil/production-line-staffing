@@ -65,6 +65,8 @@ interface AreaStaffingProps {
   onSlotsChange: (areaId: AreaId, slots: Slot[]) => void;
   onSectionTasksChange?: (areaId: AreaId, tasks: unknown[]) => void;
   onAssign: (areaId: AreaId, slotId: string, personId: string | null) => void;
+  /** Drag-and-drop transfer between slots (Admin). */
+  onTransfer?: (from: { areaId: string; slotId: string }, to: { areaId: string; slotId: string }) => void;
   /** When true, area needs at least one Trained or Expert to run. */
   requiresTrainedOrExpert?: boolean;
   /** Called when user toggles "Needs experience" for this area. */
@@ -107,6 +109,7 @@ function AreaStaffingInner({
   onMoveRight,
   onSlotsChange,
   onAssign,
+  onTransfer,
   requiresTrainedOrExpert = false,
   onRequiresTrainedOrExpertChange,
   breakSchedules,
@@ -183,6 +186,7 @@ function AreaStaffingInner({
                     leadAssignedPersonIds={leadAssignedPersonIds}
                     supportedAreaIds={supportedAreaIds}
                     onAssign={handleAssign}
+                    onTransfer={onTransfer}
                   />
                 )}
               </div>
@@ -420,6 +424,7 @@ function AreaStaffingInner({
                     leadAssignedPersonIds={leadAssignedPersonIds}
                     supportedAreaIds={supportedAreaIds}
                     onAssign={handleAssign}
+                    onTransfer={onTransfer}
                   />
                   {breakSchedules && rotationCount != null && slot.personId && (() => {
                     const areaBreaks = breakSchedules[areaId];
