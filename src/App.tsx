@@ -36,7 +36,7 @@ import { randomizeAssignments, fillRemainingAssignments } from './lib/automation
 import { generateBreakSchedules, optimizeFloatBreakRotations } from './lib/breakSchedules';
 import { synthesizeCoverageFloats, mirrorVirtualFloatBreaksToStations } from './lib/coverageStations';
 import { clearAreaAssignments } from './lib/slots';
-import { getLineState, createCloudLine, deleteCloudLine } from './lib/cloudLines';
+import { getLineState, createCloudLine } from './lib/cloudLines';
 import { getCloudSession, setCloudSession, clearCloudSession } from './lib/cloudSession';
 import { clearCloudViewerSession } from './lib/cloudViewerSession';
 import { PersonProfileModal } from './components/PersonProfileModal';
@@ -113,7 +113,6 @@ export default function App() {
   const [rosterVisible, setRosterVisible] = useState(true);
   const [adminVisible, setAdminVisible] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
-  const [shareLinkCopied, setShareLinkCopied] = useState(false);
   const [shareName, setShareName] = useState('');
   const [directLinkPassword, setDirectLinkPassword] = useState('');
   const [directLinkError, setDirectLinkError] = useState<string | null>(null);
@@ -1112,15 +1111,6 @@ export default function App() {
     schedulePersistForRootEdit();
   }, [rootState.lines, rootState.currentLineId, schedulePersistForRootEdit]);
 
-
-  const handleLeaveLine = useCallback(() => {
-    if (cloudLineId) clearCloudViewerSession(cloudLineId);
-    clearCloudSession();
-    setCloudLineId(null);
-    cloudPasswordRef.current = null;
-    setRootState(getHydratedRootState());
-  }, [cloudLineId]);
-
   const handleShareSubmit = useCallback(() => {
     if (!shareName.trim() || !sharePassword) {
       setShareError('Name and password required');
@@ -1157,33 +1147,6 @@ export default function App() {
       .catch((e) => setShareError(e instanceof Error ? e.message : String(e)))
       .finally(() => setShareLoading(false));
   }, [reloadLineState, setCloudUpdatedAt, shareName, sharePassword]);
-
-  const handleDeleteCloudLine = useCallback(() => {
-    const password = cloudPasswordRef.current;
-    if (!cloudLineId || !password) return;
-    const msg = 'Are you sure you want to delete this line from the cloud? Anyone with the password can delete it. This cannot be undone.';
-    if (!window.confirm(msg)) return;
-    deleteCloudLine(cloudLineId, password)
-      .then(() => {
-        clearCloudSession();
-        setCloudLineId(null);
-        cloudPasswordRef.current = null;
-        setRootState(getHydratedRootState());
-        setAppMode('entry');
-      })
-      .catch((e) => alert(e instanceof Error ? e.message : String(e)));
-  }, [cloudLineId]);
-
-  const handleCopyShareLink = useCallback(() => {
-    if (!cloudLineId) return;
-    const url = `${window.location.origin}${window.location.pathname}?cloudLine=${cloudLineId}`;
-    navigator.clipboard.writeText(url).then(() => {
-      setShareLinkCopied(true);
-      setTimeout(() => setShareLinkCopied(false), 3000);
-    }).catch(() => {
-      alert(`Share this link:\n\n${url}`);
-    });
-  }, [cloudLineId]);
 
   const handleDirectLinkView = useCallback(() => {
     if (!cloudLineFromUrl || !directLinkPassword.trim()) {
@@ -1410,31 +1373,10 @@ export default function App() {
             <button type="button" className="cloud-readonly-exempt" onClick={handleGoHome}>
               Home
             </button>
-          {cloudLineId && (
-            <>
-              <button type="button" className="cloud-readonly-exempt" onClick={handleCopyShareLink} style={shareLinkCopied ? { background: '#27ae60', color: '#fff' } : undefined}>
-                {shareLinkCopied ? 'Link Copied!' : 'Share Link'}
-              </button>
-              <button type="button" className="cloud-readonly-exempt" onClick={handleLeaveLine}>
-                Leave line
-              </button>
-              <button
-                type="button"
-                className="btn-danger"
-                onClick={handleDeleteCloudLine}
-                title="Delete this shared line after confirmation"
-              >
-                Delete line from cloud
-              </button>
-            </>
-          )}
-          <button type="button" className="cloud-readonly-exempt" onClick={() => setView('line-manager')}>
-            Lines
-          </button>
-          <button
-            type="button"
-            className="btn-primary cloud-readonly-exempt"
-            onClick={() => setAdminVisible(true)}
+            <button
+              type="button"
+              className="btn-primary cloud-readonly-exempt"
+              onClick={() => setAdminVisible(true)}
             >
               Admin View
             </button>
