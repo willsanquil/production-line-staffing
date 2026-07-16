@@ -148,8 +148,8 @@ export function SlotDropdown({
           <li id={`${listboxId}-0`} role="option" aria-selected={!slot.personId} style={{ marginBottom: 2 }}>
             <button
               type="button"
+              className="slot-dropdown-clear"
               onClick={() => select(null)}
-              style={{ color: '#888' }}
             >
               {slot.personId ? 'Clear slot' : '— Unassigned —'}
             </button>
@@ -164,12 +164,12 @@ export function SlotDropdown({
             >
               <button
                 type="button"
+                className={slot.personId === person.id ? 'slot-dropdown-option-selected' : undefined}
                 onClick={() => select(person.id)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: 6,
-                  background: slot.personId === person.id ? '#e8f4fd' : undefined,
                 }}
               >
                 <span

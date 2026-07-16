@@ -100,7 +100,7 @@ function LeadSlotDropdown({
               small
             />
           ) : (
-            <span style={{ color: '#888' }}>— Unassigned —</span>
+            <span className="slot-dropdown-unassigned">— Unassigned —</span>
           )}
         </button>
         {open && (
@@ -112,8 +112,8 @@ function LeadSlotDropdown({
             <li style={{ marginBottom: 2 }}>
               <button
                 type="button"
+                className="slot-dropdown-clear"
                 onClick={() => select(null)}
-                style={{ color: '#888' }}
               >
                 — Unassigned —
               </button>
@@ -122,11 +122,11 @@ function LeadSlotDropdown({
               <li key={p.id} style={{ marginBottom: 2 }}>
                 <button
                   type="button"
+                  className={leadSlots[slotKey] === p.id ? 'slot-dropdown-option-selected' : undefined}
                   onClick={() => select(p.id)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    background: leadSlots[slotKey] === p.id ? '#e8f4fd' : undefined,
                   }}
                 >
                   <SkillPill

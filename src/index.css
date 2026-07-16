@@ -785,7 +785,7 @@ textarea {
   flex-wrap: wrap;
   align-items: center;
   padding: var(--space-3) var(--space-4);
-  background: linear-gradient(180deg, #ffffff 0%, #f7f9fb 100%);
+  background: linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border-light);
   margin-bottom: var(--space-5);
@@ -818,12 +818,27 @@ textarea {
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
+  color: var(--color-text-primary);
   cursor: pointer;
   font-size: 0.8125rem;
-  transition: background var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
-.slot-dropdown-list li button:hover {
-  background: var(--surface-2);
+.slot-dropdown-list li button:hover,
+.slot-dropdown-list li button:focus-visible {
+  background: var(--color-accent-primary-light);
+  color: var(--color-text-primary);
+}
+.slot-dropdown-list li button.slot-dropdown-option-selected {
+  background: var(--color-accent-primary-light);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+.slot-dropdown-list li button.slot-dropdown-clear {
+  color: var(--color-text-muted);
+}
+.slot-dropdown-list li button.slot-dropdown-clear:hover,
+.slot-dropdown-list li button.slot-dropdown-clear:focus-visible {
+  color: var(--color-text-primary);
 }
 
 /* ============================================================
