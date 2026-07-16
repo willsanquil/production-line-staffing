@@ -4,6 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Production Line Staffing</title>
+    <script>
+      try {
+        var t = localStorage.getItem('pls-theme') || 'classic';
+        var m = localStorage.getItem('pls-mode') || 'light';
+        if (t !== 'classic' && t !== 'factory' && t !== 'soft') t = 'classic';
+        if (m !== 'dark') m = 'light';
+        document.documentElement.setAttribute('data-theme', t);
+        document.documentElement.setAttribute('data-mode', m);
+      } catch (e) {}
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

@@ -40,7 +40,9 @@ import { getLineState, createCloudLine } from './lib/cloudLines';
 import { getCloudSession, setCloudSession, clearCloudSession } from './lib/cloudSession';
 import { clearCloudViewerSession } from './lib/cloudViewerSession';
 import { PersonProfileModal } from './components/PersonProfileModal';
+import { ThemeControls } from './components/ThemeControls';
 import { useCloudLineSync } from './hooks/useCloudLineSync';
+import { useTheme } from './hooks/useTheme';
 import { extractLineDraftState } from './lib/lineDraftState';
 
 const PERSIST_DEBOUNCE_MS = 300;
@@ -112,6 +114,7 @@ export default function App() {
   const [areaBreakCoverageEnabled, setAreaBreakCoverageEnabled] = useState<Record<string, boolean>>(firstLineState.areaBreakCoverageEnabled ?? {});
   const [rosterVisible, setRosterVisible] = useState(true);
   const [adminVisible, setAdminVisible] = useState(true);
+  const { theme, mode, setTheme, toggleMode } = useTheme();
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareName, setShareName] = useState('');
   const [directLinkPassword, setDirectLinkPassword] = useState('');
@@ -1218,29 +1221,35 @@ export default function App() {
     }
     const entryExistingAreaIds = new Set(rootState.lines.flatMap((l) => l.areas.map((a) => a.id)));
     return (
-      <Suspense fallback={<div style={{ padding: 48, textAlign: 'center' }}>Loading…</div>}>
-        <EntryScreen
-          existingAreaIds={entryExistingAreaIds}
-          onSelectLocal={() => setAppMode('app')}
-          onJoinGroup={(root, lineId, password, cursor) => {
-            setRootState(root);
-            setCloudLineId(lineId);
-            cloudPasswordRef.current = password;
-            setCloudUpdatedAt(cursor?.updatedAt ?? null, cursor?.version);
-            reloadLineState();
-            setAppMode('app');
-          }}
-          onJoinGroupPresentation={(root, lineId, password, cursor) => {
-            setRootState(root);
-            setCloudLineId(lineId);
-            cloudPasswordRef.current = password;
-            setCloudUpdatedAt(cursor?.updatedAt ?? null, cursor?.version);
-            reloadLineState();
-            setAdminVisible(false);
-            setAppMode('app');
-          }}
-        />
-      </Suspense>
+      <>
+        <header className="app-header">
+          <span>Production Line Staffing</span>
+          <ThemeControls theme={theme} mode={mode} setTheme={setTheme} toggleMode={toggleMode} />
+        </header>
+        <Suspense fallback={<div style={{ padding: 48, textAlign: 'center' }}>Loading…</div>}>
+          <EntryScreen
+            existingAreaIds={entryExistingAreaIds}
+            onSelectLocal={() => setAppMode('app')}
+            onJoinGroup={(root, lineId, password, cursor) => {
+              setRootState(root);
+              setCloudLineId(lineId);
+              cloudPasswordRef.current = password;
+              setCloudUpdatedAt(cursor?.updatedAt ?? null, cursor?.version);
+              reloadLineState();
+              setAppMode('app');
+            }}
+            onJoinGroupPresentation={(root, lineId, password, cursor) => {
+              setRootState(root);
+              setCloudLineId(lineId);
+              cloudPasswordRef.current = password;
+              setCloudUpdatedAt(cursor?.updatedAt ?? null, cursor?.version);
+              reloadLineState();
+              setAdminVisible(false);
+              setAppMode('app');
+            }}
+          />
+        </Suspense>
+      </>
     );
   }
 
@@ -1257,9 +1266,12 @@ export default function App() {
       <>
         <header className="app-header">
           <span>Production Line Staffing</span>
-          <button type="button" onClick={handleGoHome}>
-            Home
-          </button>
+          <div>
+            <ThemeControls theme={theme} mode={mode} setTheme={setTheme} toggleMode={toggleMode} />
+            <button type="button" onClick={handleGoHome}>
+              Home
+            </button>
+          </div>
         </header>
         <Suspense fallback={<div style={{ padding: 24 }}>Loading lines…</div>}>
           <LineManager
@@ -1330,9 +1342,12 @@ export default function App() {
       <>
         <header className="app-header">
           <span>Production Line Staffing</span>
-          <button type="button" onClick={handleGoHome}>
-            Home
-          </button>
+          <div>
+            <ThemeControls theme={theme} mode={mode} setTheme={setTheme} toggleMode={toggleMode} />
+            <button type="button" onClick={handleGoHome}>
+              Home
+            </button>
+          </div>
         </header>
         <Suspense fallback={<div style={{ padding: 24 }}>Loading builder…</div>}>
           <BuildLineWizard
@@ -1350,7 +1365,8 @@ export default function App() {
       <>
         <header className="app-header">
           <span>Production Line Staffing</span>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <ThemeControls theme={theme} mode={mode} setTheme={setTheme} toggleMode={toggleMode} />
             <button type="button" onClick={handleGoHome}>
               Home
             </button>
@@ -1370,6 +1386,7 @@ export default function App() {
         <header className="app-header">
           <span>Production Line Staffing — {currentConfig.name}{cloudLineId ? ' (Group)' : ''}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <ThemeControls theme={theme} mode={mode} setTheme={setTheme} toggleMode={toggleMode} />
             <button type="button" className="cloud-readonly-exempt" onClick={handleGoHome}>
               Home
             </button>
@@ -1448,6 +1465,7 @@ export default function App() {
       <header className="app-header">
         <span>Production Line Staffing — {currentConfig.name}{cloudLineId ? ' (Group)' : ''}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <ThemeControls theme={theme} mode={mode} setTheme={setTheme} toggleMode={toggleMode} />
           <button type="button" className="cloud-readonly-exempt" onClick={handleGoHome}>
             Home
           </button>
