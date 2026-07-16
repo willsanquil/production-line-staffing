@@ -1,6 +1,5 @@
 import { memo, useState, useEffect, useRef, useCallback } from 'react';
 import type { AreaId, BreakSchedulesByArea, FloatSlotConfig, RosterPerson, SlotsByArea } from '../types';
-import type { SkillLevel } from '../types';
 import { LINE_SECTIONS, LEAD_SLOT_AREAS, areaRequiresTrainedOrExpert as defaultRequiresTrainedOrExpert } from '../types';
 import { BREAK_LINE_WIDE_KEY } from '../lib/lineConfig';
 import { BreakTable } from './BreakTable';
@@ -10,9 +9,6 @@ import { getAreaRisks } from '../lib/lineViewRisks';
 import { computeFloatCoverage } from '../lib/floatCoverage';
 import type { FloatCoverageResult } from '../lib/floatCoverage';
 import { copyTeamsPresentationToClipboard } from '../lib/copyHtmlForTeams';
-
-const BAR_HEIGHT = 18;
-const BAR_HEIGHT_COMPACT = 10;
 
 const BREAK_SLOT_LABELS = ['First Break', 'Second Break', 'Third Break', 'Fourth Break', 'Fifth Break', 'Sixth Break'] as const;
 const ROLE_PA = 'PA';
@@ -30,39 +26,6 @@ function useCompactPresentation() {
     return () => m.removeEventListener('change', fn);
   }, []);
   return compact;
-}
-
-function KnowledgeBar({ position, compact = false }: { position: number | null; compact?: boolean }) {
-  const h = compact ? BAR_HEIGHT_COMPACT : BAR_HEIGHT;
-  return (
-    <div className="seniority-spectrum-wrap" style={{ marginBottom: 0 }}>
-      <div className="seniority-spectrum" style={{ position: 'relative', height: h, borderRadius: 3, overflow: 'hidden', display: 'flex' }}>
-        <div className="skill-no_experience" style={{ flex: 1, minWidth: 0 }} />
-        <div className="skill-training" style={{ flex: 1, minWidth: 0 }} />
-        <div className="skill-trained" style={{ flex: 1, minWidth: 0 }} />
-        <div className="skill-expert" style={{ flex: 1, minWidth: 0 }} />
-        {position != null && (
-          <div
-            className="seniority-spectrum-arrow"
-            style={{
-              position: 'absolute',
-              left: `clamp(2px, ${position}%, calc(100% - 4px))`,
-              top: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: 0,
-              height: 0,
-              borderLeft: compact ? '3px solid transparent' : '5px solid transparent',
-              borderRight: compact ? '3px solid transparent' : '5px solid transparent',
-              borderTop: compact ? '4px solid #1a1a1a' : '7px solid #1a1a1a',
-              filter: 'drop-shadow(0 0 1px #fff)',
-              pointerEvents: 'none',
-            }}
-            title={`Avg: ${((position / 100) * 3).toFixed(1)} / 3`}
-          />
-        )}
-      </div>
-    </div>
-  );
 }
 
 interface LineViewProps {
@@ -149,13 +112,7 @@ function LineViewInner({
   const requiresTrainedOrExpert = areaRequiresTrainedOrExpertProp ?? defaultRequiresTrainedOrExpert;
   const getName = (personId: string | null) =>
     personId ? (roster.find((p) => p.id === personId)?.name ?? '—') : '—';
-  const getSkillInArea = (areaId: AreaId, personId: string | null): SkillLevel => {
-    if (!personId) return 'no_experience';
-    const p = roster.find((r) => r.id === personId);
-    return (p?.skills[areaId] ?? 'no_experience') as SkillLevel;
-  };
   const assignedLeadKeys = leadSlotKeys.filter((k: string) => leadSlots[k] != null && leadSlots[k] !== '');
-  const firstAreaId = typeof sections[0] === 'string' ? sections[0] : sections[0]?.[0];
 
   const nameFontSize = 'clamp(1.1rem, 3vw, 1.28rem)';
   const COLUMNS_GRID = '1.5fr 0.5fr';
@@ -194,7 +151,7 @@ function LineViewInner({
   const coverageSummaryFiltered = coverageSummary;
 
   /**
-   * One combined table per area: Role (custom or "PA") | Name (skill-colored) | First Slot | Second Slot | ... with X for break assignment.
+   * One combined table per area: Role (custom or "PA") | Name | First Slot | Second Slot | ... with X for break assignment.
    * Float row only when a float is *assigned* to this area in that slot (from floatSchedule).
    */
   const renderCombinedAreaTable = (
@@ -225,19 +182,6 @@ function LineViewInner({
     });
     const metricText = `${filled}/${min}`;
     const metricExtra = risks.length > 0 ? ` · ${risks.join(' · ')}` : '';
-    const personIds = areaSlots.map((s) => s.personId).filter(Boolean) as string[];
-    const areaKnowledgePosition =
-      personIds.length > 0
-        ? (personIds.reduce((sum, id) => {
-            const p = roster.find((r) => r.id === id);
-            const level = p?.skills[areaId] ?? 'no_experience';
-            const score = level === 'expert' ? 3 : level === 'trained' ? 2 : level === 'training' ? 1 : 0;
-            return sum + score;
-          }, 0) /
-            personIds.length /
-            3) *
-          100
-        : null;
     const breakAssignments = breakSchedules?.[areaId];
     const supportingFloatsRaw = floatSlotsForCoverage.filter((f) => {
       if (!f.supportedAreaIds.includes(areaId)) return false;
@@ -274,9 +218,6 @@ function LineViewInner({
             <h3 style={{ margin: 0, fontWeight: 700, fontSize: compact ? '0.8rem' : 'clamp(1.05rem, 2.5vw, 1.2rem)' }}>
               {subLabel} — {metricText}{metricExtra}
             </h3>
-            <div className={compact ? 'presentation-area-bar-compact' : ''} style={compact ? undefined : { width: 120, flexShrink: 0 }}>
-              <KnowledgeBar position={areaKnowledgePosition} compact={compact} />
-            </div>
           </div>
         )}
         <div style={{ overflowX: 'auto' }}>
@@ -317,13 +258,12 @@ function LineViewInner({
                 const showRole = roleDisplay !== prevRole;
                 prevRole = roleDisplay;
                 const name = getName(slot.personId);
-                const skill = getSkillInArea(areaId, slot.personId);
                 const breakRot = slot.personId && breakAssignments?.[slot.personId]?.breakRotation;
                 return (
                   <tr key={slot.id}>
                     <td className={tdClassName}>{showRole ? roleDisplay : ''}</td>
                     <td className={tdClassName}>
-                      <span className={`skill-name-${skill}`} style={compact ? undefined : { fontSize: nameFontSize, fontWeight: 600 }}>
+                      <span style={compact ? undefined : { fontSize: nameFontSize, fontWeight: 600 }}>
                         {name}
                       </span>
                     </td>
@@ -448,14 +388,10 @@ function LineViewInner({
                 <tbody>
                   {assignedLeadKeys.map((key: string) => {
                     const personId = leadSlots[key]!;
-                    const skillAreaId = /^\d+$/.test(key) ? (firstAreaId ?? '') : key;
-                    const skill = getSkillInArea(skillAreaId as AreaId, personId);
                     return (
                       <tr key={key}>
                         <td className="presentation-td-compact">{getLeadSlotLabel(key)}</td>
-                        <td className="presentation-td-compact">
-                          <span className={`skill-name-${skill}`}>{getName(personId)}</span>
-                        </td>
+                        <td className="presentation-td-compact">{getName(personId)}</td>
                       </tr>
                     );
                   })}
@@ -477,13 +413,11 @@ function LineViewInner({
                 <tbody>
                   {assignedLeadKeys.map((key: string) => {
                     const personId = leadSlots[key]!;
-                    const skillAreaId = /^\d+$/.test(key) ? (firstAreaId ?? '') : key;
-                    const skill = getSkillInArea(skillAreaId as AreaId, personId);
                     return (
                       <tr key={key}>
                         <td>{getLeadSlotLabel(key)}</td>
                         <td>
-                          <span className={`skill-name-${skill}`} style={{ fontSize: nameFontSize, fontWeight: 600 }}>{getName(personId)}</span>
+                          <span style={{ fontSize: nameFontSize, fontWeight: 600 }}>{getName(personId)}</span>
                         </td>
                       </tr>
                     );

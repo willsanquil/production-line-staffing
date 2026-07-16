@@ -1,30 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  applyThemeToDocument,
+  applyModeToDocument,
   persistMode,
-  persistTheme,
   readStoredMode,
-  readStoredTheme,
-  type ThemeId,
   type ThemeMode,
 } from '../lib/theme';
 
 export function useTheme() {
-  const [theme, setThemeState] = useState<ThemeId>(() =>
-    typeof document !== 'undefined' ? readStoredTheme() : 'classic'
-  );
   const [mode, setModeState] = useState<ThemeMode>(() =>
     typeof document !== 'undefined' ? readStoredMode() : 'light'
   );
 
   useEffect(() => {
-    applyThemeToDocument(theme, mode);
-  }, [theme, mode]);
-
-  const setTheme = useCallback((next: ThemeId) => {
-    setThemeState(next);
-    persistTheme(next);
-  }, []);
+    applyModeToDocument(mode);
+  }, [mode]);
 
   const setMode = useCallback((next: ThemeMode) => {
     setModeState(next);
@@ -39,5 +28,5 @@ export function useTheme() {
     });
   }, []);
 
-  return { theme, mode, setTheme, setMode, toggleMode };
+  return { mode, setMode, toggleMode };
 }

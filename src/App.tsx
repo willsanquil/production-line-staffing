@@ -114,7 +114,7 @@ export default function App() {
   const [areaBreakCoverageEnabled, setAreaBreakCoverageEnabled] = useState<Record<string, boolean>>(firstLineState.areaBreakCoverageEnabled ?? {});
   const [rosterVisible, setRosterVisible] = useState(true);
   const [adminVisible, setAdminVisible] = useState(true);
-  const { theme, mode, setTheme, toggleMode } = useTheme();
+  const { mode, toggleMode } = useTheme();
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareName, setShareName] = useState('');
   const [directLinkPassword, setDirectLinkPassword] = useState('');
@@ -1224,7 +1224,7 @@ export default function App() {
       <>
         <header className="app-header">
           <span>Production Line Staffing</span>
-          <ThemeControls theme={theme} mode={mode} setTheme={setTheme} toggleMode={toggleMode} />
+          <ThemeControls mode={mode} toggleMode={toggleMode} />
         </header>
         <Suspense fallback={<div style={{ padding: 48, textAlign: 'center' }}>Loading…</div>}>
           <EntryScreen
@@ -1267,7 +1267,7 @@ export default function App() {
         <header className="app-header">
           <span>Production Line Staffing</span>
           <div>
-            <ThemeControls theme={theme} mode={mode} setTheme={setTheme} toggleMode={toggleMode} />
+            <ThemeControls mode={mode} toggleMode={toggleMode} />
             <button type="button" onClick={handleGoHome}>
               Home
             </button>
@@ -1343,7 +1343,7 @@ export default function App() {
         <header className="app-header">
           <span>Production Line Staffing</span>
           <div>
-            <ThemeControls theme={theme} mode={mode} setTheme={setTheme} toggleMode={toggleMode} />
+            <ThemeControls mode={mode} toggleMode={toggleMode} />
             <button type="button" onClick={handleGoHome}>
               Home
             </button>
@@ -1366,7 +1366,7 @@ export default function App() {
         <header className="app-header">
           <span>Production Line Staffing</span>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <ThemeControls theme={theme} mode={mode} setTheme={setTheme} toggleMode={toggleMode} />
+            <ThemeControls mode={mode} toggleMode={toggleMode} />
             <button type="button" onClick={handleGoHome}>
               Home
             </button>
@@ -1386,7 +1386,7 @@ export default function App() {
         <header className="app-header">
           <span>Production Line Staffing — {currentConfig.name}{cloudLineId ? ' (Group)' : ''}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <ThemeControls theme={theme} mode={mode} setTheme={setTheme} toggleMode={toggleMode} />
+            <ThemeControls mode={mode} toggleMode={toggleMode} />
             <button type="button" className="cloud-readonly-exempt" onClick={handleGoHome}>
               Home
             </button>
@@ -1465,7 +1465,7 @@ export default function App() {
       <header className="app-header">
         <span>Production Line Staffing — {currentConfig.name}{cloudLineId ? ' (Group)' : ''}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <ThemeControls theme={theme} mode={mode} setTheme={setTheme} toggleMode={toggleMode} />
+          <ThemeControls mode={mode} toggleMode={toggleMode} />
           <button type="button" className="cloud-readonly-exempt" onClick={handleGoHome}>
             Home
           </button>
