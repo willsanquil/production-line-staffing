@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import type { AppState, AreaId, BreakPreference, FloatSlotConfig, RootState, RosterPerson, SavedDay, SlotsByArea } from './types';
+import type { AreaId, BreakPreference, FloatSlotConfig, RootState, RosterPerson, SlotsByArea } from './types';
 import type { SkillLevel } from './types';
 import { getLineHealthScore } from './lib/lineHealth';
 import { getHydratedRootState } from './lib/initialState';
@@ -18,7 +18,6 @@ import {
   getBreaksEnabled,
   getBreaksScope,
   getBreakRotations,
-  BREAK_LINE_WIDE_KEY,
   areaIdFromName,
   getLeadSlotKeys,
   getLeadSlotLabel,
@@ -27,33 +26,22 @@ import {
   getFloatSlots,
   LEAD_COVERAGE_PREFIX,
 } from './lib/lineConfig';
-import { createEmptyPerson, createEmptyOTPerson, createEmptySlot, getEmptyLineState, normalizeSlotsToCapacity, normalizeSlotsToLineCapacity } from './data/initialState';
+import { createEmptyPerson, createEmptyOTPerson, createEmptySlot, getEmptyLineState } from './data/initialState';
 import { RosterGrid } from './components/RosterGrid';
 import { LeadSlotsSection } from './components/LeadSlotsSection';
 import { AreaStaffing } from './components/AreaStaffing';
 import { CombinedAreaStaffing } from './components/CombinedAreaStaffing';
 import { UnslottedBank } from './components/UnslottedBank';
-import { LocalBackupPanel } from './components/LocalBackupPanel';
-import { CloudImportModal } from './components/CloudImportModal';
-import { randomizeAssignments, applyDefaultPositionsThenSpread, fillRemainingAssignments } from './lib/automation';
+import { randomizeAssignments, fillRemainingAssignments } from './lib/automation';
 import { generateBreakSchedules, optimizeFloatBreakRotations } from './lib/breakSchedules';
 import { synthesizeCoverageFloats, mirrorVirtualFloatBreaksToStations } from './lib/coverageStations';
 import { clearAreaAssignments } from './lib/slots';
-import { loadSavedDays, addSavedDay, removeSavedDay, exportRootStateToJson, importBackupFromJson } from './lib/persist';
-import type { ImportedBackup } from './lib/persist';
-import { saveToFile, overwriteFile, openFromFile, isSaveToFileSupported } from './lib/fileStorage';
-import { getLineState, createCloudLine, deleteCloudLine, listCloudLines, logDay, listDayLogs } from './lib/cloudLines';
-import type { DayLogSummary } from './types';
-import { LogDayModal } from './components/history/LogDayModal';
-import { SHIFT_HOURS } from './lib/dayLogConstants';
-import { HistoryReportsView } from './components/history/HistoryReportsView';
+import { getLineState, createCloudLine, deleteCloudLine } from './lib/cloudLines';
 import { getCloudSession, setCloudSession, clearCloudSession } from './lib/cloudSession';
 import { clearCloudViewerSession } from './lib/cloudViewerSession';
-import { BreakTable } from './components/BreakTable';
 import { PersonProfileModal } from './components/PersonProfileModal';
-import { TrainingReport } from './components/TrainingReport';
 import { useCloudLineSync } from './hooks/useCloudLineSync';
-import { buildPersistedRootState, extractLineDraftState } from './lib/lineDraftState';
+import { extractLineDraftState } from './lib/lineDraftState';
 
 const PERSIST_DEBOUNCE_MS = 300;
 
@@ -109,11 +97,7 @@ export default function App() {
   const cloudPasswordRef = useRef<string | null>(null);
 
   const [rootState, setRootState] = useState(rootInitial);
-  const [view, setView] = useState<'staffing' | 'line-manager' | 'build-line' | 'history'>('staffing');
-  const [logDayOpen, setLogDayOpen] = useState(false);
-  const [logDayLoading, setLogDayLoading] = useState(false);
-  const [logDayError, setLogDayError] = useState<string | null>(null);
-  const [dayLogSummaries, setDayLogSummaries] = useState<DayLogSummary[]>([]);
+  const [view, setView] = useState<'staffing' | 'line-manager' | 'build-line'>('staffing');
 
   const [slots, setSlots] = useState(firstLineState.slots);
   const [leadSlots, setLeadSlots] = useState(firstLineState.leadSlots);
@@ -126,7 +110,6 @@ export default function App() {
   const [breakSchedules, setBreakSchedules] = useState(firstLineState.breakSchedules ?? {});
   const [leadBreakCoverage, setLeadBreakCoverage] = useState<Record<string, boolean>>(firstLineState.leadBreakCoverage ?? {});
   const [areaBreakCoverageEnabled, setAreaBreakCoverageEnabled] = useState<Record<string, boolean>>(firstLineState.areaBreakCoverageEnabled ?? {});
-  const [savedDays, setSavedDays] = useState(() => loadSavedDays());
   const [rosterVisible, setRosterVisible] = useState(true);
   const [adminVisible, setAdminVisible] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -135,12 +118,6 @@ export default function App() {
   const [directLinkPassword, setDirectLinkPassword] = useState('');
   const [directLinkError, setDirectLinkError] = useState<string | null>(null);
   const [directLinkLoading, setDirectLinkLoading] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [importLineId, setImportLineId] = useState('');
-  const [importPassword, setImportPassword] = useState('');
-  const [importLoading, setImportLoading] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [importLines, setImportLines] = useState<{ id: string; name: string }[]>([]);
 
   const cloudLineFromUrl = useMemo(() => {
     if (typeof window === 'undefined') return null;
@@ -174,12 +151,6 @@ export default function App() {
   const [areaCoversBreaksFor, setAreaCoversBreaksFor] = useState<Record<string, string[]>>(firstLineState.areaCoversBreaksFor ?? {});
   const [profilePersonId, setProfilePersonId] = useState<string | null>(null);
   const [showStaffTheLineWizard, setShowStaffTheLineWizard] = useState(false);
-  const [undoSnapshot, setUndoSnapshot] = useState<{
-    label: string;
-    slots: SlotsByArea;
-    leadSlots: Record<string, string | null>;
-    breakSchedules: NonNullable<AppState['breakSchedules']>;
-  } | null>(null);
   /** When false, area cards show only slot names + assignee (simple view). When true, full configure UI. */
   const [configureMode, setConfigureMode] = useState(false);
 
@@ -418,25 +389,6 @@ export default function App() {
     return result;
   }, [effectiveConfig, slots, slotLabelsByArea]);
 
-  const captureUndoSnapshot = useCallback((label: string) => {
-    const state = stateRef.current;
-    setUndoSnapshot({
-      label,
-      slots: JSON.parse(JSON.stringify(state.slots)) as SlotsByArea,
-      leadSlots: JSON.parse(JSON.stringify(state.leadSlots)) as Record<string, string | null>,
-      breakSchedules: JSON.parse(JSON.stringify(state.breakSchedules ?? {})) as NonNullable<AppState['breakSchedules']>,
-    });
-  }, []);
-
-  const handleUndoLastAction = useCallback(() => {
-    if (!undoSnapshot) return;
-    markLocalChange();
-    setSlots(undoSnapshot.slots);
-    setLeadSlots(undoSnapshot.leadSlots);
-    setBreakSchedules(undoSnapshot.breakSchedules);
-    setUndoSnapshot(null);
-  }, [markLocalChange, undoSnapshot]);
-
   const setSlotAssignment = useCallback((areaId: AreaId, slotId: string, personId: string | null) => {
     markLocalChange();
     setSlots((prev) => ({
@@ -613,20 +565,6 @@ export default function App() {
   const handleCloseProfile = useCallback(() => {
     setProfilePersonId(null);
   }, []);
-
-  const handleDefaultPositionChange = useCallback(
-    (personId: string, areaId: string | null, slotIndex: number | null) => {
-      setRootState((prev) =>
-        updatePersonInRoot(prev, personId, (p) => ({
-          ...p,
-          defaultAreaId: areaId ?? null,
-          defaultSlotIndex: slotIndex ?? null,
-        }))
-      );
-      schedulePersistForRootEdit();
-    },
-    [schedulePersistForRootEdit]
-  );
 
   const handleAreaRequiresTrainedOrExpertChange = useCallback((areaId: string, value: boolean) => {
     setAreaRequiresTrainedOrExpertOverrides((prev) => ({ ...prev, [areaId]: value }));
@@ -1006,7 +944,6 @@ export default function App() {
   }, []);
 
   const handleClearLine = useCallback(() => {
-    captureUndoSnapshot('Clear line');
     setSlots((prev) => {
       let next = prev;
       for (const areaId of areaIds) {
@@ -1015,7 +952,7 @@ export default function App() {
       return next;
     });
     setBreakSchedules({});
-  }, [areaIds, captureUndoSnapshot]);
+  }, [areaIds]);
 
   const handleClearArea = useCallback((areaId: AreaId) => {
     markLocalChange();
@@ -1106,139 +1043,17 @@ export default function App() {
     regenerateBreaksForSlots(slots);
   }, [appMode, effectiveConfig, slots, leadSlots, regenerateBreaksForSlots]);
 
-  const handleSaveDay = useCallback((date: string, name?: string) => {
-    const state = stateRef.current;
-    addSavedDay(
-      date,
-      { roster, slots: state.slots, leadSlots: state.leadSlots, juicedAreas: state.juicedAreas, deJuicedAreas: state.deJuicedAreas, sectionTasks: state.sectionTasks, schedule: state.schedule, dayNotes: state.dayNotes, documents: state.documents, breakSchedules: state.breakSchedules, leadBreakCoverage: state.leadBreakCoverage, areaBreakCoverageEnabled: state.areaBreakCoverageEnabled, areaRequiresTrainedOrExpertOverrides: state.areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled: state.slotBreakCoverageEnabled, areaCoversBreaksFor: state.areaCoversBreaksFor, fullStaffOverride: state.fullStaffOverride },
-      name,
-      rootState.currentLineId
-    );
-    setSavedDays(loadSavedDays());
-  }, [roster, rootState.currentLineId]);
-
-  const handleLoadDay = useCallback((day: SavedDay) => {
-    const targetLineId = day.lineId ?? rootState.currentLineId;
-    const targetConfig = rootState.lines.find((l) => l.id === targetLineId);
-    const normalizedSlots = targetConfig
-      ? normalizeSlotsToLineCapacity(day.slots, targetConfig, areaCapacityOverrides)
-      : normalizeSlotsToCapacity(day.slots, areaCapacityOverrides);
-    const lineStateForDay = {
-      roster: rootState.lineStates[targetLineId]?.roster ?? [],
-      slots: normalizedSlots,
-      leadSlots:
-        day.leadSlots ??
-        Object.fromEntries((targetConfig ? getLeadSlotKeys(targetConfig) : leadSlotKeys).map((id) => [id, null])),
-      juicedAreas: day.juicedAreas ?? {},
-      deJuicedAreas: day.deJuicedAreas ?? {},
-      sectionTasks: day.sectionTasks ?? {},
-      schedule: day.schedule ?? [],
-      dayNotes: day.dayNotes ?? '',
-      documents: day.documents ?? [],
-      breakSchedules: day.breakSchedules ?? {},
-      leadBreakCoverage: day.leadBreakCoverage ?? {},
-      areaBreakCoverageEnabled: day.areaBreakCoverageEnabled ?? {},
-      areaRequiresTrainedOrExpertOverrides: day.areaRequiresTrainedOrExpertOverrides ?? {},
-      slotBreakCoverageEnabled: day.slotBreakCoverageEnabled ?? {},
-      areaCoversBreaksFor: day.areaCoversBreaksFor ?? {},
-      fullStaffOverride: day.fullStaffOverride ?? null,
-      areaCapacityOverrides: areaCapacityOverrides ?? {},
-      areaNameOverrides: areaNameOverrides ?? {},
-      slotLabelsByArea: slotLabelsByArea ?? {},
-    };
-    setRootState((prev) => {
-      let next: typeof prev = { ...prev, currentLineId: targetLineId, lineStates: { ...prev.lineStates, [targetLineId]: lineStateForDay } };
-      for (const p of day.roster) {
-        const normalized: RosterPerson = {
-          ...p,
-          lead: p.lead ?? false,
-          ot: p.ot ?? false,
-          otHereToday: p.otHereToday ?? false,
-          late: p.late ?? false,
-          leavingEarly: p.leavingEarly ?? false,
-          breakPreference: p.breakPreference ?? 'no_preference',
-          areasWantToLearn: p.areasWantToLearn ?? [],
-          // Preserve original flexedToLineId: null means "home" on this line,
-          // a different lineId means flexed in from that line.
-          flexedToLineId: p.flexedToLineId ?? null,
-        };
-        const homeLineId = findPersonHomeLine(next.lineStates, p.id);
-        if (homeLineId != null) {
-          next = updatePersonInRoot(next, p.id, () => normalized);
-        } else {
-          const ls = next.lineStates[targetLineId];
-          const roster = [...(ls?.roster ?? []), normalized];
-          next = { ...next, lineStates: { ...next.lineStates, [targetLineId]: { ...ls, roster } } };
-        }
-      }
-      return next;
-    });
-    setSlots(normalizedSlots);
-    setLeadSlots(lineStateForDay.leadSlots);
-    setJuicedAreas(lineStateForDay.juicedAreas);
-    setDeJuicedAreas(lineStateForDay.deJuicedAreas);
-    setSectionTasks(lineStateForDay.sectionTasks);
-    setSchedule(lineStateForDay.schedule);
-    setDayNotes(lineStateForDay.dayNotes);
-    setDocuments(lineStateForDay.documents);
-    setBreakSchedules(lineStateForDay.breakSchedules ?? {});
-    setLeadBreakCoverage(lineStateForDay.leadBreakCoverage ?? {});
-    setAreaBreakCoverageEnabled(lineStateForDay.areaBreakCoverageEnabled ?? {});
-    setAreaRequiresTrainedOrExpertOverrides(lineStateForDay.areaRequiresTrainedOrExpertOverrides ?? {});
-    setSlotBreakCoverageEnabled(lineStateForDay.slotBreakCoverageEnabled ?? {});
-    setAreaCoversBreaksFor(lineStateForDay.areaCoversBreaksFor ?? {});
-    setFullStaffOverride(lineStateForDay.fullStaffOverride ?? null);
-    // Force a reload so the useEffect at line 276 re-syncs all local state from rootState
-    setLineStateReloadKey((k) => k + 1);
-  }, [areaCapacityOverrides, areaNameOverrides, leadSlotKeys, rootState.currentLineId, rootState.lines, rootState.lineStates, slotLabelsByArea]);
-
   const handleRandomize = useCallback(() => {
-    captureUndoSnapshot('Randomize');
     const nextSlots = randomizeAssignments(roster, slots, leadAssignedPersonIds, areaIds, areaRequiresTrainedOrExpert);
     setSlots(nextSlots);
     regenerateBreaksForSlots(nextSlots);
-  }, [captureUndoSnapshot, roster, slots, leadAssignedPersonIds, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
-
-  const handleDefaultPositions = useCallback(() => {
-    captureUndoSnapshot('Default positions');
-    // Fill empty lead slots with people configured as lead (by default leads go into lead slots)
-    const newLeadSlots = { ...leadSlots };
-    const usedLeadIds = new Set<string>();
-    for (const key of leadSlotKeys) {
-      if (newLeadSlots[key]) {
-        usedLeadIds.add(newLeadSlots[key]!);
-        continue;
-      }
-      const leadPerson = roster.find(
-        (p) =>
-          p.lead &&
-          !p.absent &&
-          (!p.ot || p.otHereToday) &&
-          !usedLeadIds.has(p.id)
-      );
-      if (leadPerson) {
-        newLeadSlots[key] = leadPerson.id;
-        usedLeadIds.add(leadPerson.id);
-      }
-    }
-    const newLeadAssignedPersonIds = new Set<string>(Object.values(newLeadSlots).filter(Boolean) as string[]);
-    setLeadSlots(newLeadSlots);
-    const nextSlots = applyDefaultPositionsThenSpread(roster, slots, juicedAreas, newLeadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
-    setSlots(nextSlots);
-    regenerateBreaksForSlots(nextSlots);
-  }, [captureUndoSnapshot, roster, slots, juicedAreas, deJuicedAreas, leadSlots, leadSlotKeys, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
+  }, [roster, slots, leadAssignedPersonIds, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
 
   const handleFillRemaining = useCallback(() => {
-    captureUndoSnapshot('Fill remaining');
     const nextSlots = fillRemainingAssignments(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
     setSlots(nextSlots);
     regenerateBreaksForSlots(nextSlots);
-  }, [captureUndoSnapshot, roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
-
-  const handleRemoveDay = useCallback((id: string) => {
-    removeSavedDay(id);
-    setSavedDays(loadSavedDays());
-  }, []);
+  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
 
   const handleOpenLine = useCallback((lineId: string) => {
     setRootState((prev) => ({
@@ -1297,191 +1112,6 @@ export default function App() {
     schedulePersistForRootEdit();
   }, [rootState.lines, rootState.currentLineId, schedulePersistForRootEdit]);
 
-  const importFileRef = useRef<HTMLInputElement>(null);
-  const addToRosterFileRef = useRef<HTMLInputElement>(null);
-  const savedFileHandleRef = useRef<FileSystemFileHandle | null>(null);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
-
-  const applyImportedState = useCallback((imported: AppState) => {
-    const currentLineId = rootStateRef.current.currentLineId;
-    const normalized = (imported.roster ?? []).map((p: RosterPerson) => ({
-      ...p,
-      lead: p.lead ?? false,
-      ot: p.ot ?? false,
-      otHereToday: p.otHereToday ?? false,
-      late: p.late ?? false,
-      leavingEarly: p.leavingEarly ?? false,
-      breakPreference: p.breakPreference ?? 'no_preference',
-      areasWantToLearn: p.areasWantToLearn ?? [],
-      flexedToLineId: p.flexedToLineId ?? null,
-    }));
-    setRootState((prev) => ({
-      ...prev,
-      lineStates: {
-        ...prev.lineStates,
-        [currentLineId]: { ...prev.lineStates[currentLineId], roster: normalized.length ? normalized : prev.lineStates[currentLineId]?.roster ?? [] },
-      },
-    }));
-    const normalizedSlots =
-      effectiveConfig
-        ? normalizeSlotsToLineCapacity(imported.slots, effectiveConfig, imported.areaCapacityOverrides)
-        : normalizeSlotsToCapacity(imported.slots, imported.areaCapacityOverrides);
-    setSlots(normalizedSlots);
-    setLeadSlots(imported.leadSlots ?? Object.fromEntries(leadSlotKeys.map((id) => [id, null])));
-    setJuicedAreas(imported.juicedAreas ?? {});
-    setDeJuicedAreas(imported.deJuicedAreas ?? {});
-    setSectionTasks(imported.sectionTasks ?? {});
-    setSchedule(imported.schedule ?? []);
-    setDayNotes(imported.dayNotes ?? '');
-    setDocuments(imported.documents ?? []);
-    setBreakSchedules(imported.breakSchedules ?? {});
-    setLeadBreakCoverage(imported.leadBreakCoverage ?? {});
-    setAreaBreakCoverageEnabled(imported.areaBreakCoverageEnabled ?? {});
-    setAreaRequiresTrainedOrExpertOverrides(imported.areaRequiresTrainedOrExpertOverrides ?? {});
-    setSlotBreakCoverageEnabled(imported.slotBreakCoverageEnabled ?? {});
-    setAreaCoversBreaksFor(imported.areaCoversBreaksFor ?? {});
-    setFullStaffOverride(imported.fullStaffOverride ?? null);
-    setAreaCapacityOverrides(imported.areaCapacityOverrides ?? {});
-    setAreaNameOverrides(imported.areaNameOverrides ?? {});
-    setSlotLabelsByArea(imported.slotLabelsByArea ?? {});
-    setSavedDays(loadSavedDays());
-  }, [effectiveConfig, leadSlotKeys]);
-
-  const applyImportedBackup = useCallback(
-    (backup: ImportedBackup) => {
-      if (backup.kind === 'root') {
-        setRootState(backup.root);
-        reloadLineState();
-        setSavedDays(loadSavedDays());
-        schedulePersistForRootEdit();
-        return;
-      }
-      applyImportedState(backup.state);
-    },
-    [applyImportedState, reloadLineState, schedulePersistForRootEdit]
-  );
-
-  const handleSaveToFile = useCallback(async () => {
-    const root = buildPersistedRootState(rootStateRef.current, stateRef.current);
-    try {
-      let written = false;
-      if (savedFileHandleRef.current) {
-        written = await overwriteFile(root, savedFileHandleRef.current);
-      }
-      if (!written) {
-        const handle = await saveToFile(root);
-        if (handle) {
-          savedFileHandleRef.current = handle;
-          written = true;
-        }
-      }
-      if (written) {
-        setSaveMessage('Saved');
-        setTimeout(() => setSaveMessage(null), 2000);
-      }
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Could not save file.');
-    }
-  }, []);
-
-  const handleOpenFromFile = useCallback(async () => {
-    try {
-      const imported = await openFromFile();
-      if (imported) applyImportedBackup(imported);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Could not open file.');
-    }
-  }, [applyImportedBackup]);
-
-  const handleExportBackup = useCallback(() => {
-    const root = buildPersistedRootState(rootStateRef.current, stateRef.current);
-    const json = exportRootStateToJson(root);
-    const blob = new Blob([json], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `staffing-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }, []);
-
-  const handleImportBackup = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const text = reader.result as string;
-        const imported = importBackupFromJson(text);
-        if (!imported) {
-          alert('Invalid backup file.');
-          return;
-        }
-        applyImportedBackup(imported);
-      };
-      reader.readAsText(file);
-      e.target.value = '';
-    },
-    [applyImportedBackup]
-  );
-
-  const handleAddToRosterFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const text = reader.result as string;
-        const imported = importBackupFromJson(text);
-        let sourceRoster: RosterPerson[] | null = null;
-        if (imported?.kind === 'line') {
-          sourceRoster = imported.state.roster ?? null;
-        } else if (imported?.kind === 'root') {
-          sourceRoster = imported.root.lineStates[imported.root.currentLineId]?.roster ?? null;
-        }
-        if (!sourceRoster || !Array.isArray(sourceRoster)) {
-          alert('Invalid file or no roster in file.');
-          e.target.value = '';
-          return;
-        }
-        setRootState((prev) => {
-          const lineId = prev.currentLineId;
-          const currentRoster = prev.lineStates[lineId]?.roster ?? [];
-          const toAdd: RosterPerson[] = sourceRoster.map((p) => {
-            const id = Math.random().toString(36).slice(2, 11);
-            const skills = { ...p.skills } as Record<AreaId, SkillLevel>;
-            for (const aid of areaIds) {
-              if (skills[aid] === undefined) skills[aid] = 'no_experience';
-            }
-            return {
-              ...p,
-              id,
-              skills,
-              areasWantToLearn: p.areasWantToLearn ?? [],
-              flexedToLineId: null,
-            };
-          });
-          return {
-            ...prev,
-            lineStates: {
-              ...prev.lineStates,
-              [lineId]: {
-                ...prev.lineStates[lineId],
-                roster: [...currentRoster, ...toAdd],
-              },
-            },
-          };
-        });
-        schedulePersistForRootEdit();
-      };
-      reader.readAsText(file);
-      e.target.value = '';
-    },
-    [areaIds, schedulePersistForRootEdit]
-  );
-
-  const handleAddToRoster = useCallback(() => {
-    addToRosterFileRef.current?.click();
-  }, []);
 
   const handleLeaveLine = useCallback(() => {
     if (cloudLineId) clearCloudViewerSession(cloudLineId);
@@ -1554,133 +1184,6 @@ export default function App() {
       alert(`Share this link:\n\n${url}`);
     });
   }, [cloudLineId]);
-
-  const refreshDayLogSummaries = useCallback(async () => {
-    if (!cloudLineId || !cloudPasswordRef.current) return;
-    try {
-      const logs = await listDayLogs(cloudLineId, cloudPasswordRef.current);
-      setDayLogSummaries(logs);
-    } catch {
-      setDayLogSummaries([]);
-    }
-  }, [cloudLineId]);
-
-  const handleOpenLogDay = useCallback(() => {
-    setLogDayError(null);
-    setLogDayOpen(true);
-    void refreshDayLogSummaries();
-  }, [refreshDayLogSummaries]);
-
-  const handleLogDayConfirm = useCallback(
-    async (workDate: string) => {
-      if (!cloudLineId || !cloudPasswordRef.current || !effectiveConfig) return;
-      setLogDayLoading(true);
-      setLogDayError(null);
-      try {
-        const lineState = rootState.lineStates[rootState.currentLineId];
-        if (!lineState) throw new Error('No line state to log');
-        const res = await logDay({
-          lineId: cloudLineId,
-          password: cloudPasswordRef.current,
-          workDate,
-          shiftHours: SHIFT_HOURS,
-          lineConfig: effectiveConfig,
-          lineState: {
-            roster: lineState.roster,
-            slots: lineState.slots,
-            leadSlots: lineState.leadSlots,
-            breakSchedules: lineState.breakSchedules,
-            areaNameOverrides: lineState.areaNameOverrides,
-            slotLabelsByArea: lineState.slotLabelsByArea,
-            juicedAreas: lineState.juicedAreas,
-            dayNotes: lineState.dayNotes,
-          },
-          notes: lineState.dayNotes,
-        });
-        setSaveMessage(`Logged ${workDate} (${res.assignmentCount} assignments)`);
-        setLogDayOpen(false);
-        void refreshDayLogSummaries();
-      } catch (e) {
-        setLogDayError(e instanceof Error ? e.message : String(e));
-      } finally {
-        setLogDayLoading(false);
-      }
-    },
-    [cloudLineId, effectiveConfig, refreshDayLogSummaries, rootState]
-  );
-
-  const handleOpenImportModal = useCallback(() => {
-    setImportLineId('');
-    setImportPassword('');
-    setImportError(null);
-    setShowImportModal(true);
-    listCloudLines()
-      .then((lines) => setImportLines(lines.filter((l) => l.id !== cloudLineId)))
-      .catch(() => setImportLines([]));
-  }, [cloudLineId]);
-
-  const handleImportFromCloudLine = useCallback(() => {
-    if (!importLineId || !importPassword.trim()) {
-      setImportError('Select a line and enter its password');
-      return;
-    }
-    setImportError(null);
-    setImportLoading(true);
-    getLineState(importLineId, importPassword.trim())
-      .then(({ rootState: importedRoot }) => {
-        const importedLineState = importedRoot.lineStates[importedRoot.currentLineId];
-        const importedRoster = importedLineState?.roster ?? [];
-        const importedLineConfig = importedRoot.lines.find((l) => l.id === importedRoot.currentLineId);
-        const importedAreaIds = importedLineConfig?.areas.map((a) => a.id) ?? [];
-        
-        setRootState((prev) => {
-          const currentLineState = prev.lineStates[prev.currentLineId];
-          const currentRoster = currentLineState?.roster ?? [];
-          const currentNameMap = new Map(currentRoster.map((p) => [p.name.toLowerCase().trim(), p]));
-          
-          const updatedRoster = [...currentRoster];
-          for (const importedPerson of importedRoster) {
-            const nameKey = importedPerson.name.toLowerCase().trim();
-            const existing = currentNameMap.get(nameKey);
-            if (existing) {
-              // Merge skills - add skills from imported areas
-              const mergedSkills = { ...existing.skills };
-              for (const areaId of importedAreaIds) {
-                const importedSkill = importedPerson.skills[areaId];
-                if (importedSkill && importedSkill !== 'no_experience') {
-                  mergedSkills[areaId] = importedSkill;
-                }
-              }
-              const idx = updatedRoster.findIndex((p) => p.id === existing.id);
-              if (idx >= 0) {
-                updatedRoster[idx] = { ...updatedRoster[idx], skills: mergedSkills };
-              }
-            } else {
-              // Add new person with new ID
-              const newId = Math.random().toString(36).slice(2, 11);
-              updatedRoster.push({
-                ...importedPerson,
-                id: newId,
-                flexedToLineId: undefined,
-              });
-            }
-          }
-          
-          return {
-            ...prev,
-            lineStates: {
-              ...prev.lineStates,
-              [prev.currentLineId]: { ...currentLineState, roster: updatedRoster },
-            },
-          };
-        });
-        
-        setShowImportModal(false);
-        alert(`Imported ${importedRoster.length} people from the other line. People with matching names had their skills merged.`);
-      })
-      .catch((e) => setImportError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setImportLoading(false));
-  }, [importLineId, importPassword]);
 
   const handleDirectLinkView = useCallback(() => {
     if (!cloudLineFromUrl || !directLinkPassword.trim()) {
@@ -1783,17 +1286,6 @@ export default function App() {
       <div style={{ padding: 48, textAlign: 'center' }}>
         <p>Loading group line…</p>
       </div>
-    );
-  }
-
-  if (view === 'history' && cloudLineId && effectiveConfig && cloudPasswordRef.current) {
-    return (
-      <HistoryReportsView
-        lineId={cloudLineId}
-        password={cloudPasswordRef.current}
-        lineConfig={effectiveConfig}
-        onBack={() => setView('staffing')}
-      />
     );
   }
 
@@ -2005,17 +1497,6 @@ export default function App() {
             slotBreakCoverageEnabled={slotBreakCoverageEnabled}
           />
         </Suspense>
-        {cloudLineId && effectiveConfig && (
-          <LogDayModal
-            lineName={effectiveConfig.name}
-            open={logDayOpen}
-            loading={logDayLoading}
-            error={logDayError}
-            loggedDates={dayLogSummaries.map((s) => s.workDate)}
-            onClose={() => setLogDayOpen(false)}
-            onConfirm={(workDate) => void handleLogDayConfirm(workDate)}
-          />
-        )}
       </>
     );
   }
@@ -2028,30 +1509,6 @@ export default function App() {
           <button type="button" className="cloud-readonly-exempt" onClick={handleGoHome}>
             Home
           </button>
-          {cloudLineId && (
-            <>
-              <button type="button" className="cloud-readonly-exempt" onClick={handleOpenLogDay}>
-                Log the day
-              </button>
-              <button type="button" className="cloud-readonly-exempt" onClick={() => setView('history')}>
-                History
-              </button>
-              <button type="button" className="cloud-readonly-exempt" onClick={handleLeaveLine}>
-                Leave line
-              </button>
-              <button
-                type="button"
-                className="btn-danger"
-                onClick={handleDeleteCloudLine}
-                title="Delete this shared line after confirmation"
-              >
-                Delete line from cloud
-              </button>
-            </>
-          )}
-          <button type="button" className="cloud-readonly-exempt" onClick={() => setView('line-manager')}>
-            Lines
-          </button>
           <button
             type="button"
             className="cloud-readonly-exempt"
@@ -2062,18 +1519,6 @@ export default function App() {
           </button>
         </div>
       </header>
-
-      {cloudLineId && effectiveConfig && (
-        <LogDayModal
-          lineName={effectiveConfig.name}
-          open={logDayOpen}
-          loading={logDayLoading}
-          error={logDayError}
-          loggedDates={dayLogSummaries.map((s) => s.workDate)}
-          onClose={() => setLogDayOpen(false)}
-          onConfirm={(workDate) => void handleLogDayConfirm(workDate)}
-        />
-      )}
 
       {appMode === 'app' && cloudLineId && cloudViewerRole === 'readonly' && (
         <div
@@ -2141,13 +1586,6 @@ export default function App() {
         onToggleOTHereToday={handleToggleOTHereToday}
         onSkillChange={handleSkillChange}
         onFlexedToLineChange={handleFlexedToLineChange}
-        saveMessage={saveMessage}
-        onSaveToFile={handleSaveToFile}
-        onOpenFromFile={handleOpenFromFile}
-        onAddToRoster={handleAddToRoster}
-        isSaveToFileSupported={isSaveToFileSupported}
-        onImportFromCloudLine={handleOpenImportModal}
-        isCloudMode={!!cloudLineId}
         onOpenProfile={handleOpenProfile}
       />
 
@@ -2219,15 +1657,8 @@ export default function App() {
         <button type="button" className="btn-primary" onClick={() => setShowStaffTheLineWizard(true)} title="Quick setup: mark absences and disable stations">
           Staff the line
         </button>
-        <button type="button" className="btn-primary" onClick={handleDefaultPositions}>Default positions</button>
         <button type="button" className="btn-primary" onClick={handleFillRemaining}>Fill remaining</button>
         <button type="button" className="btn-primary" onClick={handleRandomize}>Randomize</button>
-        <button type="button" className="btn-ghost" onClick={handleUndoLastAction} disabled={!undoSnapshot}>
-          Undo{undoSnapshot ? ` ${undoSnapshot.label}` : ''}
-        </button>
-        {/* STRETCH temporarily disabled
-        <button type="button" onClick={handleStretch} title="Push team outside comfort zone; prefer areas they want to learn">STRETCH</button>
-        */}
         <button type="button" className="btn-danger" onClick={handleClearLine}>Clear line</button>
       </div>
 
@@ -2656,7 +2087,7 @@ export default function App() {
             onToggleOTHereToday={handleToggleOTHereToday}
             onSetSlotsForArea={setSlotsForArea}
             onClose={() => setShowStaffTheLineWizard(false)}
-            onStaffComplete={handleDefaultPositions}
+            onStaffComplete={handleFillRemaining}
           />
         </Suspense>
       )}
@@ -2673,7 +2104,6 @@ export default function App() {
           onToggleLeavingEarly={handleToggleLeavingEarly}
           onBreakPreferenceChange={handleBreakPreferenceChange}
           onSkillChange={handleSkillChange}
-          onDefaultPositionChange={handleDefaultPositionChange}
           onAreasWantToLearnChange={handleAreasWantToLearnChange}
           onFlexedToLineChange={handleFlexedToLineChange}
         />
@@ -2832,176 +2262,6 @@ export default function App() {
         allAssignedPersonIds={allAssignedPersonIds}
       />
       </div>
-
-      <TrainingReport
-        roster={roster}
-        slots={slots}
-        areaLabels={areaLabels}
-        effectiveCapacity={effectiveCapacity}
-        areaIds={areaIds}
-      />
-
-      {effectiveConfig && getBreaksEnabled(effectiveConfig) && (() => {
-        const rotationCount = getBreakRotations(effectiveConfig);
-        const scope = getBreaksScope(effectiveConfig);
-        if (scope === 'line') {
-          const lineAssignments = breakSchedules?.[BREAK_LINE_WIDE_KEY];
-          if (!lineAssignments || Object.keys(lineAssignments).length === 0) return null;
-          const people = Object.keys(lineAssignments).map((id) => {
-            const p = roster.find((r) => r.id === id);
-            return { id, name: p?.name ?? id };
-          });
-          return (
-            <BreakTable
-              people={people}
-              assignments={lineAssignments}
-              rotationCount={rotationCount}
-              title="Break schedule (line-wide)"
-            />
-          );
-        }
-        const floatSlots = getFloatSlots(effectiveConfig);
-        return (
-          <>
-            {floatSlots.length > 0 && (
-              <div className="section-card" style={{ marginBottom: 16 }}>
-                <h3 style={{ margin: '0 0 8px 0', fontWeight: 700, fontSize: '1.05rem' }}>Float break schedule</h3>
-                <p style={{ color: '#555', fontSize: '0.9rem', marginBottom: 12 }}>
-                  Floats cover their areas when others are on break. Each float gets a break rotation; assignments update automatically when you change the line.
-                </p>
-                {floatSlots.map((f) => {
-                  const assignments = breakSchedules?.[f.id];
-                  const areaSlots = slots[f.id] ?? [];
-                  const assignedPersonId = areaSlots[0]?.personId;
-                  const hasAssignment = assignments && Object.keys(assignments).length > 0;
-                  if (hasAssignment) {
-                    const people = Object.keys(assignments!).map((id) => {
-                      const p = roster.find((r) => r.id === id);
-                      return { id, name: p?.name ?? id };
-                    });
-                    return (
-                      <BreakTable
-                        key={f.id}
-                        people={people}
-                        assignments={assignments!}
-                        rotationCount={rotationCount}
-                        title={`${f.name} (supports: ${f.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ') || 'none'})`}
-                      />
-                    );
-                  }
-                  const assignedName = assignedPersonId ? roster.find((r) => r.id === assignedPersonId)?.name : null;
-                  return (
-                    <div
-                      key={f.id}
-                      style={{
-                        padding: 12,
-                        marginBottom: 8,
-                        background: '#f8f9fa',
-                        border: '1px solid #e9ecef',
-                        borderRadius: 8,
-                        fontSize: '0.9rem',
-                      }}
-                    >
-                      <strong>{f.name}</strong>
-                      <span style={{ color: '#555' }}>
-                        {' '}
-                        (supports: {f.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ') || 'none'})
-                      </span>
-                      <div style={{ marginTop: 6 }}>
-                        {assignedName
-                          ? `Assigned: ${assignedName}. Break rotation updates when you change assignments.`
-                          : `Assign someone to this float position above; their break rotation will update automatically.`}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            {areaIds.map((areaId) => {
-              const assignments = breakSchedules?.[areaId];
-              if (!assignments || Object.keys(assignments).length === 0) return null;
-              const people = Object.keys(assignments).map((id) => {
-                const p = roster.find((r) => r.id === id);
-                return { id, name: p?.name ?? id };
-              });
-              const floatSlot = floatSlots.find((f) => f.id === areaId);
-              const title = floatSlot
-                ? `Break schedule — ${floatSlot.name} (supports: ${floatSlot.supportedAreaIds.map((id) => areaLabels[id] ?? id).join(', ') || 'none'})`
-                : `Break schedule — ${areaLabels[areaId] ?? areaId}`;
-              return (
-                <BreakTable
-                  key={areaId}
-                  people={people}
-                  assignments={assignments}
-                  rotationCount={rotationCount}
-                  title={title}
-                />
-              );
-            })}
-            {/* Lead break coverage info */}
-            {leadSlotKeys.some((key) => leadBreakCoverage[key] && leadSlots[key]) && (
-              <div className="section-card" style={{ marginTop: 16 }}>
-                <h3 style={{ margin: '0 0 8px 0', fontWeight: 700, fontSize: '1.05rem' }}>Lead break coverage</h3>
-                <p style={{ color: '#555', fontSize: '0.9rem', marginBottom: 12 }}>
-                  These leads cover stations during all break rotations and manage their own breaks outside the normal schedule. Coverage appears in the presentation view when assignments change.
-                </p>
-                {leadSlotKeys.map((key) => {
-                  if (!leadBreakCoverage[key] || !leadSlots[key]) return null;
-                  const leadPerson = roster.find((r) => r.id === leadSlots[key]);
-                  const label = effectiveConfig ? getLeadSlotLabel(effectiveConfig, key, areaLabels) : key;
-                  return (
-                    <div
-                      key={key}
-                      style={{
-                        padding: 12,
-                        marginBottom: 8,
-                        background: '#e8f5e9',
-                        border: '1px solid #c8e6c9',
-                        borderRadius: 8,
-                        fontSize: '0.9rem',
-                      }}
-                    >
-                      <strong>Lead: {label}</strong>
-                      {leadPerson && <span style={{ color: '#555' }}> — {leadPerson.name}</span>}
-                      <span style={{ color: '#2e7d32', marginLeft: 8 }}>Available all rotations</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        );
-      })()}
-
-      <LocalBackupPanel
-        canSaveToFile={false}
-        saveMessage={null}
-        onSaveToFile={handleSaveToFile}
-        onOpenFromFile={handleOpenFromFile}
-        onExportBackup={handleExportBackup}
-        onImportBackupClick={() => importFileRef.current?.click()}
-        importFileRef={importFileRef}
-        onImportBackupChange={handleImportBackup}
-        addToRosterFileRef={addToRosterFileRef}
-        onAddToRosterFileChange={handleAddToRosterFileChange}
-        savedDays={savedDays}
-        onLoadDay={handleLoadDay}
-        onSaveCurrentDay={handleSaveDay}
-        onRemoveDay={handleRemoveDay}
-      />
-
-      <CloudImportModal
-        open={showImportModal}
-        loading={importLoading}
-        error={importError}
-        lines={importLines}
-        lineId={importLineId}
-        password={importPassword}
-        onLineIdChange={setImportLineId}
-        onPasswordChange={setImportPassword}
-        onImport={handleImportFromCloudLine}
-        onClose={() => setShowImportModal(false)}
-      />
     </>
   );
 }

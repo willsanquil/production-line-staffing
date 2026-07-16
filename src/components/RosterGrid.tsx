@@ -26,15 +26,6 @@ interface RosterGridProps {
   onToggleOT: (personId: string, ot: boolean) => void;
   onToggleOTHereToday: (personId: string, otHereToday: boolean) => void;
   onSkillChange: (personId: string, areaId: AreaId, level: SkillLevel) => void;
-  /** Roster file actions (optional; when provided, shown in header next to Hide roster) */
-  saveMessage?: string | null;
-  onSaveToFile?: () => void;
-  onOpenFromFile?: () => void;
-  onAddToRoster?: () => void;
-  isSaveToFileSupported?: () => boolean;
-  /** Import roster from another cloud line (for merging lines). */
-  onImportFromCloudLine?: () => void;
-  isCloudMode?: boolean;
   /** Open a detailed profile view for this person. */
   onOpenProfile?: (personId: string) => void;
 }
@@ -140,13 +131,6 @@ function RosterGridInner({
   onToggleOT,
   onToggleOTHereToday,
   onSkillChange,
-  saveMessage,
-  onSaveToFile,
-  onOpenFromFile,
-  onAddToRoster,
-  isSaveToFileSupported,
-  onImportFromCloudLine,
-  isCloudMode,
   onOpenProfile,
 }: RosterGridProps) {
   const areaIds = areaIdsProp ?? [...AREA_IDS];
@@ -267,19 +251,6 @@ function RosterGridInner({
           <button type="button" onClick={() => setOtVisible((v) => !v)}>
             {otVisible ? 'Hide OT' : 'Show OT'}
           </button>
-          {onSaveToFile && onOpenFromFile && (isSaveToFileSupported?.() ?? true) && (
-            <>
-              <button type="button" onClick={onSaveToFile}>Save to file</button>
-              {saveMessage != null && saveMessage !== '' && <span style={{ color: '#27ae60', fontWeight: 500 }}>✓ {saveMessage}</span>}
-              <button type="button" onClick={onOpenFromFile}>Open from file</button>
-            </>
-          )}
-          {onAddToRoster && (
-            <button type="button" onClick={onAddToRoster}>Add to roster</button>
-          )}
-          {isCloudMode && onImportFromCloudLine && (
-            <button type="button" onClick={onImportFromCloudLine}>Import from cloud line</button>
-          )}
         </div>
       </div>
       {visible && (
@@ -617,6 +588,9 @@ function RosterGridInner({
                   aria-label="New OT person name"
                 />
                 <button type="button" onClick={handleAddOT}>Add OT</button>
+                <button type="button" onClick={() => setOtVisible(false)}>
+                  Hide OT
+                </button>
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table className="data-table">

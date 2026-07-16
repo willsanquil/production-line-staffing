@@ -17,7 +17,6 @@ interface PersonProfileModalProps {
   onToggleLeavingEarly: (personId: string, leavingEarly: boolean) => void;
   onBreakPreferenceChange: (personId: string, preference: BreakPreference) => void;
   onSkillChange: (personId: string, areaId: AreaId, level: SkillLevel) => void;
-  onDefaultPositionChange: (personId: string, areaId: string | null, slotIndex: number | null) => void;
   onAreasWantToLearnChange: (personId: string, areaId: AreaId, checked: boolean) => void;
   onFlexedToLineChange?: (personId: string, lineId: string | null) => void;
 }
@@ -42,7 +41,6 @@ export function PersonProfileModal({
   onToggleLeavingEarly,
   onBreakPreferenceChange,
   onSkillChange,
-  onDefaultPositionChange,
   onAreasWantToLearnChange,
   onFlexedToLineChange,
 }: PersonProfileModalProps) {
@@ -258,39 +256,9 @@ export function PersonProfileModal({
                   </table>
                 </div>
 
-                <h3 style={{ margin: '16px 0 8px 0', fontSize: '1rem' }}>Default position (this line)</h3>
-                <p style={{ fontSize: '0.85rem', color: '#555', marginTop: 0 }}>
-                  Preferred area when auto-filling or suggesting slots.
-                </p>
-                <select
-                  value={
-                    person.defaultAreaId != null && person.defaultSlotIndex != null
-                      ? `${person.defaultAreaId}:${person.defaultSlotIndex}`
-                      : ''
-                  }
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (!v) {
-                      onDefaultPositionChange(person.id, null, null);
-                      return;
-                    }
-                    const [areaId, slotIndexStr] = v.split(':');
-                    const slotIndex = parseInt(slotIndexStr, 10);
-                    if (!Number.isNaN(slotIndex)) onDefaultPositionChange(person.id, areaId, slotIndex);
-                  }}
-                  style={{ padding: '6px 10px', fontSize: '0.9rem', minWidth: 200 }}
-                >
-                  <option value="">—</option>
-                  {stationAreaIds.map((aid) => (
-                    <option key={aid} value={`${aid}:0`}>
-                      {areaLabels[aid] ?? aid}
-                    </option>
-                  ))}
-                </select>
-
                 <h3 style={{ margin: '16px 0 8px 0', fontSize: '1rem' }}>Want to learn</h3>
                 <p style={{ fontSize: '0.85rem', color: '#555', marginTop: 0 }}>
-                  Areas this person wants to train in (used in training report).
+                  Areas this person wants to train in.
                 </p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   {stationAreaIds.map((areaId) => {

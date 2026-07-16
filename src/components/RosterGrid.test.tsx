@@ -47,7 +47,7 @@ describe('RosterGrid', () => {
     expect(screen.getByRole('heading', { name: 'Staff' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'OT pool' })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Hide OT' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Hide OT' })[0]);
 
     expect(screen.getByRole('heading', { name: 'Staff' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'OT pool' })).toBeNull();
