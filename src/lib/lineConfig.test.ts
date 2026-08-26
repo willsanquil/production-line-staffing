@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   getDefaultICLineConfig,
   getDefaultNICLineConfig,
+  getDefaultIC2LineConfig,
+  getDefaultNIC2LineConfig,
   getAreaIds,
   getRosterAreaIds,
   getFloatSlots,
@@ -88,12 +90,57 @@ describe('IC default line config (post Flip-as-floats)', () => {
 });
 
 describe('NIC default line config', () => {
-  it('mirrors IC structurally so people can flex between lines', () => {
+  it('mirrors IC structurally (same station set)', () => {
     const ic = getDefaultICLineConfig();
     const nic = getDefaultNICLineConfig();
     expect(nic.areas.map((a) => a.id)).toEqual(ic.areas.map((a) => a.id));
     expect(getFloatSlots(nic).map((f) => f.id)).toEqual(getFloatSlots(ic).map((f) => f.id));
     expect(getLeadSlotKeys(nic)).toEqual(getLeadSlotKeys(ic));
+  });
+});
+
+describe('IC 2.0 line config', () => {
+  const ic2 = getDefaultIC2LineConfig();
+
+  it('adds 25.9k Inspections after 14.5 with training/extra slot', () => {
+    expect(ic2.areas.map((a) => a.id)).toEqual([
+      'area_14_5',
+      'area_25_9k_inspections',
+      'area_courtyard',
+      'area_bonding',
+      'area_testing',
+      'area_potting',
+      'area_end_of_line',
+    ]);
+    const inspections = ic2.areas.find((a) => a.id === 'area_25_9k_inspections');
+    expect(inspections?.minSlots).toBe(2);
+    expect(inspections?.maxSlots).toBe(3);
+    expect(inspections?.defaultSlotLabels?.[2]).toBe('Training/Extra');
+    expect(inspections?.requiresTrainedOrExpert).toBe(false);
+  });
+
+  it('uses 5 break rotations', () => {
+    expect(ic2.breakRotations).toBe(5);
+  });
+});
+
+describe('NIC 2.0 line config', () => {
+  const nic2 = getDefaultNIC2LineConfig();
+
+  it('prepends 3k, 10.5k, 12k in numeric order with training/extra slots', () => {
+    expect(nic2.areas.slice(0, 3).map((a) => a.id)).toEqual(['area_3k', 'area_10_5k', 'area_12k']);
+    const k3 = nic2.areas.find((a) => a.id === 'area_3k');
+    expect(k3?.minSlots).toBe(2);
+    expect(k3?.maxSlots).toBe(3);
+    const k105 = nic2.areas.find((a) => a.id === 'area_10_5k');
+    expect(k105?.minSlots).toBe(3);
+    expect(k105?.maxSlots).toBe(4);
+    expect(k105?.defaultSlotLabels?.[3]).toBe('Training/Extra');
+  });
+
+  it('uses 5 break rotations and same leads as IC/NIC', () => {
+    expect(nic2.breakRotations).toBe(5);
+    expect(getLeadSlotKeys(nic2).sort()).toEqual(['area_bonding', 'area_courtyard', 'area_end_of_line']);
   });
 });
 

@@ -1,22 +1,16 @@
 import { memo, useMemo, useState, useEffect, type CSSProperties } from 'react';
-import type { AreaId, FloatSlotConfig, LineConfig, RosterPerson, SkillLevel } from '../types';
+import type { AreaId, FloatSlotConfig, RosterPerson, SkillLevel } from '../types';
 import { AREA_IDS } from '../types';
 import { sortByFirstName } from '../lib/rosterSort';
 
 interface RosterGridProps {
   roster: RosterPerson[];
-  /** Person IDs who are flexed in to this line (show in a separate Flex pool section). */
-  flexedInPersonIds?: Set<string>;
   visible: boolean;
   areaLabels: Record<AreaId, string>;
   /** When building custom lines, pass area IDs in display order. Omit for default IC areas. */
   areaIds?: string[];
   /** Float slot configs for this line (so float columns show combined skill from supported areas). */
   floatSlots?: FloatSlotConfig[];
-  /** When multiple lines exist, show Flexed dropdown (other lines only). */
-  lines?: LineConfig[];
-  currentLineId?: string;
-  onFlexedToLineChange?: (personId: string, lineId: string | null) => void;
   onToggleVisible: () => void;
   onNameChange: (personId: string, name: string) => void;
   onRemovePerson: (personId: string) => void;
@@ -114,14 +108,10 @@ function PersonHealthBar({ person, areaIds }: { person: RosterPerson; areaIds: s
 
 function RosterGridInner({
   roster,
-  flexedInPersonIds = new Set(),
   visible,
   areaLabels,
   areaIds: areaIdsProp,
   floatSlots = [],
-  lines = [],
-  currentLineId = '',
-  onFlexedToLineChange,
   onToggleVisible,
   onNameChange,
   onRemovePerson,
@@ -140,18 +130,13 @@ function RosterGridInner({
     return m;
   }, [floatSlots]);
   const stickyNameStyle: CSSProperties = { position: 'sticky', left: 0, zIndex: 1, background: 'var(--color-bg-card, #fff)', minWidth: 120, boxShadow: '2px 0 4px rgba(0,0,0,0.06)' };
-  const otherLines = useMemo(() => lines.filter((l) => l.id !== currentLineId), [lines, currentLineId]);
-  const showFlexedColumn = otherLines.length > 0 && currentLineId && onFlexedToLineChange;
-  const { staffRoster, flexedInRoster, otRoster } = useMemo(() => {
+  const { staffRoster, otRoster } = useMemo(() => {
     const sorted = sortByFirstName(roster);
-    const flexedIn = sorted.filter((p) => flexedInPersonIds.has(p.id));
-    const own = sorted.filter((p) => !flexedInPersonIds.has(p.id));
     return {
-      staffRoster: own.filter((p) => !p.ot),
-      flexedInRoster: sortByFirstName(flexedIn),
-      otRoster: own.filter((p) => p.ot),
+      staffRoster: sorted.filter((p) => !p.ot),
+      otRoster: sorted.filter((p) => p.ot),
     };
-  }, [roster, flexedInPersonIds]);
+  }, [roster]);
   const [newName, setNewName] = useState('');
   const [newOTName, setNewOTName] = useState('');
   const [searchText, setSearchText] = useState('');
@@ -166,13 +151,6 @@ function RosterGridInner({
       ),
     [staffRoster, normalizedSearch]
   );
-  const filteredFlexedInRoster = useMemo(
-    () =>
-      flexedInRoster.filter(
-        (person) => normalizedSearch === '' || person.name.toLowerCase().includes(normalizedSearch)
-      ),
-    [flexedInRoster, normalizedSearch]
-  );
   const filteredOtRoster = useMemo(
     () =>
       otRoster.filter(
@@ -182,11 +160,8 @@ function RosterGridInner({
   );
 
   const staffTotalPages = Math.max(1, Math.ceil(filteredStaffRoster.length / PAGE_SIZE));
-  const flexedInTotalPages = Math.max(1, Math.ceil(filteredFlexedInRoster.length / PAGE_SIZE));
   const otTotalPages = Math.max(1, Math.ceil(filteredOtRoster.length / PAGE_SIZE));
   const staffPageIndex = Math.min(staffPage, staffTotalPages - 1);
-  const [flexedInPage, setFlexedInPage] = useState(0);
-  const flexedInPageIndex = Math.min(flexedInPage, flexedInTotalPages - 1);
   const otPageIndex = Math.min(otPage, otTotalPages - 1);
   const staffRosterPage = useMemo(
     () =>
@@ -195,14 +170,6 @@ function RosterGridInner({
         (staffPageIndex + 1) * PAGE_SIZE
       ),
     [filteredStaffRoster, staffPageIndex]
-  );
-  const flexedInRosterPage = useMemo(
-    () =>
-      filteredFlexedInRoster.slice(
-        flexedInPageIndex * PAGE_SIZE,
-        (flexedInPageIndex + 1) * PAGE_SIZE
-      ),
-    [filteredFlexedInRoster, flexedInPageIndex]
   );
   const otRosterPage = useMemo(
     () =>
@@ -213,9 +180,6 @@ function RosterGridInner({
   useEffect(() => {
     if (staffPageIndex !== staffPage) setStaffPage(staffPageIndex);
   }, [staffPageIndex, staffPage]);
-  useEffect(() => {
-    if (flexedInPageIndex !== flexedInPage) setFlexedInPage(flexedInPageIndex);
-  }, [flexedInPageIndex, flexedInPage]);
   useEffect(() => {
     if (otPageIndex !== otPage) setOtPage(otPageIndex);
   }, [otPageIndex, otPage]);
@@ -285,9 +249,6 @@ function RosterGridInner({
                 <tr>
                   <th style={stickyNameStyle}>Name</th>
                   <th style={{ width: 44 }}></th>
-                  {showFlexedColumn && (
-                    <th style={{ minWidth: 100 }} title="Temporarily assign this person to another line">Flexed</th>
-                  )}
                   <th style={{ width: 70 }}>Absent</th>
                   <th style={{ width: 70 }}>Profile</th>
                   {areaIds.map((areaId) => (
@@ -321,35 +282,6 @@ function RosterGridInner({
                         −
                       </button>
                     </td>
-                    {showFlexedColumn && (
-                      <td>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-                          <select
-                            value={person.flexedToLineId ?? ''}
-                            onChange={(e) => onFlexedToLineChange?.(person.id, e.target.value || null)}
-                            style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 88 }}
-                            title="Temporarily assign to another line"
-                            aria-label={`${person.name} flexed to`}
-                          >
-                            <option value="">—</option>
-                            {otherLines.map((l) => (
-                              <option key={l.id} value={l.id}>{l.name}</option>
-                            ))}
-                          </select>
-                          {otherLines.map((l) => (
-                            <button
-                              key={l.id}
-                              type="button"
-                              onClick={() => onFlexedToLineChange?.(person.id, l.id)}
-                              style={{ padding: '2px 6px', fontSize: '0.75rem', whiteSpace: 'nowrap' }}
-                              title={`Flex to ${l.name}`}
-                            >
-                              → {l.name}
-                            </button>
-                          ))}
-                        </div>
-                      </td>
-                    )}
                     <td>
                       <input
                         type="checkbox"
@@ -441,135 +373,6 @@ function RosterGridInner({
             </div>
           )}
 
-          {/* Flexed to this line – people from other lines; can be assigned to slots here */}
-          {filteredFlexedInRoster.length > 0 && (
-            <>
-              <h3 style={{ margin: '1.25rem 0 0.5rem 0', fontSize: '1rem' }}>Flexed to this line</h3>
-              <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#666' }}>
-                People temporarily assigned from other lines. They can be slotted here; skills are unchanged.
-              </p>
-              <div style={{ overflowX: 'auto' }}>
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th style={stickyNameStyle}>Name</th>
-                      <th style={{ width: 90 }}>Send back</th>
-                      {showFlexedColumn && (
-                        <th style={{ minWidth: 100 }}>Flexed</th>
-                      )}
-                      <th style={{ width: 70 }}>Absent</th>
-                      {areaIds.map((areaId) => (
-                        <th key={areaId} style={{ textAlign: 'center', minWidth: 90 }}>
-                          {areaLabels[areaId]}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {flexedInRosterPage.map((person) => (
-                      <tr key={person.id} style={{ backgroundColor: 'rgba(33, 150, 243, 0.06)' }}>
-                        <td style={{ ...stickyNameStyle, verticalAlign: 'top' }}>
-                          <PersonHealthBar person={person} areaIds={areaIds} />
-                          <span style={{ fontWeight: 500 }}>{person.name}</span>
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            onClick={() => onFlexedToLineChange?.(person.id, null)}
-                            style={{ padding: '4px 8px', fontSize: '0.8rem' }}
-                            title="Send back to their home line"
-                          >
-                            Send back
-                          </button>
-                        </td>
-                        {showFlexedColumn && (
-                          <td>
-                            <select
-                              value={person.flexedToLineId ?? ''}
-                              onChange={(e) => onFlexedToLineChange?.(person.id, e.target.value || null)}
-                              style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 88 }}
-                              aria-label={`${person.name} flexed to`}
-                            >
-                              <option value="">—</option>
-                              {otherLines.map((l) => (
-                                <option key={l.id} value={l.id}>{l.name}</option>
-                              ))}
-                            </select>
-                          </td>
-                        )}
-                        <td>
-                          <input
-                            type="checkbox"
-                            checked={person.absent}
-                            onChange={(e) => onToggleAbsent(person.id, e.target.checked)}
-                            aria-label={`Mark ${person.name} absent`}
-                          />
-                        </td>
-                        {areaIds.map((areaId) => {
-                          const supported = floatIdToSupported.get(areaId);
-                          if (supported != null) {
-                            const level = floatCombinedSkill(person, supported);
-                            return (
-                              <td key={areaId} style={{ textAlign: 'center' }} title={`From supported areas`}>
-                                <span className={`skill-${level}`} style={{ padding: '2px 6px', borderRadius: 4, fontSize: '0.8rem' }}>
-                                  {SKILL_LABELS[level]}
-                                </span>
-                              </td>
-                            );
-                          }
-                          const level = person.skills[areaId] ?? 'no_experience';
-                          return (
-                            <td key={areaId} style={{ textAlign: 'center' }}>
-                              <select
-                                value={level}
-                                onChange={(e) => onSkillChange(person.id, areaId, e.target.value as SkillLevel)}
-                                className={`skill-${level}`}
-                                style={{
-                                  width: '100%',
-                                  maxWidth: 120,
-                                  padding: '4px 6px',
-                                  border: '1px solid rgba(0,0,0,0.2)',
-                                  borderRadius: 4,
-                                  fontSize: '0.8rem',
-                                }}
-                              >
-                                {SKILL_LEVELS.map((l) => (
-                                  <option key={l} value={l}>{SKILL_LABELS[l]}</option>
-                                ))}
-                              </select>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {filteredFlexedInRoster.length > PAGE_SIZE && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => setFlexedInPage((p) => Math.max(0, p - 1))}
-                    disabled={flexedInPageIndex <= 0}
-                  >
-                    ← Prev
-                  </button>
-                  <span style={{ fontSize: '0.9rem' }}>
-                    Page {flexedInPageIndex + 1} of {flexedInTotalPages}
-                    <span style={{ color: '#666', marginLeft: 4 }}>({filteredFlexedInRoster.length} flexed in)</span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setFlexedInPage((p) => Math.min(flexedInTotalPages - 1, p + 1))}
-                    disabled={flexedInPageIndex >= flexedInTotalPages - 1}
-                  >
-                    Next →
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-
           {/* OT pool – separate list; "Here today" controls slotting eligibility */}
           {otVisible && (
             <>
@@ -598,9 +401,6 @@ function RosterGridInner({
                     <tr>
                       <th style={stickyNameStyle}>Name</th>
                       <th style={{ width: 44 }}></th>
-                      {showFlexedColumn && (
-                        <th style={{ minWidth: 100 }}>Flexed</th>
-                      )}
                       <th style={{ width: 50 }}>OT</th>
                       <th style={{ width: 90 }}>Here today</th>
                       {areaIds.map((areaId) => (
@@ -634,34 +434,6 @@ function RosterGridInner({
                             −
                           </button>
                         </td>
-                        {showFlexedColumn && (
-                          <td>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-                              <select
-                                value={person.flexedToLineId ?? ''}
-                                onChange={(e) => onFlexedToLineChange?.(person.id, e.target.value || null)}
-                                style={{ padding: '4px 6px', fontSize: '0.8rem', minWidth: 88 }}
-                                aria-label={`${person.name} flexed to`}
-                              >
-                                <option value="">—</option>
-                                {otherLines.map((l) => (
-                                  <option key={l.id} value={l.id}>{l.name}</option>
-                                ))}
-                              </select>
-                              {otherLines.map((l) => (
-                                <button
-                                  key={l.id}
-                                  type="button"
-                                  onClick={() => onFlexedToLineChange?.(person.id, l.id)}
-                                  style={{ padding: '2px 6px', fontSize: '0.75rem', whiteSpace: 'nowrap' }}
-                                  title={`Flex to ${l.name}`}
-                                >
-                                  → {l.name}
-                                </button>
-                              ))}
-                            </div>
-                          </td>
-                        )}
                         <td>
                           <input
                             type="checkbox"

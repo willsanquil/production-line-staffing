@@ -1,7 +1,17 @@
 export type SkillLevel = 'no_experience' | 'training' | 'trained' | 'expert';
 
-/** Break preference for schedule generation: early = rot 1, middle = rot 2, late = rot N. */
-export type BreakPreference = 'prefer_early' | 'prefer_middle' | 'prefer_late' | 'no_preference';
+/** Break preference for schedule generation. Legacy early/middle/late map to rotation 1, center, N.
+ * prefer_rotation_N pins a specific break slot (used on 5-rotation lines). */
+export type BreakPreference =
+  | 'prefer_early'
+  | 'prefer_middle'
+  | 'prefer_late'
+  | 'prefer_rotation_1'
+  | 'prefer_rotation_2'
+  | 'prefer_rotation_3'
+  | 'prefer_rotation_4'
+  | 'prefer_rotation_5'
+  | 'no_preference';
 
 export const AREA_IDS = [
   'area_14_5',
@@ -220,6 +230,8 @@ export interface AppState {
    * When null/undefined, the displayed Full staff is computed as leads + sum of area min slots.
    * The user-entered value persists across reloads / line switches / day loads. */
   fullStaffOverride?: number | null;
+  /** When true, break schedules are edited manually and auto-regeneration is skipped. */
+  breakSchedulesManual?: boolean;
   /** Per-lead and supervisor assignment views: key = lead slot key or ASSIGNMENT_VIEW_SUPERVISOR_KEY. */
   assignmentViews?: Record<string, AssignmentViewSnapshot>;
   /** Which assignment view is currently shown (supervisor vs each lead). Default supervisor. */

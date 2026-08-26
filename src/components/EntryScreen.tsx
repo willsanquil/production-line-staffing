@@ -289,6 +289,24 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
                   >
                     NIC line
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuickJoinName('IC 2.0');
+                      setStep('list');
+                    }}
+                  >
+                    IC 2.0 line
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuickJoinName('NIC 2.0');
+                      setStep('list');
+                    }}
+                  >
+                    NIC 2.0 line
+                  </button>
                 </div>
               </div>
             </>

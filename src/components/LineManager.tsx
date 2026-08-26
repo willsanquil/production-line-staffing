@@ -23,7 +23,7 @@ export function LineManager({ rootState, canShare, onShareClick, onOpenLine, onB
         <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>My lines</h1>
       </div>
       <p style={{ color: '#555', marginBottom: 20, fontSize: '0.95rem' }}>
-        Each line has its own roster. Use the Flexed dropdown to temporarily assign a person to another line; they then appear on that line's roster and can be slotted there (skills retained). Open a line to work on it, or build a new one. When in local mode, you can share a line to the cloud so others can join it from the Group list.
+        Each line has its own roster. Open a line to work on it, or build a new one. When in local mode, you can share a line to the cloud so others can join it from the Group list.
       </p>
       {canShare && onShareClick && (
         <div style={{ marginBottom: 16 }}>

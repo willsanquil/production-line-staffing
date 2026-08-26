@@ -3,7 +3,7 @@ import type { AreaId, BreakPreference, FloatSlotConfig, RootState, RosterPerson,
 import type { SkillLevel } from './types';
 import { getLineHealthScore } from './lib/lineHealth';
 import { getHydratedRootState } from './lib/initialState';
-import { getRosterForLine, getFlexedInPersonIds } from './lib/personLabel';
+import { getRosterForLine } from './lib/personLabel';
 import { sortByFirstName } from './lib/rosterSort';
 import { getSlotLabel as getSlotLabelIC } from './lib/areaConfig';
 import {
@@ -41,6 +41,7 @@ import { getLineState, createCloudLine } from './lib/cloudLines';
 import { getCloudSession, setCloudSession, clearCloudSession } from './lib/cloudSession';
 import { clearCloudViewerSession } from './lib/cloudViewerSession';
 import { PersonProfileModal } from './components/PersonProfileModal';
+import { ManualBreaksModal } from './components/ManualBreaksModal';
 import { ThemeControls } from './components/ThemeControls';
 import { useCloudLineSync } from './hooks/useCloudLineSync';
 import { useTheme } from './hooks/useTheme';
@@ -111,6 +112,7 @@ export default function App() {
   const [dayNotes, setDayNotes] = useState(firstLineState.dayNotes ?? '');
   const [documents, setDocuments] = useState<string[]>(firstLineState.documents ?? []);
   const [breakSchedules, setBreakSchedules] = useState(firstLineState.breakSchedules ?? {});
+  const [breakSchedulesManual, setBreakSchedulesManual] = useState(firstLineState.breakSchedulesManual ?? false);
   const [leadBreakCoverage, setLeadBreakCoverage] = useState<Record<string, boolean>>(firstLineState.leadBreakCoverage ?? {});
   const [areaBreakCoverageEnabled, setAreaBreakCoverageEnabled] = useState<Record<string, boolean>>(firstLineState.areaBreakCoverageEnabled ?? {});
   const [rosterVisible, setRosterVisible] = useState(true);
@@ -154,6 +156,7 @@ export default function App() {
   const [areaCoversBreaksFor, setAreaCoversBreaksFor] = useState<Record<string, string[]>>(firstLineState.areaCoversBreaksFor ?? {});
   const [profilePersonId, setProfilePersonId] = useState<string | null>(null);
   const [showStaffTheLineWizard, setShowStaffTheLineWizard] = useState(false);
+  const [showManualBreaksModal, setShowManualBreaksModal] = useState(false);
   /** When false, area cards show only slot names + assignee (simple view). When true, full configure UI. */
   const [configureMode, setConfigureMode] = useState(false);
 
@@ -221,13 +224,9 @@ export default function App() {
     () => sortByFirstName(getRosterForLine(rootState.currentLineId, rootState.lineStates)),
     [rootState.currentLineId, rootState.lineStates]
   );
-  const flexedInPersonIds = useMemo(
-    () => getFlexedInPersonIds(rootState.currentLineId, rootState.lineStates),
-    [rootState.currentLineId, rootState.lineStates]
-  );
 
   const stateRef = useRef(extractLineDraftState(firstLineState));
-  stateRef.current = { slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, leadBreakCoverage, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea, areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled, areaCoversBreaksFor, fullStaffOverride };
+  stateRef.current = { slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, leadBreakCoverage, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea, areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled, areaCoversBreaksFor, fullStaffOverride, breakSchedulesManual };
   const rootStateRef = useRef(rootState);
   rootStateRef.current = rootState;
 
@@ -270,7 +269,7 @@ export default function App() {
     setRootState,
     reloadLineState,
     persistDebounceMs: PERSIST_DEBOUNCE_MS,
-    persistDeps: [slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea, areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled, areaCoversBreaksFor, fullStaffOverride],
+    persistDeps: [slots, leadSlots, juicedAreas, deJuicedAreas, sectionTasks, schedule, dayNotes, documents, breakSchedules, areaBreakCoverageEnabled, areaCapacityOverrides, areaNameOverrides, slotLabelsByArea, areaRequiresTrainedOrExpertOverrides, slotBreakCoverageEnabled, areaCoversBreaksFor, fullStaffOverride, breakSchedulesManual],
     onViewerKickedToHome: handleViewerKickedToHome,
     onIdleReturnToEntry: handleGoHome,
   });
@@ -294,6 +293,7 @@ export default function App() {
     setDayNotes(lineState.dayNotes ?? '');
     setDocuments(lineState.documents ?? []);
     setBreakSchedules(lineState.breakSchedules ?? {});
+    setBreakSchedulesManual(lineState.breakSchedulesManual ?? false);
     setLeadBreakCoverage(lineState.leadBreakCoverage ?? {});
     setAreaBreakCoverageEnabled(lineState.areaBreakCoverageEnabled ?? {});
     setAreaCapacityOverrides(lineState.areaCapacityOverrides ?? {});
@@ -530,13 +530,6 @@ export default function App() {
 
   const handleToggleLeavingEarly = useCallback((personId: string, leavingEarly: boolean) => {
     setRootState((prev) => updatePersonInRoot(prev, personId, (p) => ({ ...p, leavingEarly })));
-    schedulePersistForRootEdit();
-  }, [schedulePersistForRootEdit]);
-
-  const handleFlexedToLineChange = useCallback((personId: string, lineId: string | null) => {
-    setRootState((prev) =>
-      updatePersonInRoot(prev, personId, (p) => ({ ...p, flexedToLineId: lineId || undefined }))
-    );
     schedulePersistForRootEdit();
   }, [schedulePersistForRootEdit]);
 
@@ -966,6 +959,7 @@ export default function App() {
       return next;
     });
     setBreakSchedules({});
+    setBreakSchedulesManual(false);
   }, [areaIds]);
 
   const handleClearArea = useCallback((areaId: AreaId) => {
@@ -1051,23 +1045,44 @@ export default function App() {
     setBreakSchedules(mirrorVirtualFloatBreaksToStations(optimized, coverageLinks));
   }, [effectiveConfig, areaIds, roster, leadSlots, leadBreakCoverage, slotBreakCoverageEnabled, slotLabelsByArea, leadSlotKeys, areaCoversBreaksFor, areaLabels]);
 
-  // Recalc breaks whenever slot or lead assignments change (no manual "Regenerate breaks" needed).
+  // Recalc breaks whenever slot or lead assignments change (skip when manual breaks mode is on).
   useEffect(() => {
-    if (appMode !== 'app' || !effectiveConfig || !getBreaksEnabled(effectiveConfig)) return;
+    if (appMode !== 'app' || !effectiveConfig || !getBreaksEnabled(effectiveConfig) || breakSchedulesManual) return;
     regenerateBreaksForSlots(slots);
-  }, [appMode, effectiveConfig, slots, leadSlots, regenerateBreaksForSlots]);
+  }, [appMode, effectiveConfig, slots, leadSlots, breakSchedulesManual, regenerateBreaksForSlots]);
+
+  const handleOpenManualBreaks = useCallback(() => {
+    markLocalChange();
+    setBreakSchedulesManual(true);
+    if (Object.keys(breakSchedules).length === 0) {
+      regenerateBreaksForSlots(slots);
+    }
+    setShowManualBreaksModal(true);
+  }, [markLocalChange, breakSchedules, regenerateBreaksForSlots, slots]);
+
+  const handleManualBreakSchedulesChange = useCallback((next: import('./types').BreakSchedulesByArea) => {
+    markLocalChange();
+    setBreakSchedules(next);
+  }, [markLocalChange]);
+
+  const handleRegenerateBreaksAuto = useCallback(() => {
+    markLocalChange();
+    setBreakSchedulesManual(false);
+    regenerateBreaksForSlots(slots);
+    setShowManualBreaksModal(false);
+  }, [markLocalChange, regenerateBreaksForSlots, slots]);
 
   const handleRandomize = useCallback(() => {
     const nextSlots = randomizeAssignments(roster, slots, leadAssignedPersonIds, areaIds, areaRequiresTrainedOrExpert);
     setSlots(nextSlots);
-    regenerateBreaksForSlots(nextSlots);
-  }, [roster, slots, leadAssignedPersonIds, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
+    if (!breakSchedulesManual) regenerateBreaksForSlots(nextSlots);
+  }, [roster, slots, leadAssignedPersonIds, areaIds, areaRequiresTrainedOrExpert, breakSchedulesManual, regenerateBreaksForSlots]);
 
   const handleFillRemaining = useCallback(() => {
     const nextSlots = fillRemainingAssignments(roster, slots, juicedAreas, leadAssignedPersonIds, deJuicedAreas, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert);
     setSlots(nextSlots);
-    regenerateBreaksForSlots(nextSlots);
-  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert, regenerateBreaksForSlots]);
+    if (!breakSchedulesManual) regenerateBreaksForSlots(nextSlots);
+  }, [roster, slots, juicedAreas, deJuicedAreas, leadAssignedPersonIds, effectiveCapacity, areaIds, areaRequiresTrainedOrExpert, breakSchedulesManual, regenerateBreaksForSlots]);
 
   const handleOpenLine = useCallback((lineId: string) => {
     setRootState((prev) => ({
@@ -1511,13 +1526,10 @@ export default function App() {
 
       <RosterGrid
         roster={roster}
-        flexedInPersonIds={flexedInPersonIds}
         visible={rosterVisible}
         areaLabels={areaLabels}
         areaIds={rosterAreaIds}
         floatSlots={effectiveConfig ? getFloatSlots(effectiveConfig) : []}
-        lines={rootState.lines}
-        currentLineId={rootState.currentLineId}
         onToggleVisible={() => setRosterVisible((v) => !v)}
         onNameChange={handleNameChange}
         onRemovePerson={handleRemovePerson}
@@ -1527,7 +1539,6 @@ export default function App() {
         onToggleOT={handleToggleOT}
         onToggleOTHereToday={handleToggleOTHereToday}
         onSkillChange={handleSkillChange}
-        onFlexedToLineChange={handleFlexedToLineChange}
         onOpenProfile={handleOpenProfile}
       />
 
@@ -1601,6 +1612,16 @@ export default function App() {
         </button>
         <button type="button" className="btn-primary" onClick={handleFillRemaining}>Fill remaining</button>
         <button type="button" className="btn-primary" onClick={handleRandomize}>Randomize</button>
+        {effectiveConfig && getBreaksEnabled(effectiveConfig) && (
+          <button
+            type="button"
+            className={breakSchedulesManual ? 'btn-primary' : 'btn-ghost'}
+            onClick={handleOpenManualBreaks}
+            title={breakSchedulesManual ? 'Manual breaks active — click to edit' : 'Manually adjust break rotations'}
+          >
+            Manual breaks{breakSchedulesManual ? ' (active)' : ''}
+          </button>
+        )}
         <button type="button" className="btn-danger" onClick={handleClearLine}>Clear line</button>
       </div>
 
@@ -2047,7 +2068,21 @@ export default function App() {
           onBreakPreferenceChange={handleBreakPreferenceChange}
           onSkillChange={handleSkillChange}
           onAreasWantToLearnChange={handleAreasWantToLearnChange}
-          onFlexedToLineChange={handleFlexedToLineChange}
+        />
+      )}
+
+      {showManualBreaksModal && effectiveConfig && getBreaksEnabled(effectiveConfig) && (
+        <ManualBreaksModal
+          areaIds={areaIds}
+          areaLabels={areaLabels}
+          roster={roster}
+          slots={slots}
+          breakSchedules={breakSchedules}
+          rotationCount={getBreakRotations(effectiveConfig)}
+          breaksScope={getBreaksScope(effectiveConfig)}
+          onClose={() => setShowManualBreaksModal(false)}
+          onChange={handleManualBreakSchedulesChange}
+          onRegenerateAuto={handleRegenerateBreaksAuto}
         />
       )}
 

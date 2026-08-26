@@ -16,8 +16,13 @@ interface Bucket {
   personIds: string[];
 }
 
-/** Which rotation(s) fit a preference (early = 1, middle = center, late = N). */
+/** Which rotation(s) fit a preference (early = 1, middle = center, late = N, prefer_rotation_X = X). */
 function preferredRotations(pref: BreakPreference | undefined, rotationCount: number): number[] {
+  if (pref === 'prefer_rotation_1') return [1];
+  if (pref === 'prefer_rotation_2') return [2];
+  if (pref === 'prefer_rotation_3') return [3];
+  if (pref === 'prefer_rotation_4') return [4];
+  if (pref === 'prefer_rotation_5') return [5];
   if (pref === 'prefer_early') return [1];
   if (pref === 'prefer_late') return [rotationCount];
   // 'prefer_middle' and 'no_preference' (default) both prefer middle rotations

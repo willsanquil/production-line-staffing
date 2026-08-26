@@ -1,7 +1,9 @@
-import type { LineConfig, FloatSlotConfig, AreaCapacityOverrides, AreaNameOverrides, SlotLabelsByArea } from '../types';
+import type { LineConfig, FloatSlotConfig, AreaCapacityOverrides, AreaNameOverrides, SlotLabelsByArea, AreaConfigInLine } from '../types';
 
 export const DEFAULT_IC_LINE_ID = 'ic';
 export const DEFAULT_NIC_LINE_ID = 'nic';
+export const DEFAULT_IC2_LINE_ID = 'ic_2';
+export const DEFAULT_NIC2_LINE_ID = 'nic_2';
 
 /** Shared area layout for IC/NIC (both halves of MIC).
  * Flip is intentionally NOT a station here — it lives as 2 float slots that cover
@@ -57,7 +59,7 @@ export function getDefaultICLineConfig(): LineConfig {
   };
 }
 
-/** Built-in NIC line (other half of MIC): same areas as IC so people can flex between lines. */
+/** Built-in NIC line (other half of MIC). */
 export function getDefaultNICLineConfig(): LineConfig {
   return {
     id: DEFAULT_NIC_LINE_ID,
@@ -70,6 +72,92 @@ export function getDefaultNICLineConfig(): LineConfig {
     breaksScope: 'station',
     breakRotations: 3,
   };
+}
+
+/** Slot labels with the last slot named Training/Extra (min slots + 1 max). */
+function trainingExtraSlotLabels(minSlots: number): string[] {
+  const labels: string[] = new Array(minSlots + 1);
+  labels[minSlots] = 'Training/Extra';
+  return labels;
+}
+
+/** New station with min slots plus one Training/Extra slot; no experience requirement by default. */
+function newStationArea(id: string, name: string, minSlots: number): AreaConfigInLine {
+  return {
+    id,
+    name,
+    minSlots,
+    maxSlots: minSlots + 1,
+    requiresTrainedOrExpert: false,
+    defaultSlotLabels: trainingExtraSlotLabels(minSlots),
+  };
+}
+
+/** IC 2.0: IC layout + 25.9k Inspections, 5 break rotations. */
+export function getDefaultIC2LineConfig(): LineConfig {
+  const areas: LineConfig['areas'] = [
+    { ...DEFAULT_LINE_AREAS[0] },
+    newStationArea('area_25_9k_inspections', '25.9k Inspections', 2),
+    ...DEFAULT_LINE_AREAS.slice(1).map((a) => ({ ...a })),
+  ];
+  return {
+    id: DEFAULT_IC2_LINE_ID,
+    name: 'IC 2.0',
+    areas,
+    floatSlots: DEFAULT_LINE_FLOATS.map((f) => ({ ...f, supportedAreaIds: [...f.supportedAreaIds] })),
+    leadAreaIds: ['area_end_of_line', 'area_courtyard', 'area_bonding'],
+    combinedSections: [],
+    breaksEnabled: true,
+    breaksScope: 'station',
+    breakRotations: 5,
+  };
+}
+
+/** NIC 2.0: NIC layout + 3k, 10.5k, 12k (numeric order), 5 break rotations. */
+export function getDefaultNIC2LineConfig(): LineConfig {
+  const areas: LineConfig['areas'] = [
+    newStationArea('area_3k', '3k', 2),
+    newStationArea('area_10_5k', '10.5k', 3),
+    newStationArea('area_12k', '12k', 2),
+    ...DEFAULT_LINE_AREAS.map((a) => ({ ...a })),
+  ];
+  return {
+    id: DEFAULT_NIC2_LINE_ID,
+    name: 'NIC 2.0',
+    areas,
+    floatSlots: DEFAULT_LINE_FLOATS.map((f) => ({ ...f, supportedAreaIds: [...f.supportedAreaIds] })),
+    leadAreaIds: ['area_end_of_line', 'area_courtyard', 'area_bonding'],
+    combinedSections: [],
+    breaksEnabled: true,
+    breaksScope: 'station',
+    breakRotations: 5,
+  };
+}
+
+/** Built-in line presets (IC/NIC 1.0 and 2.0). */
+export function getBuiltInLineConfig(lineId: string): LineConfig | null {
+  switch (lineId) {
+    case DEFAULT_IC_LINE_ID:
+      return getDefaultICLineConfig();
+    case DEFAULT_NIC_LINE_ID:
+      return getDefaultNICLineConfig();
+    case DEFAULT_IC2_LINE_ID:
+      return getDefaultIC2LineConfig();
+    case DEFAULT_NIC2_LINE_ID:
+      return getDefaultNIC2LineConfig();
+    default:
+      return null;
+  }
+}
+
+/** Match a cloud line display name to a built-in preset (exact name, case-insensitive). */
+export function getBuiltInLineConfigByName(name: string): LineConfig | null {
+  const n = name.trim().toLowerCase();
+  if (n === 'ic') return getDefaultICLineConfig();
+  if (n === 'nic') return getDefaultNICLineConfig();
+  if (n === 'ic 2.0' || n === 'ic 2') return getDefaultIC2LineConfig();
+  if (n === 'nic 2.0' || n === 'nic 2') return getDefaultNIC2LineConfig();
+  return null;
 }
 
 /** Area IDs in display order (station areas first, then float slot ids). */

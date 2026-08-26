@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AreaId, BreakPreference, LineConfig, LineState, RosterPerson, SkillLevel } from '../types';
 import { AREA_IDS, AREA_LABELS } from '../types';
-import { getAreaIds, getBaseAreaLabels } from '../lib/lineConfig';
+import { getAreaIds, getBaseAreaLabels, getBreakRotations } from '../lib/lineConfig';
+import { getBreakPreferenceOptions, normalizeBreakPreference } from '../lib/breakPreferences';
 
 interface PersonProfileModalProps {
   personId: string;
@@ -18,7 +19,6 @@ interface PersonProfileModalProps {
   onBreakPreferenceChange: (personId: string, preference: BreakPreference) => void;
   onSkillChange: (personId: string, areaId: AreaId, level: SkillLevel) => void;
   onAreasWantToLearnChange: (personId: string, areaId: AreaId, checked: boolean) => void;
-  onFlexedToLineChange?: (personId: string, lineId: string | null) => void;
 }
 
 function findPerson(lineStates: Record<string, LineState>, personId: string): RosterPerson | null {
@@ -42,20 +42,8 @@ export function PersonProfileModal({
   onBreakPreferenceChange,
   onSkillChange,
   onAreasWantToLearnChange,
-  onFlexedToLineChange,
 }: PersonProfileModalProps) {
   const person = findPerson(lineStates, personId);
-  const homeLineId = useMemo(() => {
-    for (const [lineId, state] of Object.entries(lineStates)) {
-      if (state?.roster?.some((p) => p.id === personId)) return lineId;
-    }
-    return null;
-  }, [lineStates, personId]);
-  const otherLinesForFlex = useMemo(
-    () => (homeLineId ? lines.filter((l) => l.id !== homeLineId) : []),
-    [lines, homeLineId]
-  );
-  const flexedToLine = person?.flexedToLineId ? lines.find((l) => l.id === person.flexedToLineId) : null;
   const [selectedLineId, setSelectedLineId] = useState(() => {
     if (lines.some((l) => l.id === currentLineId)) return currentLineId;
     return lines[0]?.id ?? '';
@@ -96,7 +84,11 @@ export function PersonProfileModal({
     return null;
   }
 
-  const breakPref = person.breakPreference ?? 'no_preference';
+  const breakPref = normalizeBreakPreference(
+    person?.breakPreference ?? 'no_preference',
+    selectedLine ? getBreakRotations(selectedLine) : 3
+  );
+  const breakOptions = getBreakPreferenceOptions(selectedLine ? getBreakRotations(selectedLine) : 3);
 
   return (
     <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="person-profile-title" onClick={onClose}>
@@ -153,44 +145,14 @@ export function PersonProfileModal({
             <select
               value={breakPref}
               onChange={(e) => onBreakPreferenceChange(person.id, e.target.value as BreakPreference)}
-              style={{ padding: '6px 10px', fontSize: '0.9rem', minWidth: 180 }}
+              style={{ padding: '6px 10px', fontSize: '0.9rem', minWidth: 220 }}
             >
-              <option value="no_preference">Prefer middle</option>
-              <option value="prefer_early">Prefer early</option>
-              <option value="prefer_late">Prefer late</option>
+              {breakOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
-
-            {person && onFlexedToLineChange && lines.length > 1 && homeLineId && (
-              <>
-                <h3 style={{ margin: '16px 0 8px 0', fontSize: '1rem' }}>Flex to line</h3>
-                <p style={{ fontSize: '0.85rem', color: '#555', marginTop: 0 }}>
-                  Home line: <strong>{lines.find((l) => l.id === homeLineId)?.name ?? homeLineId}</strong>
-                  {flexedToLine ? `. Currently flexed to ${flexedToLine.name}.` : '.'}
-                </p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                  {flexedToLine ? (
-                    <button
-                      type="button"
-                      onClick={() => onFlexedToLineChange(person.id, null)}
-                      style={{ padding: '6px 12px', fontSize: '0.9rem' }}
-                    >
-                      Send back to home line
-                    </button>
-                  ) : (
-                    otherLinesForFlex.map((l) => (
-                      <button
-                        key={l.id}
-                        type="button"
-                        onClick={() => onFlexedToLineChange(person.id, l.id)}
-                        style={{ padding: '6px 12px', fontSize: '0.9rem' }}
-                      >
-                        Flex to {l.name}
-                      </button>
-                    ))
-                  )}
-                </div>
-              </>
-            )}
           </section>
 
           {/* Right: skills per line */}
