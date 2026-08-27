@@ -11,6 +11,8 @@ import {
 } from '../lib/cloudLines';
 import { setCloudSession } from '../lib/cloudSession';
 import { getEmptyLineState } from '../data/initialState';
+import { buildPresetCloudRootStateByName } from '../lib/cloudLinePresets';
+import { getBuiltInLineConfigByName } from '../lib/lineConfig';
 import { BuildLineWizard } from './BuildLineWizard';
 
 interface CloudLineCursor {
@@ -40,7 +42,7 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
     }
   })();
   
-  const [step, setStep] = useState<'choose' | 'list' | 'create' | 'join' | 'configure' | 'clone' | 'quickJoin'>(initialStep);
+  const [step, setStep] = useState<'choose' | 'list' | 'create' | 'join' | 'configure' | 'clone' | 'quickJoin' | 'createPreset'>(initialStep);
   const [lines, setLines] = useState<CloudLineSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +53,9 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
   const [joinPassword, setJoinPassword] = useState('');
   /** When set from a front-page quick-join button, auto-select a cloud line by name. */
   const [quickJoinName, setQuickJoinName] = useState<string | null>(null);
+  /** Built-in preset name when creating IC/NIC 2.0 (etc.) because no cloud line exists yet. */
+  const [createPresetName, setCreatePresetName] = useState<string | null>(null);
+  const [createPresetPassword, setCreatePresetPassword] = useState('');
 
   /** After create we have lineId + password; wizard completes with config → we save and join. */
   const [configureLineId, setConfigureLineId] = useState<string | null>(null);
@@ -98,6 +103,12 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
             setJoinPassword('');
             setError(null);
             setStep('quickJoin');
+          } else if (getBuiltInLineConfigByName(quickJoinName)) {
+            // No cloud line yet — offer one-click create from the built-in preset (IC 2.0 / NIC 2.0, etc.).
+            setCreatePresetName(quickJoinName);
+            setCreatePresetPassword('');
+            setError(null);
+            setStep('createPreset');
           } else {
             setError(`No line found matching "${quickJoinName}"`);
             setStep('join');
@@ -182,6 +193,40 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
+  };
+
+  /** Create a built-in preset line (e.g. IC 2.0) in the cloud, then join it. */
+  const handleCreatePreset = async () => {
+    if (!createPresetName || !createPresetPassword.trim()) {
+      setError('Enter a password for the new line');
+      return;
+    }
+    const password = createPresetPassword.trim();
+    const presetRoot = buildPresetCloudRootStateByName(createPresetName);
+    if (!presetRoot) {
+      setError(`No built-in preset for "${createPresetName}"`);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const displayName = getBuiltInLineConfigByName(createPresetName)?.name ?? createPresetName;
+      const { lineId, rootState, updatedAt, version } = await createCloudLine(
+        displayName,
+        password,
+        presetRoot
+      );
+      setCloudSession(lineId, password);
+      if (onJoinGroupPresentation) {
+        onJoinGroupPresentation(rootState, lineId, password, { updatedAt, version });
+      } else {
+        onJoinGroup(rootState, lineId, password, { updatedAt, version });
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
   };
 
   /** Quick join: password-only prompt then join and go to staffing view. */
@@ -391,6 +436,50 @@ export function EntryScreen({ onSelectLocal, onJoinGroup, onJoinGroupPresentatio
             setStep('choose');
             setJoinLineId('');
             setJoinPassword('');
+            setError(null);
+          }}
+        >
+          Back
+        </button>
+      </div>
+    );
+  }
+
+  if (step === 'createPreset' && createPresetName) {
+    const presetLabel = getBuiltInLineConfigByName(createPresetName)?.name ?? createPresetName;
+    return (
+      <div className="entry-screen entry-screen--narrow">
+        <h1 style={{ fontSize: '1.5rem', marginBottom: 8 }}>Create {presetLabel}</h1>
+        <p className="entry-muted" style={{ marginBottom: 16 }}>
+          No cloud line named <strong>{presetLabel}</strong> exists yet. Set a password to create it with the built-in stations and break rotations, then open staffing.
+        </p>
+        {error && <div className="alert alert-error">{error}</div>}
+        <div className="entry-panel" style={{ maxWidth: '100%', marginBottom: 16 }}>
+          <label style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>Password</label>
+          <input
+            type="password"
+            value={createPresetPassword}
+            onChange={(e) => {
+              setCreatePresetPassword(e.target.value);
+              setError(null);
+            }}
+            placeholder="Share this with others to join"
+            style={{ width: '100%', marginBottom: 12 }}
+            autoComplete="new-password"
+            autoFocus
+            onKeyDown={(e) => e.key === 'Enter' && void handleCreatePreset()}
+          />
+          <button type="button" onClick={() => void handleCreatePreset()} disabled={loading} className="btn-primary">
+            {loading ? 'Creating…' : `Create ${presetLabel} & open`}
+          </button>
+        </div>
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={() => {
+            setStep('choose');
+            setCreatePresetName(null);
+            setCreatePresetPassword('');
             setError(null);
           }}
         >
